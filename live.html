@@ -28,6 +28,25 @@
   .said { white-space:pre-wrap; }
   .turn.you .said { color:#cfc6b6; }
   .lat { margin-top:5px; font-size:11.5px; color:var(--gold); letter-spacing:.04em; }
+  /* the gate: a shut door is the default state, not an error state */
+  #gate { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+    background:rgba(12,11,10,.93); backdrop-filter:blur(6px); padding:22px; }
+  #gate.open { display:none; }
+  #gate .gcard { width:100%; max-width:390px; border:1px solid #2c2823; border-radius:14px;
+    background:#151311; padding:22px 20px; box-shadow:0 24px 60px rgba(0,0,0,.5); }
+  #gate .gtitle { font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--gold); margin-bottom:12px; }
+  #gate .gtext { font-size:14.5px; line-height:1.55; color:#d8d0c4; margin:0 0 16px; }
+  #gate .glabel { display:block; font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:#6f675b; margin-bottom:6px; }
+  #gate input { width:100%; box-sizing:border-box; padding:10px 12px; border-radius:9px; border:1px solid #332e28;
+    background:#0f0d0c; color:#efe7db; font:inherit; font-size:15px; margin-bottom:14px; }
+  #gate .gbtn { width:100%; padding:13px 14px; border-radius:10px; border:1px solid #6d5a33;
+    background:#241d13; color:var(--gold); font:inherit; font-size:14px; letter-spacing:.04em; cursor:pointer; }
+  #gate .gbtn:disabled { opacity:.5; }
+  #gate .galt { display:block; width:100%; margin-top:10px; padding:8px; background:transparent;
+    border:0; color:#6f675b; font:inherit; font-size:11.5px; letter-spacing:.06em; cursor:pointer; text-decoration:underline dotted; }
+  #gate .ghidden { display:none; }
+  #gate .gmsg { min-height:16px; margin-top:12px; font-size:12px; color:#e8cfae; line-height:1.5; }
+  #gate .gnote { margin-top:10px; font-size:11px; color:#5f5850; line-height:1.55; }
   .sess { margin:0 0 14px; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
     color:#6f675b; text-align:center; }
   footer { text-align:center; padding-top:8px; }
@@ -90,6 +109,21 @@
   <div class="hint" id="hint">one tap opens the microphone and the stream together</div>
   <div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span></div>
 </footer>
+
+<div id="gate" class="shut" role="dialog" aria-label="the door">
+  <div class="gcard">
+    <div class="gtitle">the door</div>
+    <p class="gtext" id="gtext">This door opens for one phone, with a fingerprint. Nothing behind it moves until the phone has been read.</p>
+    <div id="gcode" class="ghidden">
+      <label class="glabel" for="code">the enrolment code</label>
+      <input id="code" type="password" inputmode="numeric" autocomplete="off" placeholder="one time only">
+    </div>
+    <button id="gbtn" class="gbtn" type="button">open the door</button>
+    <button id="galt" class="galt" type="button">set this phone up instead</button>
+    <div class="gmsg" id="gmsg"></div>
+    <div class="gnote" id="gnote"></div>
+  </div>
+</div>
 
 <div id="voicesheet">
   <div class="shead">the mouth <button id="vclose" style="float:right;background:transparent;border:0;color:#6f675b;font:inherit;font-size:11px;cursor:pointer">close</button></div>
@@ -254,6 +288,206 @@ function stampSession() {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+/* ---------- the lock ----------
+   Edwin, 4 Nov 2026: the door needs his phone and fingerprint. The key is made in
+   the phone's secure element by the OS, the private half never leaves it, and the
+   signature only exists if a fingerprint is presented. What the page keeps is a
+   session token, short-lived, and the server re-checks it every time it is asked
+   for a mouth. A page that fakes its own state gets nothing, because the mint
+   refuses without the session (see eiLiveToken). */
+const FNBASE = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/';
+const DOOR_KEY = 'ei-door-session';
+
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64u = (s) => {
+  const p = String(s).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(p + '='.repeat((4 - (p.length % 4)) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+};
+
+function doorSession() {
+  try {
+    const raw = sessionStorage.getItem(DOOR_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d.token || !d.expires_at) return null;
+    if (new Date(d.expires_at).getTime() - 30000 < Date.now()) return null;
+    return d;
+  } catch { return null; }
+}
+
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  const kind = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : 'browser';
+  const ver = (ua.match(/(?:OS|Android) ([0-9_]+)/) || [])[1];
+  return kind + (ver ? ' ' + ver.replace(/_/g, '.') : '');
+}
+
+const gateEl = document.getElementById('gate');
+const gText = document.getElementById('gtext');
+const gBtn = document.getElementById('gbtn');
+const gAlt = document.getElementById('galt');
+const gMsg = document.getElementById('gmsg');
+const gCode = document.getElementById('gcode');
+const gNote = document.getElementById('gnote');
+
+function gateSay(text, tone) {
+  gMsg.textContent = text || '';
+  gMsg.style.color = tone === 'bad' ? '#e0907e' : '#e8cfae';
+}
+
+async function gatePost(fn, body) {
+  const r = await fetch(FNBASE + fn, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let d = {};
+  try { d = await r.json(); } catch {}
+  if (!d || d.ok !== true) throw new Error((d && d.error) || ('the door refused (' + r.status + ')'));
+  return d;
+}
+
+async function unlockWithFingerprint(mode, enrolCode) {
+  gBtn.disabled = true;
+  gAlt.disabled = true;
+  gateSay(mode === 'register' ? 'asking the phone to make a key' : 'asking the phone for your fingerprint');
+
+  const begin = await gatePost('doorKeyBegin', { mode, device_label: deviceLabel() });
+
+  if (mode === 'unlock' && !begin.has_keys) {
+    throw new Error('this phone is not a key to this door yet');
+  }
+  if (mode === 'register' && begin.has_keys && !enrolCode) {
+    // still allowed: a second device may be enrolled, but it must present the code
+  }
+
+  const opts = begin.options;
+  const publicKey = {
+    challenge: unb64u(opts.challenge),
+    rpId: opts.rpId,
+    timeout: opts.timeout,
+    userVerification: 'required',
+  };
+  if (mode === 'register') {
+    publicKey.rp = opts.rp;
+    publicKey.user = { ...opts.user, id: unb64u(opts.user.id) };
+    publicKey.pubKeyCredParams = opts.pubKeyCredParams;
+    publicKey.authenticatorSelection = opts.authenticatorSelection;
+    publicKey.attestation = opts.attestation;
+    publicKey.excludeCredentials = (opts.excludeCredentials || []).map(c => ({ ...c, id: unb64u(c.id) }));
+  } else {
+    publicKey.allowCredentials = (opts.allowCredentials || []).map(c => ({ ...c, id: unb64u(c.id) }));
+  }
+
+  let cred;
+  try {
+    cred = mode === 'register'
+      ? await navigator.credentials.create({ publicKey })
+      : await navigator.credentials.get({ publicKey });
+  } catch (e) {
+    const why = (e && e.name) || 'error';
+    if (why === 'NotAllowedError') {
+      throw new Error(mode === 'register'
+        ? 'the phone did not create the key. if it offered a passcode instead of a fingerprint, that passcode is the device, not the door.'
+        : 'no fingerprint was given, so the door stayed shut.');
+    }
+    throw new Error('the phone refused: ' + why);
+  }
+  if (!cred) throw new Error('the phone returned nothing');
+
+  const res = cred.response;
+  const payload = {
+    mode,
+    challenge_id: begin.challenge_id,
+    device_label: deviceLabel(),
+    enrol_code: enrolCode || '',
+    response: {
+      id: cred.id,
+      rawId: b64u(cred.rawId),
+      clientDataJSON: b64u(res.clientDataJSON),
+      authenticatorData: b64u(res.getAuthenticatorData ? res.getAuthenticatorData() : res.authenticatorData),
+      signature: res.signature ? b64u(res.signature) : '',
+      attestationObject: res.attestationObject ? b64u(res.attestationObject) : '',
+    },
+  };
+
+  const done = await gatePost('doorKeyFinish', payload);
+  if (mode === 'register') {
+    gateSay('this phone is now a key. asking for the fingerprint to open');
+    gBtn.disabled = false; gAlt.disabled = false;
+    return unlockWithFingerprint('unlock', null);
+  }
+
+  sessionStorage.setItem(DOOR_KEY, JSON.stringify({
+    token: done.session_token,
+    expires_at: done.expires_at,
+    device: done.device_label,
+    tier: done.verification_tier,
+  }));
+  gBtn.disabled = false; gAlt.disabled = false;
+  return done;
+}
+
+function showGate(reason) {
+  gateEl.classList.remove('open');
+  gCode.classList.add('ghidden');
+  gBtn.textContent = 'open the door';
+  gBtn.onclick = onUnlockTap;
+  gAlt.textContent = 'set this phone up instead';
+  gAlt.onclick = () => {
+    gCode.classList.remove('ghidden');
+    gBtn.textContent = 'enrol this phone';
+    gBtn.onclick = onEnrolTap;
+    gNote.textContent = 'Enrolment needs the code once, because otherwise anyone holding this address could put their own finger in the door. After that the phone alone is enough.';
+    document.getElementById('code').focus();
+  };
+  gateSay(reason || '');
+  gNote.textContent = gNote.textContent || '';
+  if (!doorSession()) {
+    gateSay('');
+  }
+}
+
+function gatePassed() { gateEl.classList.add('open'); }
+
+async function onUnlockTap() {
+  gateSay('waiting for the phone');
+  try {
+    const done = await unlockWithFingerprint('unlock', null);
+    gateSay('fingerprint verified · ' + (done.device_label || 'this phone'));
+    setTimeout(() => { gatePassed(); setState('tap the circle to open the door'); }, 420);
+  } catch (e) {
+    gateSay(String(e.message || e), 'bad');
+    if (/not a key/.test(String(e.message))) gAlt.click();
+  }
+}
+
+async function onEnrolTap() {
+  const code = document.getElementById('code').value.trim();
+  if (!code) { gateSay('the enrolment code is needed once', 'bad'); return; }
+  gateSay('asking the phone to make a key');
+  try {
+    await unlockWithFingerprint('register', code);
+    gateSay('this phone is a key to this door');
+    setTimeout(() => { gatePassed(); setState('tap the circle to open the door'); }, 420);
+  } catch (e) {
+    gateSay(String(e.message || e), 'bad');
+  }
+}
+
+/* The door starts shut. A page load is not a credential. */
+if (doorSession()) {
+  gatePassed();
+} else {
+  showGate('');
+  setState('the door is locked');
+  hint('one fingerprint opens it');
+}
+
 /* ---------- the door ---------- */
 
 async function openDoor() {
@@ -264,9 +498,21 @@ async function openDoor() {
   hint('');
   startClock('opening the door');
   try {
-    const r = await fetch(FN, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const session = doorSession();
+    if (!session) throw new Error('the door is locked: give it your fingerprint first');
+    const r = await fetch(FN, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session_token: session.token }),
+    });
     const d = await r.json();
-    if (!d.ok) throw new Error(d.error || 'the door did not open');
+    if (!d.ok) {
+      if (/session|locked|fingerprint/i.test(String(d.error || ''))) {
+        sessionStorage.removeItem(DOOR_KEY);
+        showGate('the session ended. one fingerprint opens it again.');
+      }
+      throw new Error(d.error || 'the door did not open');
+    }
 
     await openMic();
 
