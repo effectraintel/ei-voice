@@ -31,6 +31,12 @@
     background:transparent; border:1px solid #3a332a; border-radius:999px; padding:5px 12px; cursor:pointer; }
   #voicechip span { color:var(--gold); }
   #voiceall { font-size:11px; letter-spacing:.06em; color:#6f675b; text-decoration:none; border-bottom:1px dotted #4a4237; }
+  /* He went to the written channel and could not find his way back to the live
+     door, which is the only door he actually uses. The way home now sits above
+     the fold, in the same gold as the wordmark, and says what it leads to. */
+  #tolive { display:inline-block; margin-top:8px; font-size:11.5px; letter-spacing:.1em;
+    color:var(--gold); text-decoration:none; border:1px solid #3a332a; border-radius:999px;
+    padding:5px 12px; }
   #voicesheet { display:none; position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 12px);
     z-index:20; background:#1a1613; border:1px solid #3a332a; border-radius:14px; padding:14px 14px 10px;
     box-shadow:0 12px 40px rgba(0,0,0,.5); }
@@ -93,6 +99,7 @@
 <body>
 <header>
   <div class="wordmark">Effectra Intelligence</div>
+  <a id="tolive" href="live.html">&#8592; the live door &middot; speech straight through</a>
   <div class="state" id="state">Voice and text — tap the mic, or use the line below</div>
   <div class="warn" id="warn"></div>
 </header>
@@ -120,7 +127,7 @@
   <div class="voicebar" id="voicebar">
     <button id="voicechip" type="button">voice · <span id="voicename">sage</span></button>
     <a id="voiceall" href="audition.html">audition all voices</a>
-    <a id="voiceall" href="live.html" title="speech straight through, no render step">the live door</a>
+    <a id="voicelive" href="live.html" title="speech straight through, no render step">the live door</a>
   </div>
   <div class="brand">Powered by Effectra Intelligence<br>Proof on chain. Payload in the vault.<br>&copy; 2026 Effectra Intelligence</div>
 </footer>
