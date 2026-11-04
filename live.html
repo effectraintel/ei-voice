@@ -115,8 +115,8 @@
     <div class="gtitle">the door</div>
     <p class="gtext" id="gtext">This door opens for one phone, with a fingerprint. Nothing behind it moves until the phone has been read.</p>
     <div id="gcode" class="ghidden">
-      <label class="glabel" for="code">the enrolment code</label>
-      <input id="code" type="password" inputmode="numeric" autocomplete="off" placeholder="one time only">
+      <label class="glabel" for="code">the one-time code</label>
+      <input id="code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" placeholder="XXXX-XXXX-XXXX">
     </div>
     <button id="gbtn" class="gbtn" type="button">open the door</button>
     <button id="galt" class="galt" type="button">set this phone up instead</button>
@@ -446,7 +446,7 @@ function showGate(reason) {
     gCode.classList.remove('ghidden');
     gBtn.textContent = 'enrol this phone';
     gBtn.onclick = onEnrolTap;
-    gNote.textContent = 'Enrolment needs the code once, because otherwise anyone holding this address could put their own finger in the door. After that the phone alone is enough.';
+    gNote.textContent = 'A one-time code, from My Authorised Devices on a phone that is already in the door. It works once and lasts ten minutes. With no device left, ask the engine for one. After that the phone alone is enough.';
     document.getElementById('code').focus();
   };
   gateSay(reason || '');
