@@ -223,8 +223,11 @@ function tighten(text) {
     if (keep.length >= 2) break;
   }
   var out = keep.join(' ') || sents[0].trim();
-  if (out.length > 340) {
-    var cut = out.slice(0, 340);
+  // 220 characters is the working ceiling: it renders in about five to seven
+  // seconds and plays in eight to twelve. Two long sentences used to run to 335
+  // characters, eleven seconds of rendering and nearly half a minute of talking.
+  if (out.length > 220) {
+    var cut = out.slice(0, 220);
     var stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
     out = stop > 60 ? cut.slice(0, stop + 1) : cut.replace(/[ ,;:]+$/, '') + '.';
   }
