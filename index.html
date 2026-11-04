@@ -163,18 +163,28 @@ function stopPlayback() {
   try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
 }
 
+// Splitting has to be conservative: a decimal point is not a full stop. The old
+// version cut "R1.29 million" into a sentence, which the tighten pass then
+// rejoined with a space, and it came out as "1. 29 million". A break now needs
+// punctuation followed by whitespace and something that looks like a new sentence.
 function splitSentences(text) {
-  var parts = String(text || '').replace(/\s+/g, ' ').trim().match(/[^.!?\u2026]+[.!?\u2026]*/g) || [];
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return [];
   var out = [];
-  parts.forEach(function (p) {
+  var buf = '';
+  var pieces = t.split(/(?<=[.!?\u2026])\s+/);
+  pieces.forEach(function (p) {
     p = p.trim();
     if (!p) return;
-    while (p.length > 220) { out.push(p.slice(0, 220)); p = p.slice(220).trim(); }
-    if (p) out.push(p);
+    if (buf && !/^["'\u201c\u2018(\[]?[A-Z0-9]/.test(p)) {
+      // Not a new sentence after all (a lower-case continuation).
+      buf += ' ' + p;
+      return;
+    }
+    if (buf) out.push(buf);
+    buf = p;
   });
-  // Four segments is enough for a spoken turn; anything longer is merged into
-  // the last one so the mouth never runs far behind the answer.
-  if (out.length > 4) out = out.slice(0, 3).concat([out.slice(3).join(' ')]);
+  if (buf) out.push(buf);
   return out;
 }
 
@@ -192,6 +202,35 @@ function renderSegment(text, lang) {
 // The voice is one call, so it is one reading. Only an answer too long for the
 // speaking function is cut, and then only at a sentence boundary, into two parts
 // at most, so nothing is dropped and nothing shifts mood mid-answer.
+// Short answers, deliberately. Edwin's call, 4 Nov 2026: start short and tune
+// upwards. The mouth is told two sentences, but a model obeys probabilistically,
+// and one 389-character answer cost 13.9 seconds to render and 27 seconds to
+// speak - that is not a conversation, that is a podcast. So the page holds the
+// line: the first two sentences are the answer, and a trailing "if you want, I
+// can..." line is dropped outright rather than spoken as a third.
+function tighten(text) {
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return t;
+  var sents = splitSentences(t);
+  if (!sents.length) return t;
+  var keep = [];
+  for (var i = 0; i < sents.length; i++) {
+    var s = sents[i].trim();
+    if (!s) continue;
+    var isOffer = /^(if you (want|like|need|prefer)|say the word|i can (take|go)|let me know|i could)/i.test(s);
+    if (isOffer) break;
+    keep.push(s);
+    if (keep.length >= 2) break;
+  }
+  var out = keep.join(' ') || sents[0].trim();
+  if (out.length > 340) {
+    var cut = out.slice(0, 340);
+    var stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+    out = stop > 60 ? cut.slice(0, stop + 1) : cut.replace(/[ ,;:]+$/, '') + '.';
+  }
+  return out;
+}
+
 function chunkForSpeech(text) {
   var t = String(text || '').replace(/\s+/g, ' ').trim();
   if (!t) return [];
@@ -411,9 +450,10 @@ async function send(payload) {
     tone(880, 70, 0.05);
     if (d.you_said) { say('you', d.you_said); turns.push({ role: 'you', content: d.you_said }); }
     if (d.reply) {
-      say('engine', d.reply, d.actions);
-      turns.push({ role: 'engine', content: d.reply });
-      speak(d.reply, d.reply_lang || 'en');
+      var spoken = tighten(d.reply);
+      say('engine', spoken, d.actions);
+      turns.push({ role: 'engine', content: spoken });
+      speak(spoken, d.reply_lang || 'en');
     }
     var secs = ((Date.now() - t0) / 1000).toFixed(1);
     hintEl.textContent = 'tap once to start, tap again to send · last turn ' + secs + 's';
