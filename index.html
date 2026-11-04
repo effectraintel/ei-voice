@@ -236,10 +236,18 @@ function speak(text, lang) {
   var segments = splitSentences(text);
   if (!segments.length) return;
 
-  var ready = segments.map(function (seg) {
-    // Six seconds is the whole allowance for one spoken sentence: the measured
-    // render is 2.7 to 3.5 seconds, so a rail past six is a stalled rail.
-    return withTimeout(renderSegment(seg, langCode), 6000);
+  // One continuous reading for a short answer. Edwin noticed the voice changing
+  // tone and tempo from sentence to sentence; that was this: each sentence was
+  // rendered as its own call, so each one inferred its own mood from its own
+  // words. A one or two sentence answer, which is most of them, now goes over as
+  // a single call and comes back as one thought. Only longer answers still
+  // split, and only so the first words start playing sooner.
+  var units = segments.length <= 2 ? [segments.join(' ')] : segments;
+
+  var ready = units.map(function (seg) {
+    // Eight seconds is the whole allowance for one spoken unit: a single
+    // sentence renders in 2.7 to 3.5 seconds, a joined pair around five.
+    return withTimeout(renderSegment(seg, langCode), 8000);
   });
 
   var i = 0;
@@ -265,17 +273,17 @@ function speak(text, lang) {
       var started = false;
       audio.onplaying = function () { started = true; };
       audio.onended = advance;
-      audio.onerror = function () { deviceSpeak(segments[idx], langCode, advance); };
-      audio.play().catch(function () { deviceSpeak(segments[idx], langCode, advance); });
+      audio.onerror = function () { deviceSpeak(units[idx], langCode, advance); };
+      audio.play().catch(function () { deviceSpeak(units[idx], langCode, advance); });
       // If the audio does not actually start within 3.5 seconds, the network is
       // holding a file that looked ready. Speak it instead of waiting.
       setTimeout(function () {
         if (token !== playback.token || started) return;
         try { audio.pause(); } catch (e) {}
-        deviceSpeak(segments[idx], langCode, advance);
+        deviceSpeak(units[idx], langCode, advance);
       }, 3500);
     }).catch(function () {
-      deviceSpeak(segments[idx], langCode, advance);
+      deviceSpeak(units[idx], langCode, advance);
     });
   }
 
