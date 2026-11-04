@@ -208,6 +208,17 @@ async function openDoor() {
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
         },
         systemInstruction: { parts: [{ text: BRIEF }] },
+        // Give him room to think. The default half-second of silence made the engine
+        // jump into a mid-sentence pause; a full second lets a breath pass, and the
+        // lower end-sensitivity stops a room noise from looking like the end of a turn.
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+            endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+            prefixPaddingMs: 300,
+            silenceDurationMs: 1100,
+          },
+        },
         inputAudioTranscription: {},
         outputAudioTranscription: {},
       },
