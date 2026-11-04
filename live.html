@@ -28,6 +28,8 @@
   .said { white-space:pre-wrap; }
   .turn.you .said { color:#cfc6b6; }
   .lat { margin-top:5px; font-size:11.5px; color:var(--gold); letter-spacing:.04em; }
+  .sess { margin:0 0 14px; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+    color:#6f675b; text-align:center; }
   footer { text-align:center; padding-top:8px; }
   .voicebar { display:flex; align-items:center; justify-content:center; gap:12px; margin:2px 0 10px; }
   #voicechip { font:inherit; font-size:11.5px; letter-spacing:.08em; color:var(--dim);
@@ -208,16 +210,51 @@ function resetTurns() { turns = { you: null, engine: null }; said = { you: '', e
    reads as the engine replaying an old conversation. The socket is shut, so the
    words are a photograph, not a live turn. Wipe them and say plainly that the
    door is shut, so what is on screen is never mistaken for what is happening. */
-window.addEventListener('pageshow', (e) => {
-  if (!e.persisted) return;
+function shutDoor() {
   try { ws && ws.close(); } catch {}
   ws = null; sessionUp = false; listening = false; busy = false;
   micBtn.classList.remove('live', 'arming');
   stopClock(); closeMic(); resetTurns();
-  logEl.innerHTML = '';
   setState('the door is shut');
   hint('tap the circle to open it again');
+}
+
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  shutDoor();
+  logEl.innerHTML = '';
 });
+
+/* A session is bounded, not immortal. iOS keeps the page alive when he switches
+   away, so a door he opened at six could still be holding a nine o'clock
+   conversation, which then sounds exactly like a memory the engine does not have.
+   Two minutes away ends the session: the next tap is a fresh door, a fresh
+   context, and a printed stamp saying when it opened. */
+let hiddenAt = 0;
+const AWAY_LIMIT_S = 120;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (!hiddenAt) return;
+  const away = (Date.now() - hiddenAt) / 1000;
+  hiddenAt = 0;
+  if (away > AWAY_LIMIT_S && (sessionUp || listening)) {
+    shutDoor();
+    warn('that door timed out after ' + Math.round(away / 60) + ' min away. tap the circle for a fresh one.');
+  }
+});
+
+/* Every door states when it opened, in the transcript, so "this is a new
+   session" is something he can see rather than something I assert. */
+function stampSession() {
+  const d = document.createElement('div');
+  d.className = 'sess';
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  d.textContent = 'session opened · ' + hh + ':' + mm + ' · ' + voice;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
 
 /* ---------- the door ---------- */
 
@@ -315,6 +352,7 @@ function handleFrame(text) {
 
   if (msg.setupComplete) {
     sessionUp = true; busy = false; listening = true;
+    stampSession();
     stopClock();
     micBtn.classList.remove('arming'); micBtn.classList.add('live');
     setState('listening. speak whenever you like');
