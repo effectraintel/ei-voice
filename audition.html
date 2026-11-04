@@ -21,6 +21,12 @@
   .script .line + .line { margin-top:10px; padding-top:10px; border-top:1px dashed #2c2620; }
   .script .lang { color:var(--gold); font-size:10px; letter-spacing:.14em; margin-right:8px; }
   .cards { display:grid; gap:12px; margin:20px 0 0; }
+  .cards.sub { margin:10px 0 6px; }
+  @media (min-width:620px) { .cards.sub { grid-template-columns:1fr 1fr; } }
+  .group { margin:26px 0 0; }
+  .gtitle { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); }
+  .gnote { font-size:12px; color:var(--dim); margin-top:5px; line-height:1.55; }
+  .gate { float:right; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:#6f675b; font-weight:500; }
   @media (min-width:620px) { .cards { grid-template-columns:1fr 1fr 1fr; } }
   .card { border:1px solid var(--line); border-radius:14px; padding:14px; background:#191512; }
   .card.picked { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
@@ -42,7 +48,7 @@
 <header>
   <div class="wordmark">Effectra Intelligence</div>
   <h1>Whose voice is Effectra's?</h1>
-  <p class="lede">Three candidates, the same promise in both languages. Listen once in each, then pick the one that should answer every door, forever. These are the production voices, not your laptop's.</p>
+  <p class="lede">Two speaking gates, one voice to choose. Gate one is Gemini, gate two is OpenAI. Listen once in each language, then pick the one that should answer every door, forever. These are the production voices, not your laptop's.</p>
 </header>
 
 <div class="script">
@@ -58,63 +64,108 @@
 <footer>Powered by Effectra Intelligence<br>Proof on chain. Payload in the vault.<br>&copy; 2026 Effectra Intelligence</footer>
 
 <script>
-var AUDITION = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceAudition';
-var CANDIDATES = [
-  { voice: 'Kore',   name: 'Kore',   note: 'Warm, low, unhurried. Reads as someone who is certain and does not need to raise her voice.' },
-  { voice: 'Charon', name: 'Charon', note: 'Deep and measured. The institutional register, closer to a notary than an assistant.' },
-  { voice: 'Puck',   name: 'Puck',   note: 'Lighter and quicker. Friendlier, younger, better for the consumer door, thinner in a boardroom.' }
+var SPEAK = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceSpeak';
+var SCRIPT = {
+  en: 'Good evening, Boss. This is Effectra. Your call was recorded, sealed and filed. Nothing is claimed about it that the record does not prove.',
+  af: 'Goeienaand, Boss. Dit is Effectra. Jou oproep is opgeneem, verseel en geliasseer. Niks word daaroor beweer wat die rekord nie bewys nie.'
+};
+
+// Gate one. Provisional and already heard: Kore is the current standing voice.
+var GEMINI = [
+  { gate: 'gemini', voice: 'Kore',   note: 'Warm, low, unhurried. Reads as someone who is certain and does not need to raise her voice.' },
+  { gate: 'gemini', voice: 'Charon', note: 'Deep and measured. The institutional register, closer to a notary than an assistant.' },
+  { gate: 'gemini', voice: 'Puck',   note: 'Lighter and quicker. Friendlier, younger, better for the consumer door, thinner in a boardroom.' }
 ];
+
+// Gate two, the new audition. Billed to the OpenAI key, so the daily render
+// allowance that stops Gemini does not apply here, and it takes the tone brief
+// as instructions rather than only as punctuation.
+var OPENAI = [
+  { gate: 'openai', voice: 'sage',    note: 'Calm and warm, measured. The closest thing here to a person who is listening.' },
+  { gate: 'openai', voice: 'ash',     note: 'Clear and confident, a little brighter. Reads young-professional without sounding green.' },
+  { gate: 'openai', voice: 'ballad',  note: 'Expressive and storytelling. Lovely on a sentence with feeling in it, showy on a receipt.' },
+  { gate: 'openai', voice: 'coral',   note: 'Bright and upbeat. The friendliest of the set, and the most likely to sound eager.' },
+  { gate: 'openai', voice: 'echo',    note: 'Steady and low. Plain-spoken, no theatre, holds a long answer without tiring.' },
+  { gate: 'openai', voice: 'fable',   note: 'Characterful narrator. Carries a story beautifully, may colour a technical line.' },
+  { gate: 'openai', voice: 'nova',    note: 'Light and lively. Quick and clear, suits the consumer door more than the boardroom.' },
+  { gate: 'openai', voice: 'onyx',    note: 'Deep and authoritative. The heaviest voice here; institutional, close to officious.' },
+  { gate: 'openai', voice: 'shimmer', note: 'Soft and gentle. Kind rather than commanding; may sit too quietly on a phone.' },
+  { gate: 'openai', voice: 'alloy',   note: 'Even and neutral. The safe default, and the least distinctive.' },
+  { gate: 'openai', voice: 'verse',   note: 'Versatile and expressive, moves easily between light and serious.' }
+];
+
 var selected = '';
+try { var savedVoice = JSON.parse(localStorage.getItem('ei_voice') || 'null'); if (savedVoice && savedVoice.voice) selected = savedVoice.voice; } catch (e) {}
 var cardsEl = document.getElementById('cards');
 var statusEl = document.getElementById('status');
 var current = null;
 
 function status(html) { statusEl.innerHTML = html; }
 
-CANDIDATES.forEach(function (c) {
-  var card = document.createElement('div');
-  card.className = 'card';
-  card.dataset.voice = c.voice;
-  card.innerHTML =
-    '<div class="name">' + c.name + '</div>' +
-    '<div class="note">' + c.note + '</div>' +
-    '<div class="plays">' +
-      '<button class="play" data-lang="en">English</button>' +
-      '<button class="play" data-lang="af">Afrikaans</button>' +
-    '</div>' +
-    '<button class="pick">Use this voice</button>';
-  cardsEl.appendChild(card);
-
-  card.querySelectorAll('.play').forEach(function (btn) {
-    btn.addEventListener('click', function () { play(c, btn.dataset.lang, btn); });
-  });
-  card.querySelector('.pick').addEventListener('click', function () {
-    selected = c.voice;
-    document.querySelectorAll('.card').forEach(function (el) {
-      el.classList.toggle('picked', el.dataset.voice === selected);
+function buildGroup(title, note, list) {
+  var head = document.createElement('div');
+  head.className = 'group';
+  head.innerHTML = '<div class="gtitle">' + title + '</div><div class="gnote">' + note + '</div>';
+  cardsEl.appendChild(head);
+  var grid = document.createElement('div');
+  grid.className = 'cards sub';
+  cardsEl.appendChild(grid);
+  list.forEach(function (c) {
+    var card = document.createElement('div');
+    card.className = 'card' + (selected === c.voice ? ' picked' : '');
+    card.dataset.voice = c.voice;
+    card.dataset.gate = c.gate;
+    card.innerHTML =
+      '<div class="name">' + c.voice + '<span class="gate">' + (c.gate === 'openai' ? 'OpenAI' : 'Gemini') + '</span></div>' +
+      '<div class="note">' + c.note + '</div>' +
+      '<div class="plays">' +
+        '<button class="play" data-lang="en">English</button>' +
+        '<button class="play" data-lang="af">Afrikaans</button>' +
+      '</div>' +
+      '<button class="pick">Use this voice</button>';
+    grid.appendChild(card);
+    card.querySelectorAll('.play').forEach(function (btn) {
+      btn.addEventListener('click', function () { play(c, btn.dataset.lang, btn); });
     });
-    status('<strong>' + c.name + '</strong> noted. Nothing is locked until the engine is wired to it.');
+    card.querySelector('.pick').addEventListener('click', function () {
+      selected = c.voice;
+      try { localStorage.setItem('ei_voice', JSON.stringify({ gate: c.gate, voice: c.voice })); } catch (e) {}
+      document.querySelectorAll('.card').forEach(function (el) {
+        el.classList.toggle('picked', el.dataset.voice === selected && el.dataset.gate === c.gate);
+      });
+      status('<strong>' + c.voice + '</strong> saved. The voice channel reads this the next time it opens.');
+    });
   });
-});
+}
+
+buildGroup('Gate one \u00b7 Gemini', 'The voices already on trial. The free tier allows only so many renders a day, so a sample may refuse while the allowance is spent.', GEMINI);
+buildGroup('Gate two \u00b7 OpenAI', 'New on trial today, at his instruction. No daily allowance of the same kind, and the tone brief can be spoken to it in words.', OPENAI);
 
 function play(c, lang, btn) {
   if (current) { try { current.pause(); } catch (e) {} }
   btn.classList.add('busy');
   btn.disabled = true;
-  status('Rendering ' + c.name + ' in ' + (lang === 'af' ? 'Afrikaans' : 'English') + '\u2026');
-  fetch(AUDITION, {
+  status('Rendering ' + c.voice + ' in ' + (lang === 'af' ? 'Afrikaans' : 'English') + '\u2026');
+  fetch(SPEAK, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ voice: c.voice, lang: lang })
+    body: JSON.stringify({ text: SCRIPT[lang], lang: lang, gate: c.gate, voice: c.voice })
   }).then(function (r) { return r.json(); }).then(function (d) {
     btn.classList.remove('busy');
     btn.disabled = false;
-    if (!d || !d.ok) { status('That sample did not render. ' + ((d && d.error) || '')); return; }
-    var audio = new Audio('data:audio/wav;base64,' + d.audio_base64);
+    if (!d || !d.ok) {
+      var why = (d && d.error) || '';
+      var quota = /429|quota/i.test(why);
+      status(quota
+        ? 'That gate is out of render allowance for today. The OpenAI voices still play.'
+        : 'That sample did not render. ' + why);
+      return;
+    }
+    var audio = new Audio('data:' + d.mime + ';base64,' + d.audio_base64);
     current = audio;
-    audio.onended = function () { status(c.name + ', ' + (lang === 'af' ? 'Afrikaans' : 'English') + ', ' + d.seconds + 's.'); };
+    audio.onended = function () { status(c.voice + ', ' + (lang === 'af' ? 'Afrikaans' : 'English') + ', done.'); };
     audio.play();
-    status('Playing ' + c.name + ', ' + (lang === 'af' ? 'Afrikaans' : 'English') + ', ' + d.seconds + 's.');
+    status('Playing ' + c.voice + ', ' + (lang === 'af' ? 'Afrikaans' : 'English') + '.');
   }).catch(function (e) {
     btn.classList.remove('busy');
     btn.disabled = false;
