@@ -283,7 +283,7 @@ async function openMic() {
   micStream = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
-  micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+  if (!micCtx) micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
   await micCtx.resume();
   const src = micCtx.createMediaStreamSource(micStream);
   proc = micCtx.createScriptProcessor(4096, 1, 1);
@@ -306,7 +306,7 @@ async function openMic() {
     }
 
     if (!listening || !sessionUp || !ws || ws.readyState !== 1) return;
-    sendPcm(downsample(data, 48000, 16000));
+    sendPcm(downsample(data, micCtx.sampleRate, 16000));
   };
   src.connect(proc);
   proc.connect(micCtx.destination);
@@ -415,6 +415,10 @@ function barge() {
 
 micBtn.addEventListener('click', async () => {
   if (busy) return;
+  // iOS and Android only start audio that was unlocked inside the tap. The
+  // playback context is unlocked here, synchronously, before the first await hands
+  // the gesture back to the browser. The capture context is built after the
+  // microphone is granted, and is resumed in the same tick it is created.
   if (listening || sessionUp) {
     listening = false; sessionUp = false;
     try { ws && ws.close(); } catch {}
