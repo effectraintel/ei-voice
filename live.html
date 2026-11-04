@@ -409,7 +409,11 @@ async function unlockWithFingerprint(mode, enrolCode) {
       id: cred.id,
       rawId: b64u(cred.rawId),
       clientDataJSON: b64u(res.clientDataJSON),
-      authenticatorData: b64u(res.getAuthenticatorData ? res.getAuthenticatorData() : res.authenticatorData),
+      // Safari does not always expose getAuthenticatorData() on a registration;
+      // the server reads the bytes out of attestationObject in that case.
+      authenticatorData: (mode === 'unlock')
+        ? b64u(res.authenticatorData)
+        : (res.getAuthenticatorData ? b64u(res.getAuthenticatorData()) : ''),
       signature: res.signature ? b64u(res.signature) : '',
       attestationObject: res.attestationObject ? b64u(res.attestationObject) : '',
     },
