@@ -120,32 +120,37 @@ function say(role, text, acts) {
 
 // The voice picker matters more than it looks. On 4 Nov the page answered in
 // Finnish on Edwin's laptop: with no English voice chosen, the browser falls
-// back to the SYSTEM voice, whatever the machine's language is. So English is
-// now forced explicitly, and a saved choice wins if one exists.
-function englishVoice() {
+// back to the SYSTEM voice, whatever the machine's language is. So the language
+// is now explicit, and it follows HIM: the turn returns the language he spoke,
+// and the page picks a voice in that language.
+function voiceFor(lang) {
   var voices = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
-  var en = voices.filter(function (v) { return /^en/i.test(v.lang || ''); });
+  var want = /^af/i.test(lang || '') ? 'af' : 'en';
+  var pool = voices.filter(function (v) { return new RegExp('^' + want, 'i').test(v.lang || ''); });
   var saved = '';
-  try { saved = localStorage.getItem('ei_voice_name') || ''; } catch (e) {}
+  try { saved = localStorage.getItem('ei_voice_name_' + want) || ''; } catch (e) {}
   if (saved) {
-    var hit = en.filter(function (v) { return v.name === saved; })[0];
+    var hit = pool.filter(function (v) { return v.name === saved; })[0];
     if (hit) return hit;
   }
-  return en.filter(function (v) { return /en-ZA/i.test(v.lang); })[0]
-    || en.filter(function (v) { return /en-GB/i.test(v.lang); })[0]
-    || en.filter(function (v) { return /en-US/i.test(v.lang); })[0]
-    || en[0] || null;
+  if (want === 'af') {
+    return pool.filter(function (v) { return /af-ZA/i.test(v.lang); })[0] || pool[0] || null;
+  }
+  return pool.filter(function (v) { return /en-ZA/i.test(v.lang); })[0]
+    || pool.filter(function (v) { return /en-GB/i.test(v.lang); })[0]
+    || pool.filter(function (v) { return /en-US/i.test(v.lang); })[0]
+    || pool[0] || null;
 }
 
-function speak(text) {
+function speak(text, lang) {
   if (!('speechSynthesis' in window) || !text) return;
   try { speechSynthesis.cancel(); } catch (e) {}
   var u = new SpeechSynthesisUtterance(text);
-  var v = englishVoice();
-  u.lang = 'en-ZA';
-  if (v) { u.voice = v; u.lang = v.lang || 'en-ZA'; }
+  var v = voiceFor(lang);
+  u.lang = /^af/i.test(lang || '') ? 'af-ZA' : 'en-ZA';
+  if (v) { u.voice = v; u.lang = v.lang || u.lang; }
   else {
-    warn('<b>This device has no English voice installed.</b> The answer still appears below. Add an English system voice to hear it spoken.');
+    warn('<b>This device has no ' + (u.lang.slice(0,2) === 'af' ? 'Afrikaans' : 'English') + ' voice installed.</b> The answer still appears below.');
   }
   u.rate = 1.02;
   u.onstart = function () { stateEl.textContent = 'speaking'; };
@@ -179,7 +184,7 @@ async function send(payload) {
     var d = await r.json();
     if (!d.ok) throw new Error(d.error || 'turn failed');
     if (d.you_said) { say('you', d.you_said); turns.push({ role: 'you', content: d.you_said }); }
-    if (d.reply) { say('engine', d.reply, d.actions); turns.push({ role: 'engine', content: d.reply }); speak(d.reply); }
+    if (d.reply) { say('engine', d.reply, d.actions); turns.push({ role: 'engine', content: d.reply }); speak(d.reply, d.reply_lang || 'en'); }
     hintEl.textContent = 'tap once to start, tap again to send';
   } catch (e) {
     hintEl.textContent = 'that turn failed';
