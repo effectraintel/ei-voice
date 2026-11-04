@@ -220,14 +220,16 @@ function tighten(text) {
     var isOffer = /^(if you (want|like|need|prefer)|say the word|i can (take|go)|let me know|i could)/i.test(s);
     if (isOffer) break;
     keep.push(s);
-    if (keep.length >= 2) break;
+    if (keep.length >= 3) break;
   }
   var out = keep.join(' ') || sents[0].trim();
-  // 220 characters is the working ceiling: it renders in about five to seven
-  // seconds and plays in eight to twelve. Two long sentences used to run to 335
-  // characters, eleven seconds of rendering and nearly half a minute of talking.
-  if (out.length > 220) {
-    var cut = out.slice(0, 220);
+  // Lifted on 4 November, at his instruction, from two sentences and 220
+  // characters to three and 300. Measured at the current pace: 273 characters
+  // renders in about eleven seconds and plays in sixteen; 351 characters took
+  // seventeen and a half seconds to render, which is the practical wall given
+  // the speaking function's timeout. So 300 is the ceiling that still arrives.
+  if (out.length > 300) {
+    var cut = out.slice(0, 300);
     var stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
     out = stop > 60 ? cut.slice(0, stop + 1) : cut.replace(/[ ,;:]+$/, '') + '.';
   }
@@ -303,7 +305,7 @@ function speak(text, lang) {
   if (!units.length) return;
 
   var ready = units.map(function (seg) {
-    return withTimeout(renderSegment(seg, langCode), 16000);
+    return withTimeout(renderSegment(seg, langCode), 20000);
   });
 
   var i = 0;
