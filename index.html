@@ -27,10 +27,42 @@
   .acts { margin-top:6px; font-size:12px; color:var(--gold); }
   footer { text-align:center; padding-top:8px; }
   button#mic { width:92px; height:92px; border-radius:50%; border:1px solid #3a332a; background:#1d1916;
-    color:var(--ink); display:grid; place-items:center; margin:0 auto 8px; transition:transform .12s, background .2s, border-color .2s; }
+    color:var(--ink); display:grid; place-items:center; margin:0 auto 8px; --lvl:0;
+    transition:transform .12s, background .2s, border-color .2s, box-shadow .08s linear; }
+
+  /* Liveness, in three acts, because he asked for it on 4 Nov 2026: the press has
+     to be acknowledged before anything slow happens, and the button has to show
+     it is hearing him while he talks. Act one is the arming ring - it spins the
+     moment he touches the mic, before the browser has even asked for permission.
+     Act two is the level: the halo grows and the button lifts on his actual voice
+     level, so a dead microphone looks dead. Act three is the clock, which already
+     existed for the engine but now starts where the wait now starts. */
+  button#mic.arming { border-color:var(--gold); animation:armpulse 1s ease-in-out infinite; }
+  @keyframes armpulse {
+    0%   { box-shadow:0 0 0 2px rgba(176,141,47,.10); }
+    50%  { box-shadow:0 0 0 12px rgba(176,141,47,.16); }
+    100% { box-shadow:0 0 0 2px rgba(176,141,47,.10); }
+  }
+
+  button#mic.live { background:#2a1614; border-color:var(--gold);
+    box-shadow:0 0 0 calc(6px + var(--lvl) * 20px) rgba(176,141,47,.16),
+               0 0 22px calc(var(--lvl) * 14px) rgba(214,176,86,.30);
+    transform:scale(calc(1 + var(--lvl) * .06)); }
   button#mic:active { transform:scale(.96); }
-  button#mic.live { background:#2a1614; border-color:var(--gold); box-shadow:0 0 0 8px rgba(176,141,47,.10); }
   button#mic.work { opacity:.5; }
+  button#mic.reject { animation:rejectshake .3s ease; }
+  @keyframes rejectshake {
+    0%,100% { transform:translateX(0); }
+    25% { transform:translateX(-4px); }
+    75% { transform:translateX(4px); }
+  }
+  button#mic.live.work { opacity:.75; }
+
+  .lvlbars { height:26px; display:flex; align-items:center; justify-content:center; gap:4px;
+    margin:-2px 0 6px; opacity:0; transition:opacity .2s; }
+  .lvlbars.on { opacity:1; }
+  .lvlbars span { width:3px; height:4px; border-radius:2px; background:var(--gold);
+    transition:height .07s linear, opacity .2s; opacity:.85; }
   svg { width:36px; height:36px; }
   .hint { font-size:11.5px; color:var(--dim); letter-spacing:.03em; min-height:15px; margin-bottom:8px; }
   .typebar { display:flex; gap:8px; margin:0 0 6px; }
@@ -55,6 +87,7 @@
       <path d="M12 18v3"/>
     </svg>
   </button>
+  <div class="lvlbars" id="lvlbars"><span></span><span></span><span></span><span></span><span></span></div>
   <div class="hint" id="hint">tap once to start, tap again to send</div>
   <form class="typebar" id="textform" method="POST" action="https://solene-7ba0f3a1.base44.app/functions/eiVoiceText">
     <input id="typed" name="text" placeholder="or type a turn" autocomplete="off">
@@ -491,11 +524,99 @@ function blobToB64(blob) {
   });
 }
 
+// Hearing him, and being seen to hear him. A microphone that shows nothing is
+// indistinguishable from a dead one, so the analyser drives the button rather
+// than a decorative loop: if it does not move, he is not being recorded.
+var audioCtx = null, analyser = null, meterRAF = 0, meterSrc = null, levelHist = [];
+var silentSince = 0, warnedSilent = false;
+var bars = Array.prototype.slice.call(document.querySelectorAll('#lvlbars span'));
+var barsWrap = document.getElementById('lvlbars');
+
+function meterStart(stream) {
+  meterStop();
+  try {
+    var Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return;
+    audioCtx = new Ctor();
+    meterSrc = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.5;
+    meterSrc.connect(analyser);
+    var buf = new Uint8Array(analyser.fftSize);
+    var smooth = 0;
+    barsWrap.classList.add('on');
+    (function loop() {
+      analyser.getByteTimeDomainData(buf);
+      var sum = 0;
+      for (var i = 0; i < buf.length; i++) {
+        var v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      var rms = Math.sqrt(sum / buf.length);
+      // Linear RMS barely moves for a voice: typical speech lands around 0.05,
+      // which a straight multiplier turns into a permanently half-lit button.
+      // Decibels are how loudness is actually heard: -55 dB is the floor, -20 dB
+      // is a strong voice, and everything between gets the full range.
+      var db = 20 * Math.log(rms + 1e-6) / Math.LN10;
+      var lvl = Math.max(0, Math.min(1, (db + 62) / 52));
+      // A silent microphone has to say so. Two seconds of nothing while it is
+      // supposedly recording earns one plain line, said once, not a nag.
+      if (lvl < 0.12) {
+        if (!silentSince) silentSince = Date.now();
+        else if (!warnedSilent && Date.now() - silentSince > 2000) {
+          warnedSilent = true;
+          hintEl.textContent = 'I am getting no sound — check the mic is not muted';
+        }
+      } else {
+        silentSince = 0;
+      }
+      smooth = smooth * 0.7 + lvl * 0.3;
+      mic.style.setProperty('--lvl', smooth.toFixed(3));
+      levelHist.push(smooth);
+      if (levelHist.length > 6) levelHist.shift();
+      for (var b = 0; b < bars.length; b++) {
+        var v2 = levelHist[levelHist.length - 1 - b] || 0;
+        bars[b].style.height = (4 + Math.min(1, v2 * 1.15) * 19).toFixed(1) + 'px';
+        bars[b].style.opacity = (0.45 + Math.min(1, v2 * 1.15) * 0.55).toFixed(2);
+      }
+      meterRAF = requestAnimationFrame(loop);
+    })();
+  } catch (e) { /* no meter is not a reason to lose the recording */ }
+}
+
+function meterStop() {
+  if (meterRAF) { cancelAnimationFrame(meterRAF); meterRAF = 0; }
+  try { if (meterSrc) meterSrc.disconnect(); } catch (e) {}
+  try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch (e) {}
+  audioCtx = null; analyser = null; meterSrc = null;
+  levelHist = [];
+  silentSince = 0; warnedSilent = false;
+  mic.style.setProperty('--lvl', '0');
+  barsWrap.classList.remove('on');
+  for (var b = 0; b < bars.length; b++) bars[b].style.height = '4px';
+}
+
 async function start() {
-  if (busy) return;
-  stateEl.textContent = 'asking for the mic…';
+  if (busy) {
+    // Silence here read as a broken button, so say why it is not answering.
+    hintEl.textContent = 'one moment — still working on the last one';
+    mic.classList.remove('reject');
+    void mic.offsetWidth;
+    mic.classList.add('reject');
+    setTimeout(function () { mic.classList.remove('reject'); }, 320);
+    return;
+  }
+  // Act one: acknowledge the touch immediately. Asking the browser for the mic
+  // can take a second or produce a permission prompt, and in that gap the old
+  // page looked like it had not registered the press at all.
+  mic.classList.add('arming');
+  stateEl.textContent = 'opening the mic…';
+  hintEl.textContent = 'allow the microphone if the browser asks';
+  try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) {}
   try {
     var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mic.classList.remove('arming');
     chunks = [];
     var type = '';
     if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) type = 'audio/webm;codecs=opus';
@@ -519,10 +640,13 @@ async function start() {
     mic.classList.add('live');
     stateEl.textContent = 'listening';
     hintEl.textContent = 'tap again to send';
+    meterStart(stream);
   } catch (e) {
     var n = (e && e.name) || 'Error';
     live = false;
     mic.classList.remove('live');
+    mic.classList.remove('arming');
+    meterStop();
     stateEl.textContent = 'mic unavailable';
     var why = {
       NotAllowedError: 'You (or the browser) said no to the microphone. In Safari: tap the aA icon, Website Settings, set Microphone to Allow, then reload.',
@@ -539,6 +663,7 @@ function stop() {
   if (recorder && live) {
     live = false;
     mic.classList.remove('live');
+    meterStop();
     try { recorder.stop(); } catch (e) {}
   }
 }
