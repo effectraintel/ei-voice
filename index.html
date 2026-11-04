@@ -449,6 +449,29 @@ function setBusy(v) {
   else mic.classList.remove('work');
 }
 
+var HEAR = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceHear';
+
+// Hearing first, thinking second, and how it is said preserved. He named this
+// boundary himself on 4 November: English speech was coming back as Afrikaans
+// text in the view. The transcript now comes from its own function with a
+// verbatim, never-translate instruction, and the words are what get carried
+// into the turn. If hearing fails, the audio still goes to the turn endpoint,
+// which can transcribe it the old way, so a broken hop costs quality, not the
+// question.
+async function hear(b64, mime) {
+  try {
+    stateEl.textContent = 'hearing you…';
+    var r = await withTimeout(fetch(HEAR, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ audio_base64: b64, mime: mime || 'audio/webm' })
+    }), 14000);
+    var d = await r.json();
+    if (d && d.ok && d.text) return String(d.text).trim();
+  } catch (e) { /* fall through to the turn's own ears */ }
+  return '';
+}
+
 async function send(payload) {
   setBusy(true);
   hintEl.textContent = 'sent — hold on';
@@ -529,8 +552,20 @@ function blobToB64(blob) {
 // than a decorative loop: if it does not move, he is not being recorded.
 var audioCtx = null, analyser = null, meterRAF = 0, meterSrc = null, levelHist = [];
 var silentSince = 0, warnedSilent = false;
+
+// Auto-send, from his own voice note on 4 November: "every time I stop talking I
+// have to hit the microphone button to send it... when I pause for more than one
+// or two seconds, pick it up and drop it" - but also "I don't want to be
+// interrupted while I'm still thinking". Both are honoured by counting down in
+// public: the turn ends itself after a real pause, and any sound before the
+// countdown finishes cancels it, so thinking out loud keeps the floor.
+var AUTO = { enabled: true, quietMs: 1500, sendAtMs: 2600, minMs: 700, maxMs: 45000, started: 0, lastSound: 0, spoken: false };
 var bars = Array.prototype.slice.call(document.querySelectorAll('#lvlbars span'));
 var barsWrap = document.getElementById('lvlbars');
+
+function autoHintReset() {
+  if (hintEl.textContent.indexOf('sending in') === 0) hintEl.textContent = 'tap again to send';
+}
 
 function meterStart(stream) {
   meterStop();
@@ -570,6 +605,23 @@ function meterStart(stream) {
         }
       } else {
         silentSince = 0;
+      }
+
+      if (AUTO.enabled && live) {
+        var now = Date.now();
+        if (lvl > 0.2) { AUTO.lastSound = now; AUTO.spoken = true; autoHintReset(); }
+        if (AUTO.spoken) {
+          var quietFor = now - AUTO.lastSound;
+          if (quietFor > AUTO.quietMs && quietFor <= AUTO.sendAtMs) {
+            hintEl.textContent = 'sending in ' + Math.max(1, Math.ceil((AUTO.sendAtMs - quietFor) / 1000)) + '… talk to keep going';
+          }
+          if (quietFor > AUTO.sendAtMs || now - AUTO.started > AUTO.maxMs) {
+            var wasSilent = hintEl.textContent.indexOf('sending in') === 0;
+            AUTO.enabled = true; AUTO.spoken = false;
+            if (!wasSilent) hintEl.textContent = 'that was a long one — sending';
+            stop();
+          }
+        }
       }
       smooth = smooth * 0.7 + lvl * 0.3;
       mic.style.setProperty('--lvl', smooth.toFixed(3));
@@ -628,7 +680,10 @@ async function start() {
       var blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
       if (blob.size > 1200) {
         blobToB64(blob).then(function (b64) {
-          send({ audio_base64: b64, mime: blob.type || 'audio/webm' });
+          return hear(b64, blob.type || 'audio/webm').then(function (text) {
+            if (text) send({ text: text });
+            else send({ audio_base64: b64, mime: blob.type || 'audio/webm' });
+          });
         }).catch(function () { stateEl.textContent = 'could not read the recording'; });
       } else {
         hintEl.textContent = 'too short — hold on a moment longer';
@@ -640,6 +695,7 @@ async function start() {
     mic.classList.add('live');
     stateEl.textContent = 'listening';
     hintEl.textContent = 'tap again to send';
+    AUTO.started = Date.now(); AUTO.lastSound = Date.now(); AUTO.spoken = false;
     meterStart(stream);
   } catch (e) {
     var n = (e && e.name) || 'Error';
