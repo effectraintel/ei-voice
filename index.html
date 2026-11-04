@@ -101,7 +101,7 @@
   <button class="vclose" id="vclose" type="button">close</button>
   <div class="shead">Which mouth speaks</div>
   <div id="vbody"></div>
-  <div class="vnote">A tap takes effect on the next answer. Every voice gets a proper listen on the audition page, both languages.</div>
+  <div class="vnote">A tap changes this device only, on the next answer. The Effectra voice is the locked one, marked EI, and every door speaks in it. Every voice gets a proper listen on the audition page, both languages.</div>
 </div>
 <footer>
   <button id="mic" aria-label="Record">
@@ -228,7 +228,15 @@ var SPEAK_GATES = {
   gemini: ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'],
   openai: ['sage', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'shimmer', 'alloy', 'verse']
 };
-var VOICE = { gate: 'openai', voice: 'sage' };
+// The locked voice lives in the VoiceCanon record, not here. Edwin, 4 Nov 2026:
+// "once I found the one I like most we can lock that into the DNA of EI rather
+// than you changing it and I test?" So this page keeps NO opinion of its own: if
+// he has not chosen on this device, it names nothing and the speaking function
+// answers in the canon. Lock the record once and every door, device and instance
+// follows, with no page edit and no engine opinion in the way. A choice made
+// here is local to this device and never written back to the canon.
+var VOICE = null;
+var CANON = null;
 try {
   var savedVoice = JSON.parse(localStorage.getItem('ei_voice') || 'null');
   if (savedVoice && SPEAK_GATES[savedVoice.gate] && SPEAK_GATES[savedVoice.gate].indexOf(savedVoice.voice) > -1) {
@@ -269,12 +277,21 @@ function splitSentences(text) {
   return out;
 }
 
+// No local choice, no names in the request: the function then speaks in the
+// canon. That is the whole mechanism behind "lock it into the DNA".
+function speechRequest(text, lang) {
+  var payload = { text: text, lang: lang };
+  if (VOICE) { payload.gate = VOICE.gate; payload.voice = VOICE.voice; }
+  return payload;
+}
+
 function renderSegment(text, lang) {
   return fetch(SPEAK_ENDPOINT, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text: text, lang: lang, gate: VOICE.gate, voice: VOICE.voice })
+    body: JSON.stringify(speechRequest(text, lang))
   }).then(function (r) { return r.json(); }).then(function (d) {
+    if (d && d.canon) { CANON = { gate: d.canon.gate, voice: d.canon.voice, status: d.canon.status }; if (typeof labelVoice === 'function') labelVoice(); }
     if (!d || !d.ok || !d.audio_base64) throw new Error((d && d.error) || 'no audio');
     // Gemini answers in WAV, OpenAI in mp3; the type travels with the audio
     // instead of being assumed, or Safari silently refuses to play one of them.
@@ -799,11 +816,29 @@ window.addEventListener('beforeunload', stop);
   var all = document.getElementById('voiceall');
   if (!chip || !sheet || !body) return;
 
-  function label() { nameEl.textContent = VOICE.voice; chip.setAttribute('aria-label', 'voice ' + VOICE.voice + ' on the ' + VOICE.gate + ' gate'); }
-  label();
+  window.labelVoice = function () {
+    nameEl.textContent = VOICE ? VOICE.voice : (CANON ? CANON.voice : 'EI voice');
+    chip.setAttribute('aria-label', VOICE
+      ? 'voice ' + VOICE.voice + ' on the ' + VOICE.gate + ' gate, chosen on this device'
+      : 'the locked Effectra voice' + (CANON ? ': ' + CANON.voice : ''));
+  };
+  window.labelVoice();
 
   function draw() {
     body.innerHTML = '';
+    var back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'vbtn' + (VOICE ? '' : ' on');
+    back.style.marginBottom = '4px';
+    back.textContent = 'the Effectra voice' + (CANON ? ' \u00b7 ' + CANON.voice : '');
+    back.addEventListener('click', function () {
+      VOICE = null;
+      try { localStorage.removeItem('ei_voice'); } catch (e) {}
+      labelVoice(); draw(); sheet.classList.remove('open');
+      stateEl.textContent = 'back on the Effectra voice' + (CANON ? ' \u00b7 ' + CANON.voice : '');
+    });
+    body.appendChild(back);
+
     ['openai', 'gemini'].forEach(function (gate) {
       var head = document.createElement('div');
       head.className = 'gname';
@@ -814,13 +849,13 @@ window.addEventListener('beforeunload', stop);
       SPEAK_GATES[gate].forEach(function (v) {
         var b = document.createElement('button');
         b.type = 'button';
-        b.className = 'vbtn' + (VOICE.gate === gate && VOICE.voice === v ? ' on' : '');
-        b.textContent = v;
+        b.className = 'vbtn' + (VOICE && VOICE.gate === gate && VOICE.voice === v ? ' on' : '');
+        b.textContent = v + (CANON && CANON.gate === gate && CANON.voice === v ? ' \u00b7 EI' : '');
         b.addEventListener('click', function () {
           VOICE = { gate: gate, voice: v };
           try { localStorage.setItem('ei_voice', JSON.stringify(VOICE)); } catch (e) {}
-          label(); draw(); sheet.classList.remove('open');
-          hintEl.textContent = 'voice set to ' + v + ' \u00b7 tap the mic';
+          labelVoice(); draw(); sheet.classList.remove('open');
+          hintEl.textContent = 'this device now speaks in ' + v + ' \u00b7 tap the mic';
         });
         grid.appendChild(b);
       });
