@@ -223,7 +223,7 @@ function buildGroup(title, note, list) {
 }
 
 if (saved && saved.voice) selected = saved.voice;
-buildGroup('Gate one \u00b7 Gemini', 'The voices already on trial. The free tier allows only so many renders a day, so a sample may refuse while the allowance is spent.', GEMINI);
+buildGroup('Gate one \u00b7 Gemini', 'The voices already on trial. This model allows a hundred renders a day, project-wide, and a full listen of the three costs six. When the hundred are spent a sample refuses until about ten the next morning.', GEMINI);
 buildGroup('Gate two \u00b7 OpenAI', 'New on trial today, at his instruction. No daily allowance of the same kind, and the tone brief can be spoken to it in words.', OPENAI);
 
 function play(c, lang, btn) {
@@ -242,7 +242,7 @@ function play(c, lang, btn) {
       var why = (d && d.error) || '';
       var quota = /429|quota/i.test(why);
       status(quota
-        ? 'That gate is out of render allowance for today. The OpenAI voices still play.'
+        ? '<strong>Gemini</strong> has spent its hundred renders for today - it is a request cap on that model, not a credit problem, and it resets at midnight Pacific, about ten tomorrow morning. The OpenAI voices still play, and anything already spoken once is served from the cache.'
         : 'That sample did not render. ' + why);
       return;
     }
