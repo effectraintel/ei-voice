@@ -189,16 +189,43 @@ function renderSegment(text, lang) {
   });
 }
 
-function deviceSpeak(text, lang) {
-  if (!('speechSynthesis' in window) || !text) return;
-  var u = new SpeechSynthesisUtterance(text);
-  var v = voiceFor(lang);
-  u.lang = /^af/i.test(lang || '') ? 'af-ZA' : 'en-ZA';
-  if (v) { u.voice = v; u.lang = v.lang || u.lang; }
-  u.rate = 1.02;
-  u.onstart = function () { stateEl.textContent = 'speaking'; };
-  u.onend = function () { stateEl.textContent = 'tap the mic'; };
-  speechSynthesis.speak(u);
+function withTimeout(p, ms) {
+  return new Promise(function (res, rej) {
+    var done = false;
+    var t = setTimeout(function () {
+      if (done) return;
+      done = true;
+      rej(new Error('timeout'));
+    }, ms);
+    p.then(function (v) { if (done) return; done = true; clearTimeout(t); res(v); },
+           function (e) { if (done) return; done = true; clearTimeout(t); rej(e); });
+  });
+}
+
+// The device voice is the safety net, so it must always hand back control: an
+// utterance that ends, errors, or is never spoken still calls onDone.
+function deviceSpeak(text, lang, onDone) {
+  var finished = false;
+  function finish() {
+    if (finished) return;
+    finished = true;
+    stateEl.textContent = 'tap the mic';
+    if (onDone) onDone();
+  }
+  if (!('speechSynthesis' in window) || !text) { finish(); return; }
+  try {
+    var u = new SpeechSynthesisUtterance(text);
+    var v = voiceFor(lang);
+    u.lang = /^af/i.test(lang || '') ? 'af-ZA' : 'en-ZA';
+    if (v) { u.voice = v; u.lang = v.lang || u.lang; }
+    u.rate = 1.02;
+    u.onstart = function () { stateEl.textContent = 'speaking'; };
+    u.onend = finish;
+    u.onerror = finish;
+    speechSynthesis.speak(u);
+    // Some browsers never fire onend for a cancelled or silent utterance.
+    setTimeout(finish, Math.max(4000, String(text).length * 90));
+  } catch (e) { finish(); }
 }
 
 function speak(text, lang) {
@@ -207,32 +234,51 @@ function speak(text, lang) {
   var token = playback.token;
   var langCode = /^af/i.test(lang || '') ? 'af' : 'en';
   var segments = splitSentences(text);
+  if (!segments.length) return;
 
-  // Fire every sentence at once. the first one plays the moment it lands.
-  var ready = segments.map(function (seg) { return renderSegment(seg, langCode); });
+  var ready = segments.map(function (seg) {
+    // Six seconds is the whole allowance for one spoken sentence: the measured
+    // render is 2.7 to 3.5 seconds, so a rail past six is a stalled rail.
+    return withTimeout(renderSegment(seg, langCode), 6000);
+  });
 
   var i = 0;
+  var advanced = false;
+
+  function advance() {
+    if (advanced) return;
+    advanced = true;
+    stateEl.textContent = 'tap the mic';
+    next();
+  }
+
   function next() {
     if (token !== playback.token) return;
     if (i >= ready.length) { stateEl.textContent = 'tap the mic'; return; }
     var idx = i++;
+    advanced = false;
     stateEl.textContent = 'speaking';
     ready[idx].then(function (src) {
       if (token !== playback.token) return;
       var audio = new Audio(src);
       playback.audios.push(audio);
-      audio.onended = next;
-      audio.onerror = next;
-      audio.play().catch(function () {
-        // Autoplay blocked or unsupported: fall back to the device voice for
-        // this sentence rather than dropping it.
-        deviceSpeak(segments[idx], langCode);
-      });
+      var started = false;
+      audio.onplaying = function () { started = true; };
+      audio.onended = advance;
+      audio.onerror = function () { deviceSpeak(segments[idx], langCode, advance); };
+      audio.play().catch(function () { deviceSpeak(segments[idx], langCode, advance); });
+      // If the audio does not actually start within 3.5 seconds, the network is
+      // holding a file that looked ready. Speak it instead of waiting.
+      setTimeout(function () {
+        if (token !== playback.token || started) return;
+        try { audio.pause(); } catch (e) {}
+        deviceSpeak(segments[idx], langCode, advance);
+      }, 3500);
     }).catch(function () {
-      deviceSpeak(segments[idx], langCode);
-      next();
+      deviceSpeak(segments[idx], langCode, advance);
     });
   }
+
   next();
 }
 
