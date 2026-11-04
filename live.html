@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14110f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Effectra Intelligence — the live door</title>
+<style>
+  :root { --gold:#b08d2f; --char:#14110f; --ink:#efe9df; --dim:#9a9184; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--char); color:var(--ink);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  body { display:flex; flex-direction:column; padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
+  header { padding:16px 0 6px; text-align:center; }
+  .wordmark { letter-spacing:.34em; font-size:11px; color:var(--gold); text-transform:uppercase; }
+  .sub { margin-top:6px; font-size:12px; color:var(--dim); letter-spacing:.06em; }
+  .state { margin-top:8px; font-size:13px; color:var(--ink); letter-spacing:.04em; min-height:18px; }
+  .state .clock { color:var(--gold); font-variant-numeric:tabular-nums; }
+  .warn { display:none; margin:10px 0 0; padding:10px 12px; border:1px solid #5a3a1c; background:#241a10;
+    color:#e8cfae; font-size:12.5px; line-height:1.5; border-radius:10px; text-align:left; }
+  .warn.show { display:block; }
+  main { flex:1; overflow-y:auto; padding:10px 2px 4px; -webkit-overflow-scrolling:touch; }
+  .turn { margin:0 0 14px; max-width:92%; }
+  .turn.you { margin-left:auto; text-align:right; }
+  .who { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
+  .said { white-space:pre-wrap; }
+  .turn.you .said { color:#cfc6b6; }
+  .lat { margin-top:5px; font-size:11.5px; color:var(--gold); letter-spacing:.04em; }
+  footer { text-align:center; padding-top:8px; }
+  .voicebar { display:flex; align-items:center; justify-content:center; gap:12px; margin:2px 0 10px; }
+  #voicechip { font:inherit; font-size:11.5px; letter-spacing:.08em; color:var(--dim);
+    background:transparent; border:1px solid #3a332a; border-radius:999px; padding:5px 12px; cursor:pointer; }
+  #voicechip span { color:var(--gold); }
+  #back { font-size:11px; letter-spacing:.06em; color:#6f675b; text-decoration:none; border-bottom:1px dotted #4a4237; }
+  #voicesheet { display:none; position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 12px);
+    z-index:20; background:#1a1613; border:1px solid #3a332a; border-radius:14px; padding:14px 14px 10px;
+    box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #voicesheet.open { display:block; }
+  #voicesheet .shead { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+  #voicesheet .vgrid { display:flex; flex-wrap:wrap; gap:6px; }
+  #voicesheet .vbtn { font:inherit; font-size:12.5px; padding:7px 11px; border-radius:999px;
+    border:1px solid #3a332a; background:#221d18; color:#cfc6b6; cursor:pointer; }
+  #voicesheet .vbtn.on { border-color:var(--gold); color:var(--gold); background:#2a2016; }
+  #voicesheet .vnote { font-size:11.5px; color:var(--dim); margin-top:10px; line-height:1.5; }
+
+  /* Liveness in three acts, the rule he set on 4 Nov 2026: a press has to be
+     answered before anything slow happens, and the button has to show it is
+     hearing him. Act one, the arming ring, spins on touch, before the browser
+     has even asked for the microphone. Act two is his actual level. Act three is
+     the clock and the plain line when it hears nothing. */
+  button#mic { width:92px; height:92px; border-radius:50%; border:1px solid #3a332a; background:#1d1916;
+    color:var(--ink); display:grid; place-items:center; margin:0 auto 8px; --lvl:0;
+    transition:transform .12s, background .2s, border-color .2s, box-shadow .08s linear;
+    box-shadow:0 0 0 calc(var(--lvl) * 12px) rgba(176,141,47,calc(var(--lvl) * .16)); }
+  button#mic.live { border-color:var(--gold); background:#231c14; }
+  button#mic.arming { border-color:var(--gold); animation:armpulse 1s ease-in-out infinite; }
+  @keyframes armpulse {
+    0%   { box-shadow:0 0 0 2px rgba(176,141,47,.10); }
+    50%  { box-shadow:0 0 0 10px rgba(176,141,47,.16); }
+    100% { box-shadow:0 0 0 2px rgba(176,141,47,.10); }
+  }
+  button#mic.talking { transform:translateY(-2px); }
+  #mic .glyph { font-size:26px; line-height:1; opacity:.9; }
+  #bars { display:flex; gap:3px; align-items:flex-end; height:16px; margin:0 auto 8px; justify-content:center; }
+  #bars i { width:3px; height:4px; background:#4a4237; border-radius:2px; transition:height .08s linear, background .2s; }
+  #bars i.hot { background:var(--gold); }
+  .hint { font-size:11.5px; color:#6f675b; letter-spacing:.04em; }
+  .footmark { margin-top:10px; font-size:9.5px; letter-spacing:.28em; color:#4f4a41; text-transform:uppercase; }
+  .footmark span { display:block; letter-spacing:.12em; margin-top:4px; color:#3f3a33; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">Effectra Intelligence</div>
+  <div class="sub">the live door · speech straight through</div>
+  <div class="state" id="state">tap the circle to open the door</div>
+</header>
+
+<main id="log"></main>
+
+<footer>
+  <div class="voicebar">
+    <button id="voicechip">voice · <span id="voicename">Kore</span></button>
+    <a id="back" href="./index.html">the two-step channel</a>
+  </div>
+  <button id="mic" aria-label="open the door"><span class="glyph">◍</span></button>
+  <div id="bars"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="hint" id="hint">one tap opens the microphone and the stream together</div>
+  <div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span></div>
+</footer>
+
+<div id="voicesheet">
+  <div class="shead">the mouth <button id="vclose" style="float:right;background:transparent;border:0;color:#6f675b;font:inherit;font-size:11px;cursor:pointer">close</button></div>
+  <div class="vgrid" id="vgrid"></div>
+  <div class="vnote">Changing the voice starts a fresh session, because the mouth is chosen when the door opens.</div>
+</div>
+
+<script>
+/* The live door. One websocket, his microphone in, the model's audio out: no
+   transcription step and no render step in between. Everything the page has to
+   be honest about is on screen: what it heard, what it said, and how long it took
+   from his last word to the first sound. */
+
+const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
+const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
+
+const BRIEF =
+  'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. ' +
+  'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
+  'Speak in at most three sentences, and put the substance in the first one. ' +
+  'If you offer a next step, fold it into the last sentence. ' +
+  'Never end with "anything else", never ask if there is anything more you can help with, ' +
+  'never close like a call centre. When you are done, stop. ' +
+  'You cannot reach his notes, reminders, people or vault on this door yet. If he asks about his own life ' +
+  'and you do not know, say plainly that this door cannot reach the house yet. ' +
+  'Never invent his schedule, his people or his numbers.';
+
+const el = (id) => document.getElementById(id);
+const stateEl = el('state'), logEl = el('log'), micBtn = el('mic'), hintEl = el('hint');
+const bars = [...document.querySelectorAll('#bars i')];
+
+let ws = null, voice = localStorage.getItem('ei-live-voice') || 'Kore';
+let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
+let listening = false, busy = false, sessionUp = false;
+let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency = null;
+let clockT = null, clockStart = 0;
+
+el('voicename').textContent = voice;
+
+/* ---------- small screen helpers ---------- */
+
+function setState(text) { stateEl.textContent = text; }
+function startClock(label) {
+  stopClock(); clockStart = Date.now();
+  const tick = () => {
+    const sec = ((Date.now() - clockStart) / 1000).toFixed(1);
+    stateEl.textContent = label + ' ';
+    const s = document.createElement('span');
+    s.className = 'clock';
+    s.textContent = sec + 's';
+    stateEl.appendChild(s);
+  };
+  tick(); clockT = setInterval(tick, 100);
+}
+function stopClock() { if (clockT) clearInterval(clockT); clockT = null; }
+function warn(text) { hintEl.textContent = text; hintEl.style.color = '#e8cfae'; }
+function hint(text) { hintEl.textContent = text; hintEl.style.color = ''; }
+
+let turns = { you: null, engine: null };
+let said = { you: '', engine: '' };
+
+function addTurn(who, text) {
+  const d = document.createElement('div');
+  d.className = 'turn ' + (who === 'you' ? 'you' : 'engine');
+  const w = document.createElement('div'); w.className = 'who';
+  w.textContent = who === 'you' ? 'you' : 'engine';
+  const s = document.createElement('div'); s.className = 'said'; s.textContent = text;
+  d.append(w, s); logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+  return d;
+}
+
+/* Transcripts arrive as fragments, so assemble them into the current turn of the
+   right speaker instead of printing a line per fragment. */
+function appendLive(who, text) {
+  if (!turns[who]) { turns[who] = addTurn(who, ''); said[who] = ''; }
+  said[who] += text;
+  turns[who].querySelector('.said').textContent = said[who];
+  logEl.scrollTop = logEl.scrollHeight;
+  if (who === 'engine' && pendingLatency !== null) attachLatency(turns[who]);
+}
+
+function attachLatency(turnEl) {
+  if (pendingLatency === null) return;
+  const l = document.createElement('div');
+  l.className = 'lat';
+  l.textContent = 'first sound ' + pendingLatency.toFixed(2) + 's after your last word';
+  turnEl.appendChild(l);
+  pendingLatency = null;
+}
+
+function resetTurns() { turns = { you: null, engine: null }; said = { you: '', engine: '' }; }
+
+/* ---------- the door ---------- */
+
+async function openDoor() {
+  if (busy) return;
+  busy = true;
+  micBtn.classList.add('arming');
+  bars.forEach(b => b.classList.remove('hot'));
+  hint('');
+  startClock('opening the door');
+  try {
+    const r = await fetch(FN, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'the door did not open');
+
+    await openMic();
+
+    ws = new WebSocket(d.ws + '?access_token=' + encodeURIComponent(d.token));
+    ws.onopen = () => ws.send(JSON.stringify({
+      setup: {
+        model: 'models/' + d.model,
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        },
+        systemInstruction: { parts: [{ text: BRIEF }] },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
+      },
+    }));
+    ws.onmessage = onMessage;
+    ws.onerror = () => warn('the stream dropped. tap the circle to open the door again.');
+    ws.onclose = () => { sessionUp = false; listening = false; micBtn.classList.remove('live'); };
+  } catch (e) {
+    busy = false;
+    stopClock();
+    micBtn.classList.remove('arming');
+    setState('the door is shut');
+    const msg = (e && e.message) ? e.message : 'the door did not open';
+    warn(/permission|denied|NotAllowed/i.test(msg)
+      ? 'the browser refused the microphone. allow it for this page, then tap the circle again.'
+      : msg);
+    closeMic();
+  }
+}
+
+function onMessage(ev) {
+  let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+
+  if (msg.setupComplete) {
+    sessionUp = true; busy = false; listening = true;
+    stopClock();
+    micBtn.classList.remove('arming'); micBtn.classList.add('live');
+    setState('listening. speak whenever you like');
+    hint('tap the circle again to close the door');
+    return;
+  }
+  if (msg.voiceActivity && msg.voiceActivity.type === 'ACTIVITY_END') {
+    // the server's own turn boundary is the most honest "last word" we get
+    if (!speaking) { lastWordAt = Date.now(); awaitingFirstAudio = true; }
+  }
+  if (msg.error) { warn(msg.error.message || 'the stream reported a problem'); return; }
+
+  const sc = msg.serverContent;
+  if (!sc) return;
+
+  if (sc.inputTranscription && sc.inputTranscription.text) appendLive('you', sc.inputTranscription.text);
+  if (sc.outputTranscription && sc.outputTranscription.text) appendLive('engine', sc.outputTranscription.text);
+
+  const parts = (sc.modelTurn && sc.modelTurn.parts) || [];
+  for (const p of parts) {
+    const data = p.inlineData && p.inlineData.data;
+    if (data) playPcm(data);
+  }
+  if (sc.turnComplete) {
+    awaitingFirstAudio = false;
+    setState(listening ? 'listening' : 'the door is shut');
+  }
+}
+
+/* ---------- microphone ---------- */
+
+async function openMic() {
+  if (micCtx) return;
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+  micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+  await micCtx.resume();
+  const src = micCtx.createMediaStreamSource(micStream);
+  proc = micCtx.createScriptProcessor(4096, 1, 1);
+
+  proc.onaudioprocess = (e) => {
+    const data = e.inputBuffer.getChannelData(0);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+    const rms = Math.sqrt(sum / data.length);
+    const norm = Math.min(1, Math.max(0, (20 * Math.log10(rms + 1e-8) + 62) / 52));
+    paintLevel(norm);
+
+    const voiced = rms > 0.013;
+    if (voiced) {
+      if (!speaking) { speaking = true; if (playing()) barge(); }
+    } else if (speaking) {
+      speaking = false;
+      lastWordAt = Date.now();
+      awaitingFirstAudio = true;
+    }
+
+    if (!listening || !sessionUp || !ws || ws.readyState !== 1) return;
+    sendPcm(downsample(data, 48000, 16000));
+  };
+  src.connect(proc);
+  proc.connect(micCtx.destination);
+}
+
+function paintLevel(norm) {
+  micBtn.style.setProperty('--lvl', norm.toFixed(2));
+  micBtn.classList.toggle('talking', norm > 0.25);
+  bars.forEach((b, i) => {
+    b.classList.toggle('hot', norm > (i + 1) / 6);
+    b.style.height = (4 + Math.round(norm * 12 * ((i + 1) / 5))).toFixed(0) + 'px';
+  });
+}
+
+function closeMic() {
+  listening = false; speaking = false;
+  try { proc && proc.disconnect(); } catch {}
+  try { micCtx && micCtx.close(); } catch {}
+  try { micStream && micStream.getTracks().forEach(t => t.stop()); } catch {}
+  proc = null; micCtx = null; micStream = null;
+  micBtn.classList.remove('live', 'talking');
+  micBtn.style.setProperty('--lvl', 0);
+  bars.forEach(b => { b.classList.remove('hot'); b.style.height = '4px'; });
+  try { playCtx && playCtx.close(); } catch {}
+  playCtx = null; playAt = 0;
+}
+
+function downsample(float32, from, to) {
+  if (to === from) return float32;
+  const ratio = from / to, out = new Float32Array(Math.floor(float32.length / ratio));
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.floor(i * ratio), b = Math.min(float32.length, Math.floor((i + 1) * ratio));
+    let sum = 0;
+    for (let j = a; j < b; j++) sum += float32[j];
+    out[i] = sum / Math.max(1, b - a);
+  }
+  return out;
+}
+
+function sendPcm(float32) {
+  const i16 = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  const bytes = new Uint8Array(i16.buffer);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  ws.send(JSON.stringify({
+    realtimeInput: { audio: { data: btoa(bin), mimeType: 'audio/pcm;rate=16000' } },
+  }));
+}
+
+/* ---------- the engine's voice ---------- */
+
+function playCtxEnsure() {
+  if (!playCtx) playCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (playCtx.state === 'suspended') playCtx.resume();
+  return playCtx;
+}
+
+function playing() {
+  return !!playCtx && playAt > 0 && playCtx.currentTime < playAt - 0.06;
+}
+
+function playPcm(b64) {
+  const ctx = playCtxEnsure();
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const i16 = new Int16Array(bytes.buffer);
+  const buf = ctx.createBuffer(1, i16.length, 24000);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < i16.length; i++) ch[i] = i16[i] / 0x8000;
+
+  if (awaitingFirstAudio && lastWordAt) {
+    const sec = (Date.now() - lastWordAt) / 1000;
+    awaitingFirstAudio = false;
+    if (turns.engine) { pendingLatency = sec; attachLatency(turns.engine); }
+    else pendingLatency = sec;
+  }
+
+  if (playAt < ctx.currentTime + 0.05) playAt = ctx.currentTime + 0.05;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(playAt);
+  playAt += buf.duration;
+}
+
+/* Barge-in: he speaks, our voice stops where it is. The server interrupts itself
+   on speech too, but cutting our own queue is the part that feels right. */
+function barge() {
+  try { playCtx && playCtx.close(); } catch {}
+  playCtx = null; playAt = 0;
+  awaitingFirstAudio = false;
+}
+
+/* ---------- controls ---------- */
+
+micBtn.addEventListener('click', async () => {
+  if (busy) return;
+  if (listening || sessionUp) {
+    listening = false; sessionUp = false;
+    try { ws && ws.close(); } catch {}
+    ws = null;
+    closeMic(); stopClock();
+    setState('the door is shut');
+    hint('tap the circle to open it again');
+    return;
+  }
+  resetTurns();
+  lastWordAt = 0; awaitingFirstAudio = false; pendingLatency = null; speaking = false;
+  await openDoor();
+});
+
+el('voicechip').addEventListener('click', () => el('voicesheet').classList.toggle('open'));
+el('vclose').addEventListener('click', () => el('voicesheet').classList.remove('open'));
+
+VOICES.forEach(v => {
+  const b = document.createElement('button');
+  b.className = 'vbtn' + (v === voice ? ' on' : '');
+  b.textContent = v;
+  b.onclick = () => {
+    voice = v;
+    localStorage.setItem('ei-live-voice', v);
+    el('voicename').textContent = v;
+    [...el('vgrid').children].forEach(x => x.classList.toggle('on', x.textContent === v));
+    el('voicesheet').classList.remove('open');
+    if (sessionUp || listening) {
+      listening = false; sessionUp = false;
+      try { ws && ws.close(); } catch {}
+      ws = null; closeMic();
+    }
+    setState('voice set to ' + v + '. tap the circle');
+  };
+  el('vgrid').appendChild(b);
+});
+
+window.addEventListener('beforeunload', () => {
+  try { ws && ws.close(); } catch {}
+  closeMic();
+});
+</script>
+</body>
+</html>
