@@ -115,7 +115,15 @@ const BRIEF =
   'never close like a call centre. When you are done, stop. ' +
   'You cannot reach his notes, reminders, people or vault on this door yet. If he asks about his own life ' +
   'and you do not know, say plainly that this door cannot reach the house yet. ' +
-  'Never invent his schedule, his people or his numbers.';
+  'Never invent his schedule, his people or his numbers. ' +
+  // He said it "felt like older conversations", and with no memory rail the only
+  // ways that can happen are a socket that never closed or a model performing
+  // familiarity it does not have. The second is the dangerous one: invented
+  // continuity sounds exactly like real continuity.
+  'You have no memory of any earlier conversation. This one began when this door opened, ' +
+  'and nothing before it is available to you. Never say that you remember, that you discussed ' +
+  'something before, or that he told you something earlier. If he refers to a past conversation, ' +
+  'say plainly that you hold only this session and ask him to repeat what matters.';
 
 const el = (id) => document.getElementById(id);
 const stateEl = el('state'), logEl = el('log'), micBtn = el('mic'), hintEl = el('hint');
