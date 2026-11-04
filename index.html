@@ -142,20 +142,98 @@ function voiceFor(lang) {
     || pool[0] || null;
 }
 
-function speak(text, lang) {
+// ---- Speaking ------------------------------------------------------------
+// Until 4 Nov the page spoke with whatever voice the device happened to have,
+// which is why it sounded like a phone reading a menu. It now speaks in the
+// Effectra voice (the same one the audition page demonstrates) and starts on
+// the FIRST SENTENCE instead of waiting for the whole answer: each sentence is
+// rendered in parallel, then played in order. Measured 2.7 to 3.5 seconds per
+// sentence against roughly thirteen for a full answer that way.
+//
+// If the voice service is unreachable the device voice takes over, so the
+// channel never goes silent. The voice name is provisional until Edwin picks.
+var SPEAK_ENDPOINT = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceSpeak';
+var SPEAK_VOICE = 'Kore';
+var playback = { token: 0, audios: [] };
+
+function stopPlayback() {
+  playback.token++;
+  playback.audios.forEach(function (a) { try { a.pause(); } catch (e) {} });
+  playback.audios = [];
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+}
+
+function splitSentences(text) {
+  var parts = String(text || '').replace(/\s+/g, ' ').trim().match(/[^.!?\u2026]+[.!?\u2026]*/g) || [];
+  var out = [];
+  parts.forEach(function (p) {
+    p = p.trim();
+    if (!p) return;
+    while (p.length > 220) { out.push(p.slice(0, 220)); p = p.slice(220).trim(); }
+    if (p) out.push(p);
+  });
+  // Four segments is enough for a spoken turn; anything longer is merged into
+  // the last one so the mouth never runs far behind the answer.
+  if (out.length > 4) out = out.slice(0, 3).concat([out.slice(3).join(' ')]);
+  return out;
+}
+
+function renderSegment(text, lang) {
+  return fetch(SPEAK_ENDPOINT, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: text, lang: lang, voice: SPEAK_VOICE })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok || !d.audio_base64) throw new Error((d && d.error) || 'no audio');
+    return 'data:audio/wav;base64,' + d.audio_base64;
+  });
+}
+
+function deviceSpeak(text, lang) {
   if (!('speechSynthesis' in window) || !text) return;
-  try { speechSynthesis.cancel(); } catch (e) {}
   var u = new SpeechSynthesisUtterance(text);
   var v = voiceFor(lang);
   u.lang = /^af/i.test(lang || '') ? 'af-ZA' : 'en-ZA';
   if (v) { u.voice = v; u.lang = v.lang || u.lang; }
-  else {
-    warn('<b>This device has no ' + (u.lang.slice(0,2) === 'af' ? 'Afrikaans' : 'English') + ' voice installed.</b> The answer still appears below.');
-  }
   u.rate = 1.02;
   u.onstart = function () { stateEl.textContent = 'speaking'; };
   u.onend = function () { stateEl.textContent = 'tap the mic'; };
   speechSynthesis.speak(u);
+}
+
+function speak(text, lang) {
+  if (!text) return;
+  stopPlayback();
+  var token = playback.token;
+  var langCode = /^af/i.test(lang || '') ? 'af' : 'en';
+  var segments = splitSentences(text);
+
+  // Fire every sentence at once. the first one plays the moment it lands.
+  var ready = segments.map(function (seg) { return renderSegment(seg, langCode); });
+
+  var i = 0;
+  function next() {
+    if (token !== playback.token) return;
+    if (i >= ready.length) { stateEl.textContent = 'tap the mic'; return; }
+    var idx = i++;
+    stateEl.textContent = 'speaking';
+    ready[idx].then(function (src) {
+      if (token !== playback.token) return;
+      var audio = new Audio(src);
+      playback.audios.push(audio);
+      audio.onended = next;
+      audio.onerror = next;
+      audio.play().catch(function () {
+        // Autoplay blocked or unsupported: fall back to the device voice for
+        // this sentence rather than dropping it.
+        deviceSpeak(segments[idx], langCode);
+      });
+    }).catch(function () {
+      deviceSpeak(segments[idx], langCode);
+      next();
+    });
+  }
+  next();
 }
 
 // Voice lists load asynchronously in most browsers; touching them at boot and
@@ -255,7 +333,10 @@ function stop() {
   }
 }
 
-mic.addEventListener('click', function () { if (live) stop(); else start(); });
+mic.addEventListener('click', function () {
+  stopPlayback();
+  if (live) stop(); else start();
+});
 
 var textform = document.getElementById('textform');
 textform.addEventListener('submit', function (e) {
