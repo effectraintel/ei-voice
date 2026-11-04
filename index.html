@@ -26,6 +26,24 @@
   .turn.you .said { color:#cfc6b6; }
   .acts { margin-top:6px; font-size:12px; color:var(--gold); }
   footer { text-align:center; padding-top:8px; }
+  .voicebar { display:flex; align-items:center; justify-content:center; gap:12px; margin:2px 0 10px; }
+  #voicechip { font:inherit; font-size:11.5px; letter-spacing:.08em; color:var(--dim);
+    background:transparent; border:1px solid #3a332a; border-radius:999px; padding:5px 12px; cursor:pointer; }
+  #voicechip span { color:var(--gold); }
+  #voiceall { font-size:11px; letter-spacing:.06em; color:#6f675b; text-decoration:none; border-bottom:1px dotted #4a4237; }
+  #voicesheet { display:none; position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 12px);
+    z-index:20; background:#1a1613; border:1px solid #3a332a; border-radius:14px; padding:14px 14px 10px;
+    box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #voicesheet.open { display:block; }
+  #voicesheet .shead { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+  #voicesheet .gname { font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:#6f675b; margin:12px 0 6px; }
+  #voicesheet .vgrid { display:flex; flex-wrap:wrap; gap:6px; }
+  #voicesheet .vbtn { font:inherit; font-size:12.5px; padding:7px 11px; border-radius:999px;
+    border:1px solid #3a332a; background:#221d18; color:#cfc6b6; cursor:pointer; }
+  #voicesheet .vbtn.on { border-color:var(--gold); color:var(--gold); background:#2a2016; }
+  #voicesheet .vnote { font-size:11.5px; color:var(--dim); margin-top:10px; line-height:1.5; }
+  #voicesheet .vclose { float:right; font:inherit; font-size:11px; color:#6f675b; background:transparent;
+    border:0; cursor:pointer; }
   button#mic { width:92px; height:92px; border-radius:50%; border:1px solid #3a332a; background:#1d1916;
     color:var(--ink); display:grid; place-items:center; margin:0 auto 8px; --lvl:0;
     transition:transform .12s, background .2s, border-color .2s, box-shadow .08s linear; }
@@ -79,6 +97,12 @@
   <div class="warn" id="warn"></div>
 </header>
 <main id="log"></main>
+<div id="voicesheet" role="dialog" aria-label="Voice">
+  <button class="vclose" id="vclose" type="button">close</button>
+  <div class="shead">Which mouth speaks</div>
+  <div id="vbody"></div>
+  <div class="vnote">A tap takes effect on the next answer. Every voice gets a proper listen on the audition page, both languages.</div>
+</div>
 <footer>
   <button id="mic" aria-label="Record">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
@@ -93,6 +117,10 @@
     <input id="typed" name="text" placeholder="or type a turn" autocomplete="off">
     <button id="sendTyped" type="submit">send</button>
   </form>
+  <div class="voicebar" id="voicebar">
+    <button id="voicechip" type="button">voice \u00b7 <span id="voicename">sage</span></button>
+    <a id="voiceall" href="audition.html">audition all voices</a>
+  </div>
   <div class="brand">Powered by Effectra Intelligence<br>Proof on chain. Payload in the vault.<br>&copy; 2026 Effectra Intelligence</div>
 </footer>
 <script>
@@ -186,7 +214,27 @@ function voiceFor(lang) {
 // If the voice service is unreachable the device voice takes over, so the
 // channel never goes silent. The voice name is provisional until Edwin picks.
 var SPEAK_ENDPOINT = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceSpeak';
-var SPEAK_VOICE = 'Kore';
+var AUDITION_PAGE = 'https://effectraintel.github.io/ei-voice/audition.html';
+
+// Two speaking gates, both kept, and he switches between them. Edwin, 4 Nov
+// 2026: "We need to keep both speaking gates and let me switch between them.
+// Let us give OpenAI an audition then." Gemini renders Kore, the voice already
+// on trial; OpenAI renders its own set and takes the tone brief as instructions.
+// The choice lives on the device, and the audition page writes the same key, so
+// picking a voice there changes this page too. Defaults to the OpenAI gate for
+// now only because the Gemini free tier's daily renders are spent today; it is
+// a starting point, not a verdict.
+var SPEAK_GATES = {
+  gemini: ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'],
+  openai: ['sage', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'shimmer', 'alloy', 'verse']
+};
+var VOICE = { gate: 'openai', voice: 'sage' };
+try {
+  var savedVoice = JSON.parse(localStorage.getItem('ei_voice') || 'null');
+  if (savedVoice && SPEAK_GATES[savedVoice.gate] && SPEAK_GATES[savedVoice.gate].indexOf(savedVoice.voice) > -1) {
+    VOICE = { gate: savedVoice.gate, voice: savedVoice.voice };
+  }
+} catch (e) {}
 var playback = { token: 0, audios: [] };
 
 function stopPlayback() {
@@ -225,10 +273,12 @@ function renderSegment(text, lang) {
   return fetch(SPEAK_ENDPOINT, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text: text, lang: lang, voice: SPEAK_VOICE })
+    body: JSON.stringify({ text: text, lang: lang, gate: VOICE.gate, voice: VOICE.voice })
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d || !d.ok || !d.audio_base64) throw new Error((d && d.error) || 'no audio');
-    return 'data:audio/wav;base64,' + d.audio_base64;
+    // Gemini answers in WAV, OpenAI in mp3; the type travels with the audio
+    // instead of being assumed, or Safari silently refuses to play one of them.
+    return 'data:' + (d.mime || 'audio/wav') + ';base64,' + d.audio_base64;
   });
 }
 
@@ -739,6 +789,52 @@ textform.addEventListener('submit', function (e) {
 });
 
 window.addEventListener('beforeunload', stop);
+
+// ---- the voice switcher ----------------------------------------------------
+(function () {
+  var chip = document.getElementById('voicechip');
+  var nameEl = document.getElementById('voicename');
+  var sheet = document.getElementById('voicesheet');
+  var body = document.getElementById('vbody');
+  var all = document.getElementById('voiceall');
+  if (!chip || !sheet || !body) return;
+
+  function label() { nameEl.textContent = VOICE.voice; chip.setAttribute('aria-label', 'voice ' + VOICE.voice + ' on the ' + VOICE.gate + ' gate'); }
+  label();
+
+  function draw() {
+    body.innerHTML = '';
+    ['openai', 'gemini'].forEach(function (gate) {
+      var head = document.createElement('div');
+      head.className = 'gname';
+      head.textContent = gate === 'gemini' ? 'Gemini gate' : 'OpenAI gate';
+      body.appendChild(head);
+      var grid = document.createElement('div');
+      grid.className = 'vgrid';
+      SPEAK_GATES[gate].forEach(function (v) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'vbtn' + (VOICE.gate === gate && VOICE.voice === v ? ' on' : '');
+        b.textContent = v;
+        b.addEventListener('click', function () {
+          VOICE = { gate: gate, voice: v };
+          try { localStorage.setItem('ei_voice', JSON.stringify(VOICE)); } catch (e) {}
+          label(); draw(); sheet.classList.remove('open');
+          hintEl.textContent = 'voice set to ' + v + ' \u00b7 tap the mic';
+        });
+        grid.appendChild(b);
+      });
+      body.appendChild(grid);
+    });
+  }
+
+  chip.addEventListener('click', function () {
+    var open = sheet.classList.toggle('open');
+    if (open) draw();
+  });
+  document.getElementById('vclose').addEventListener('click', function () { sheet.classList.remove('open'); });
+  if (all) all.setAttribute('href', AUDITION_PAGE);
+})();
 </script>
 </body>
 </html>
