@@ -125,6 +125,13 @@ let ws = null, voice = localStorage.getItem('ei-live-voice') || 'Kore';
 let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
 let listening = false, busy = false, sessionUp = false;
 let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency = null;
+// Echo bookkeeping. A phone speaker feeds its own voice back into its own microphone.
+// At a threshold low enough to catch a quiet word, that echo looks exactly like the
+// owner interrupting, so the page used to cut its own sentence off mid-word.
+let playRunStart = 0, loudFrames = 0;
+const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
+const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
+const BARGE_FRAMES = 3;      // sustained, not a click
 let clockT = null, clockStart = 0;
 
 el('voicename').textContent = voice;
@@ -313,7 +320,7 @@ async function openMic() {
   micStream = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
-  if (!micCtx) micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+  if (!micCtx) micCtx = keepAlive(new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 }));
   await micCtx.resume();
   const src = micCtx.createMediaStreamSource(micStream);
   proc = micCtx.createScriptProcessor(4096, 1, 1);
@@ -326,16 +333,37 @@ async function openMic() {
     const norm = Math.min(1, Math.max(0, (20 * Math.log10(rms + 1e-8) + 62) / 52));
     paintLevel(norm);
 
-    const voiced = rms > 0.013;
+    // Are we the ones making the noise? While our own voice is in the air, the
+    // microphone is mostly hearing the loudspeaker. Real speech still wins, but it
+    // has to be clearly louder than bleed and it has to last, or every "um" of a
+    // speaker tail would end our own sentence.
+    const ours = playing();
+    const voiced = rms > (ours ? ECHO_RMS : OPEN_RMS);
+
     if (voiced) {
-      if (!speaking) { speaking = true; if (playing()) barge(); }
-    } else if (speaking) {
-      speaking = false;
-      lastWordAt = Date.now();
-      awaitingFirstAudio = true;
+      loudFrames++;
+      if (!speaking && (!ours || (loudFrames >= BARGE_FRAMES && Date.now() - playRunStart > 400))) {
+        speaking = true;
+        if (ours) barge();
+      }
+      if (!speaking) speaking = true;
+    } else {
+      loudFrames = 0;
+      if (speaking) {
+        speaking = false;
+        lastWordAt = Date.now();
+        awaitingFirstAudio = true;
+      }
     }
 
     if (!listening || !sessionUp || !ws || ws.readyState !== 1) return;
+    // While we are speaking, send our own silence unless he is genuinely talking over
+    // us. Otherwise the server hears its own output, decides it was interrupted, and
+    // stops generating half a sentence in. That is the other way a sentence dies.
+    if (ours && !speaking) {
+      sendPcm(new Int16Array(640));
+      return;
+    }
     sendPcm(downsample(data, micCtx.sampleRate, 16000));
   };
   src.connect(proc);
@@ -394,13 +422,26 @@ function sendPcm(float32) {
 
 /* ---------- the engine's voice ---------- */
 
+/* iOS parks an audio context ('interrupted') when the phone takes an audio
+   session for itself, a notification, Siri, a call. Resuming it is the difference
+   between a file that plays and a sentence that dies halfway. */
+function keepAlive(ctx) {
+  try {
+    ctx.addEventListener('statechange', () => {
+      if (ctx.state === 'interrupted' || ctx.state === 'suspended') { ctx.resume().catch(() => {}); }
+    });
+  } catch {}
+  return ctx;
+}
+
 function playCtxEnsure() {
-  if (!playCtx) playCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!playCtx) playCtx = keepAlive(new (window.AudioContext || window.webkitAudioContext)());
   if (playCtx.state === 'suspended') playCtx.resume();
   return playCtx;
 }
 
 function playing() {
+  if (playCtx && (playAt === 0 || playCtx.currentTime >= playAt - 0.06)) playRunStart = 0;
   return !!playCtx && playAt > 0 && playCtx.currentTime < playAt - 0.06;
 }
 
@@ -425,6 +466,7 @@ function playPcm(b64) {
     }
   }
 
+  if (!playRunStart) playRunStart = ctx.currentTime;
   if (playAt < ctx.currentTime + 0.05) playAt = ctx.currentTime + 0.05;
   const src = ctx.createBufferSource();
   src.buffer = buf;
@@ -437,7 +479,7 @@ function playPcm(b64) {
    on speech too, but cutting our own queue is the part that feels right. */
 function barge() {
   try { playCtx && playCtx.close(); } catch {}
-  playCtx = null; playAt = 0;
+  playCtx = null; playAt = 0; playRunStart = 0; loudFrames = 0;
   awaitingFirstAudio = false;
 }
 
