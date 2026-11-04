@@ -118,19 +118,47 @@ function say(role, text, acts) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+// The voice picker matters more than it looks. On 4 Nov the page answered in
+// Finnish on Edwin's laptop: with no English voice chosen, the browser falls
+// back to the SYSTEM voice, whatever the machine's language is. So English is
+// now forced explicitly, and a saved choice wins if one exists.
+function englishVoice() {
+  var voices = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  var en = voices.filter(function (v) { return /^en/i.test(v.lang || ''); });
+  var saved = '';
+  try { saved = localStorage.getItem('ei_voice_name') || ''; } catch (e) {}
+  if (saved) {
+    var hit = en.filter(function (v) { return v.name === saved; })[0];
+    if (hit) return hit;
+  }
+  return en.filter(function (v) { return /en-ZA/i.test(v.lang); })[0]
+    || en.filter(function (v) { return /en-GB/i.test(v.lang); })[0]
+    || en.filter(function (v) { return /en-US/i.test(v.lang); })[0]
+    || en[0] || null;
+}
+
 function speak(text) {
   if (!('speechSynthesis' in window) || !text) return;
   try { speechSynthesis.cancel(); } catch (e) {}
   var u = new SpeechSynthesisUtterance(text);
-  var voices = speechSynthesis.getVoices() || [];
-  var pick = voices.filter(function (v) { return /en-ZA/i.test(v.lang); })[0]
-    || voices.filter(function (v) { return /en-GB/i.test(v.lang); })[0]
-    || voices.filter(function (v) { return /^en/i.test(v.lang); })[0];
-  if (pick) u.voice = pick;
+  var v = englishVoice();
+  u.lang = 'en-ZA';
+  if (v) { u.voice = v; u.lang = v.lang || 'en-ZA'; }
+  else {
+    warn('<b>This device has no English voice installed.</b> The answer still appears below. Add an English system voice to hear it spoken.');
+  }
   u.rate = 1.02;
   u.onstart = function () { stateEl.textContent = 'speaking'; };
   u.onend = function () { stateEl.textContent = 'tap the mic'; };
   speechSynthesis.speak(u);
+}
+
+// Voice lists load asynchronously in most browsers; touching them at boot and
+// again on the change event means the first answer is not spoken in the wrong
+// language while the list is still empty.
+if ('speechSynthesis' in window) {
+  try { speechSynthesis.getVoices(); } catch (e) {}
+  window.speechSynthesis.onvoiceschanged = function () { try { speechSynthesis.getVoices(); } catch (e) {} };
 }
 
 function setBusy(v) {
