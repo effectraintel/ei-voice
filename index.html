@@ -244,30 +244,118 @@ if ('speechSynthesis' in window) {
   window.speechSynthesis.onvoiceschanged = function () { try { speechSynthesis.getVoices(); } catch (e) {} };
 }
 
+// ---- Waiting out loud ----------------------------------------------------
+// Edwin's rule, 4 Nov 2026: "Waiting for something a few seconds is not a
+// problem, waiting without feedback and eventually getting stuck is." So a turn
+// now carries three things it did not have: a tone the instant the mic closes
+// (you hear that it landed), a running clock whose stage changes as it waits,
+// and a hard stop at 25 seconds that speaks, instead of a spinner that never
+// returns.
+function tone(freq, ms, gain) {
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    window.__eiAC = window.__eiAC || new AC();
+    var ac = window.__eiAC;
+    if (ac.state === 'suspended') ac.resume();
+    var o = ac.createOscillator(), g = ac.createGain();
+    var peak = gain || 0.05;
+    o.type = 'sine';
+    o.frequency.value = freq;
+    o.connect(g); g.connect(ac.destination);
+    var now = ac.currentTime;
+    g.gain.setValueAtTime(peak, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + (ms || 120) / 1000);
+    o.start(now);
+    o.stop(now + (ms || 120) / 1000 + 0.02);
+  } catch (e) {}
+}
+
+function stageFor(ms) {
+  if (ms < 1200) return 'got it';
+  if (ms < 4000) return 'thinking';
+  if (ms < 9000) return 'looking that up';
+  if (ms < 16000) return 'still working, this one is slow';
+  return 'nearly out of time';
+}
+
+var waiting = null;
+
+function endWaiting() {
+  if (!waiting) return;
+  clearInterval(waiting.clock);
+  clearInterval(waiting.tick);
+  clearTimeout(waiting.watch);
+  waiting = null;
+}
+
 function setBusy(v) {
   busy = v;
-  if (v) { mic.classList.add('work'); stateEl.textContent = 'thinking…'; }
-  else { mic.classList.remove('work'); }
+  if (v) mic.classList.add('work');
+  else mic.classList.remove('work');
 }
 
 async function send(payload) {
   setBusy(true);
-  hintEl.textContent = 'sending…';
+  hintEl.textContent = 'sent — hold on';
+
+  // Two quick notes: the first says "the mic closed", the second "I am on it".
+  tone(700, 90, 0.06);
+  setTimeout(function () { tone(980, 90, 0.05); }, 130);
+
+  var t0 = Date.now();
+  var ctl = new AbortController();
+  var timedOut = false;
+
+  stateEl.textContent = stageFor(0) + ' 0.0s';
+  waiting = {
+    clock: setInterval(function () {
+      var ms = Date.now() - t0;
+      stateEl.textContent = stageFor(ms) + ' ' + (ms / 1000).toFixed(1) + 's';
+    }, 200),
+    // A quiet tick every five seconds, so waiting is audible from across a room.
+    tick: setInterval(function () { tone(1250, 45, 0.02); }, 5000),
+    // Nothing may hang: at 25 seconds the turn is cut and the channel speaks.
+    watch: setTimeout(function () {
+      timedOut = true;
+      try { ctl.abort(); } catch (e) {}
+    }, 25000)
+  };
+
   try {
     var r = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(Object.assign({ session_id: sessionId, history: turns }, payload))
+      body: JSON.stringify(Object.assign({ session_id: sessionId, history: turns }, payload)),
+      signal: ctl.signal
     });
     var d = await r.json();
     if (!d.ok) throw new Error(d.error || 'turn failed');
+    tone(880, 70, 0.05);
     if (d.you_said) { say('you', d.you_said); turns.push({ role: 'you', content: d.you_said }); }
-    if (d.reply) { say('engine', d.reply, d.actions); turns.push({ role: 'engine', content: d.reply }); speak(d.reply, d.reply_lang || 'en'); }
-    hintEl.textContent = 'tap once to start, tap again to send';
+    if (d.reply) {
+      say('engine', d.reply, d.actions);
+      turns.push({ role: 'engine', content: d.reply });
+      speak(d.reply, d.reply_lang || 'en');
+    }
+    var secs = ((Date.now() - t0) / 1000).toFixed(1);
+    hintEl.textContent = 'tap once to start, tap again to send · last turn ' + secs + 's';
+    stateEl.textContent = 'ready';
   } catch (e) {
-    hintEl.textContent = 'that turn failed';
-    stateEl.textContent = 'error: ' + (e.message || 'unknown');
+    if (timedOut) {
+      var msg = 'That took too long, Boss. Ask me again.';
+      say('engine', msg);
+      turns.push({ role: 'engine', content: msg });
+      speak(msg, 'en');
+      hintEl.textContent = 'timed out at 25s — tap to ask again';
+      stateEl.textContent = 'timed out';
+    } else {
+      tone(260, 220, 0.06);
+      hintEl.textContent = 'that turn failed — tap to try again';
+      stateEl.textContent = 'error: ' + (e.message || 'unknown');
+    }
   } finally {
+    endWaiting();
     setBusy(false);
   }
 }
