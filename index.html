@@ -463,17 +463,19 @@ function speak(text, lang) {
         if (token === playback.token) stateEl.textContent = 'speaking';
       };
       audio.onended = finishSegment;
-      audio.onerror = function () { deviceSpeak(units[idx], langCode, finishSegment); };
-      audio.play().catch(function () { deviceSpeak(units[idx], langCode, finishSegment); });
+      audio.onerror = function () { stopClock(); deviceSpeak(units[idx], langCode, finishSegment); };
+      audio.play().catch(function () { stopClock(); deviceSpeak(units[idx], langCode, finishSegment); });
       // If the audio does not actually start within 3.5 seconds, the network is
       // holding a file that looked ready. Speak it instead of waiting.
       var startWatch = setTimeout(function () {
         if (token !== playback.token || started) return;
         try { audio.pause(); } catch (e) {}
+        stopClock();
         deviceSpeak(units[idx], langCode, finishSegment);
       }, 3500);
       playback.stoppers.push(function () { clearTimeout(startWatch); });
     }).catch(function () {
+      stopClock();
       deviceSpeak(units[idx], langCode, finishSegment);
     });
   }
@@ -603,6 +605,7 @@ async function send(payload) {
     });
     var d = await r.json();
     if (!d.ok) throw new Error(d.error || 'turn failed');
+    endWaiting(mine);
     tone(880, 70, 0.05);
     if (d.you_said) { say('you', d.you_said); turns.push({ role: 'you', content: d.you_said }); }
     var secs = ((Date.now() - t0) / 1000).toFixed(1);
