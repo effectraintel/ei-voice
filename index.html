@@ -189,6 +189,26 @@ function renderSegment(text, lang) {
   });
 }
 
+// The voice is one call, so it is one reading. Only an answer too long for the
+// speaking function is cut, and then only at a sentence boundary, into two parts
+// at most, so nothing is dropped and nothing shifts mood mid-answer.
+function chunkForSpeech(text) {
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return [];
+  var MAX = 850;
+  if (t.length <= MAX) return [t];
+  var parts = splitSentences(t);
+  var out = [];
+  var buf = '';
+  parts.forEach(function (p) {
+    if (buf && (buf + ' ' + p).length > MAX) { out.push(buf.trim()); buf = p; }
+    else buf = buf ? buf + ' ' + p : p;
+  });
+  if (buf) out.push(buf.trim());
+  if (out.length > 2) out = [out[0], out.slice(1).join(' ')];
+  return out;
+}
+
 function withTimeout(p, ms) {
   return new Promise(function (res, rej) {
     var done = false;
@@ -233,21 +253,15 @@ function speak(text, lang) {
   stopPlayback();
   var token = playback.token;
   var langCode = /^af/i.test(lang || '') ? 'af' : 'en';
-  var segments = splitSentences(text);
-  if (!segments.length) return;
-
-  // One continuous reading for a short answer. Edwin noticed the voice changing
-  // tone and tempo from sentence to sentence; that was this: each sentence was
-  // rendered as its own call, so each one inferred its own mood from its own
-  // words. A one or two sentence answer, which is most of them, now goes over as
-  // a single call and comes back as one thought. Only longer answers still
-  // split, and only so the first words start playing sooner.
-  var units = segments.length <= 2 ? [segments.join(' ')] : segments;
+  // One reply, one call, one reading. Splitting by sentence was the whole cause
+  // of the shifting tone: "the technical content is very formal, the things it
+  // can do about me is almost flirty." A short answer rendered in about three
+  // seconds; a long one takes longer, and the timer is there for exactly that.
+  var units = chunkForSpeech(text);
+  if (!units.length) return;
 
   var ready = units.map(function (seg) {
-    // Eight seconds is the whole allowance for one spoken unit: a single
-    // sentence renders in 2.7 to 3.5 seconds, a joined pair around five.
-    return withTimeout(renderSegment(seg, langCode), 8000);
+    return withTimeout(renderSegment(seg, langCode), 16000);
   });
 
   var i = 0;
@@ -265,13 +279,13 @@ function speak(text, lang) {
     if (i >= ready.length) { stateEl.textContent = 'tap the mic'; return; }
     var idx = i++;
     advanced = false;
-    stateEl.textContent = 'speaking';
+    stateEl.textContent = 'preparing the voice';
     ready[idx].then(function (src) {
       if (token !== playback.token) return;
       var audio = new Audio(src);
       playback.audios.push(audio);
       var started = false;
-      audio.onplaying = function () { started = true; };
+      audio.onplaying = function () { started = true; stateEl.textContent = 'speaking'; };
       audio.onended = advance;
       audio.onerror = function () { deviceSpeak(units[idx], langCode, advance); };
       audio.play().catch(function () { deviceSpeak(units[idx], langCode, advance); });
