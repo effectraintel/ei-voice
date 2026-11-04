@@ -226,7 +226,26 @@ async function openDoor() {
     ws.binaryType = 'arraybuffer';   // the server sends binary frames, not text
     ws.onmessage = onMessage;
     ws.onerror = () => warn('the stream dropped. tap the circle to open the door again.');
-    ws.onclose = () => { sessionUp = false; listening = false; micBtn.classList.remove('live'); };
+    ws.onclose = (e) => {
+      // A socket can open and then be refused a session (an exhausted API balance,
+      // a model that has been retired). Without this the page would sit on
+      // "opening the door" forever, which is the one thing it must never do.
+      const wasOpen = sessionUp || listening;
+      sessionUp = false; listening = false; busy = false;
+      micBtn.classList.remove('live', 'arming');
+      stopClock();
+      closeMic();
+      const reason = (e && e.reason ? e.reason : '').trim();
+      if (reason) {
+        setState('the door closed');
+        warn(reason);
+      } else if (wasOpen) {
+        setState('the door is shut');
+        hint('tap the circle to open it again');
+      } else {
+        setState('the door is shut');
+      }
+    };
   } catch (e) {
     busy = false;
     stopClock();
@@ -426,10 +445,17 @@ function barge() {
 
 micBtn.addEventListener('click', async () => {
   if (busy) return;
-  // iOS and Android only start audio that was unlocked inside the tap. The
+  // iOS and Android only start audio that was unlocked inside the tap, and iOS
+  // wants a buffer actually played inside that gesture, not just a resume. So the
   // playback context is unlocked here, synchronously, before the first await hands
-  // the gesture back to the browser. The capture context is built after the
-  // microphone is granted, and is resumed in the same tick it is created.
+  // the gesture back to the browser.
+  const unlock = playCtxEnsure();
+  try {
+    const b = unlock.createBuffer(1, 1, unlock.sampleRate);
+    const s = unlock.createBufferSource();
+    s.buffer = b; s.connect(unlock.destination); s.start(0);
+    unlock.resume();
+  } catch {}
   if (listening || sessionUp) {
     listening = false; sessionUp = false;
     try { ws && ws.close(); } catch {}
