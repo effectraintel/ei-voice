@@ -113,7 +113,7 @@
 <div id="gate" class="shut" role="dialog" aria-label="the door">
   <div class="gcard">
     <div class="gtitle">the door</div>
-    <p class="gtext" id="gtext">This door opens for one phone, with a fingerprint. Nothing behind it moves until the phone has been read.</p>
+    <p class="gtext" id="gtext">This door opens for one phone, with a fingerprint. One finger opens this tab for thirty minutes; nothing behind it moves until the phone has been read.</p>
     <div id="gcode" class="ghidden">
       <label class="glabel" for="code">the one-time code</label>
       <input id="code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" placeholder="XXXX-XXXX-XXXX">
@@ -462,7 +462,7 @@ async function onUnlockTap() {
   gateSay('waiting for the phone');
   try {
     const done = await unlockWithFingerprint('unlock', null);
-    gateSay('fingerprint verified · ' + (done.device_label || 'this phone'));
+    gateSay('fingerprint verified · open for thirty minutes · ' + (done.device_label || 'this phone'));
     setTimeout(() => { gatePassed(); setState('tap the circle to open the door'); }, 420);
   } catch (e) {
     gateSay(String(e.message || e), 'bad');
@@ -486,10 +486,11 @@ async function onEnrolTap() {
 /* The door starts shut. A page load is not a credential. */
 if (doorSession()) {
   gatePassed();
+  hint('open · this tab closes again in thirty minutes');
 } else {
   showGate('');
   setState('the door is locked');
-  hint('one fingerprint opens it');
+  hint('one fingerprint opens this tab, for thirty minutes');
 }
 
 /* ---------- the door ---------- */
@@ -513,7 +514,7 @@ async function openDoor() {
     if (!d.ok) {
       if (/session|locked|fingerprint/i.test(String(d.error || ''))) {
         sessionStorage.removeItem(DOOR_KEY);
-        showGate('the session ended. one fingerprint opens it again.');
+        showGate('the thirty minutes are up. one fingerprint opens it again.');
       }
       throw new Error(d.error || 'the door did not open');
     }
