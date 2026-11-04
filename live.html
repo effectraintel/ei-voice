@@ -94,7 +94,7 @@
 <div id="voicesheet">
   <div class="shead">the mouth <button id="vclose" style="float:right;background:transparent;border:0;color:#6f675b;font:inherit;font-size:11px;cursor:pointer">close</button></div>
   <div class="vgrid" id="vgrid"></div>
-  <div class="vnote">Changing the voice starts a fresh session, because the mouth is chosen when the door opens.</div>
+  <div class="vnote">Kore is the Effectra voice and the default. The others stay here so you can hear the difference; the choice is this device only, and the mouth is set when the door opens, so changing it asks for a fresh tap.</div>
 </div>
 
 <script>
@@ -121,7 +121,12 @@ const el = (id) => document.getElementById(id);
 const stateEl = el('state'), logEl = el('log'), micBtn = el('mic'), hintEl = el('hint');
 const bars = [...document.querySelectorAll('#bars i')];
 
-let ws = null, voice = localStorage.getItem('ei-live-voice') || 'Kore';
+// Kore is the Effectra voice and the default on any device that has not chosen.
+// A stored choice survives so he can try the others, but a stale or unknown name
+// must fall back to Kore rather than open a door that fails on the setup frame.
+const stored = localStorage.getItem('ei-live-voice');
+let ws = null, voice = VOICES.includes(stored) ? stored : 'Kore';
+if (stored !== voice) localStorage.setItem('ei-live-voice', voice);
 let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
 let listening = false, busy = false, sessionUp = false;
 let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency = null;
@@ -539,12 +544,13 @@ el('vclose').addEventListener('click', () => el('voicesheet').classList.remove('
 VOICES.forEach(v => {
   const b = document.createElement('button');
   b.className = 'vbtn' + (v === voice ? ' on' : '');
-  b.textContent = v;
+  b.dataset.voice = v;
+  b.textContent = v === 'Kore' ? 'Kore \u00b7 the Effectra voice' : v;
   b.onclick = () => {
     voice = v;
     localStorage.setItem('ei-live-voice', v);
     el('voicename').textContent = v;
-    [...el('vgrid').children].forEach(x => x.classList.toggle('on', x.textContent === v));
+    [...el('vgrid').children].forEach(x => x.classList.toggle('on', x.dataset.voice === v));
     el('voicesheet').classList.remove('open');
     if (sessionUp || listening) {
       listening = false; sessionUp = false;
