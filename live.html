@@ -195,6 +195,22 @@ function attachLatency(turnEl) {
 
 function resetTurns() { turns = { you: null, engine: null }; said = { you: '', engine: '' }; }
 
+/* Coming back to this tab with the back button (or from a suspended app) used to
+   restore the last conversation's transcript on screen with no door open, which
+   reads as the engine replaying an old conversation. The socket is shut, so the
+   words are a photograph, not a live turn. Wipe them and say plainly that the
+   door is shut, so what is on screen is never mistaken for what is happening. */
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  try { ws && ws.close(); } catch {}
+  ws = null; sessionUp = false; listening = false; busy = false;
+  micBtn.classList.remove('live', 'arming');
+  stopClock(); closeMic(); resetTurns();
+  logEl.innerHTML = '';
+  setState('the door is shut');
+  hint('tap the circle to open it again');
+});
+
 /* ---------- the door ---------- */
 
 async function openDoor() {
