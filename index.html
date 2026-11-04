@@ -279,13 +279,22 @@ function speak(text, lang) {
     if (i >= ready.length) { stateEl.textContent = 'tap the mic'; return; }
     var idx = i++;
     advanced = false;
-    stateEl.textContent = 'preparing the voice';
+    // Rendering the whole answer takes a few seconds and sometimes more, so this
+    // stage keeps a clock of its own rather than sitting on one frozen word.
+    var t0 = Date.now();
+    stateEl.textContent = 'preparing the voice 0.0s';
+    var prepClock = setInterval(function () {
+      if (token !== playback.token || advanced) { clearInterval(prepClock); return; }
+      var s2 = (Date.now() - t0) / 1000;
+      stateEl.textContent = (s2 > 6 ? 'still rendering the voice ' : 'preparing the voice ') + s2.toFixed(1) + 's';
+    }, 250);
+    setTimeout(function () { clearInterval(prepClock); }, 20000);
     ready[idx].then(function (src) {
       if (token !== playback.token) return;
       var audio = new Audio(src);
       playback.audios.push(audio);
       var started = false;
-      audio.onplaying = function () { started = true; stateEl.textContent = 'speaking'; };
+      audio.onplaying = function () { started = true; clearInterval(prepClock); stateEl.textContent = 'speaking'; };
       audio.onended = advance;
       audio.onerror = function () { deviceSpeak(units[idx], langCode, advance); };
       audio.play().catch(function () { deviceSpeak(units[idx], langCode, advance); });
