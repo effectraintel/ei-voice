@@ -243,12 +243,20 @@ try {
     VOICE = { gate: savedVoice.gate, voice: savedVoice.voice };
   }
 } catch (e) {}
-var playback = { token: 0, audios: [] };
+// Everything a turn starts - audio elements, clocks, watchdogs - registers a
+// stopper here. Two bugs on 4 November came from a clock with no owner: Edwin
+// reported "the timer on the top gets confused and then it just keeps on
+// running", because the first answer's clock survived into the next segment and
+// kept writing "still rendering the voice 12.4s" over whatever was really
+// happening. A clock now belongs to one segment and dies with it.
+var playback = { token: 0, audios: [], stoppers: [] };
 
 function stopPlayback() {
   playback.token++;
   playback.audios.forEach(function (a) { try { a.pause(); } catch (e) {} });
   playback.audios = [];
+  playback.stoppers.forEach(function (f) { try { f(); } catch (e) {} });
+  playback.stoppers = [];
   try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
 }
 
@@ -399,8 +407,8 @@ function speak(text, lang) {
   var langCode = /^af/i.test(lang || '') ? 'af' : 'en';
   // One reply, one call, one reading. Splitting by sentence was the whole cause
   // of the shifting tone: "the technical content is very formal, the things it
-  // can do about me is almost flirty." A short answer rendered in about three
-  // seconds; a long one takes longer, and the timer is there for exactly that.
+  // can do about me is almost flirty." A long answer is cut only where the
+  // speaking function cannot take it whole, and each part is one continuous read.
   var units = chunkForSpeech(text);
   if (!units.length) return;
 
@@ -408,53 +416,69 @@ function speak(text, lang) {
     return withTimeout(renderSegment(seg, langCode), 20000);
   });
 
-  var i = 0;
-  var advanced = false;
-
-  function advance() {
-    if (advanced) return;
-    advanced = true;
-    stateEl.textContent = 'tap the mic';
-    next();
-  }
-
-  function next() {
+  // One segment at a time. Each owns: its own render clock, its own watchdog,
+  // and its own single ending - audio ended, audio errored, autoplay refused,
+  // device voice finished, or nothing started in 3.5s. Whichever happens first
+  // stops this segment's clock and hands to the next; the rest are inert. No
+  // shared flag, because a shared flag is what let an old clock keep running.
+  function playSegment(idx) {
     if (token !== playback.token) return;
-    if (i >= ready.length) { stateEl.textContent = 'tap the mic'; return; }
-    var idx = i++;
-    advanced = false;
-    // Rendering the whole answer takes a few seconds and sometimes more, so this
-    // stage keeps a clock of its own rather than sitting on one frozen word.
+    if (idx >= ready.length) { stateEl.textContent = 'tap the mic'; return; }
+
     var t0 = Date.now();
-    stateEl.textContent = 'preparing the voice 0.0s';
+    var clockDead = false;
     var prepClock = setInterval(function () {
-      if (token !== playback.token || advanced) { clearInterval(prepClock); return; }
+      if (clockDead || token !== playback.token) { clearInterval(prepClock); return; }
       var s2 = (Date.now() - t0) / 1000;
       stateEl.textContent = (s2 > 6 ? 'still rendering the voice ' : 'preparing the voice ') + s2.toFixed(1) + 's';
     }, 250);
-    setTimeout(function () { clearInterval(prepClock); }, 20000);
-    ready[idx].then(function (src) {
+    function stopClock() {
+      if (clockDead) return;
+      clockDead = true;
+      clearInterval(prepClock);
+    }
+    playback.stoppers.push(stopClock);
+    // A clock may never outlive the turn that started it, whatever else fails.
+    var clockGuard = setTimeout(function () { stopClock(); }, 22000);
+    playback.stoppers.push(function () { clearTimeout(clockGuard); });
+
+    var ended = false;
+    function finishSegment() {
+      if (ended) return;
+      ended = true;
+      stopClock();
       if (token !== playback.token) return;
+      stateEl.textContent = 'tap the mic';
+      playSegment(idx + 1);
+    }
+
+    ready[idx].then(function (src) {
+      if (token !== playback.token) { stopClock(); return; }
       var audio = new Audio(src);
       playback.audios.push(audio);
       var started = false;
-      audio.onplaying = function () { started = true; clearInterval(prepClock); stateEl.textContent = 'speaking'; };
-      audio.onended = advance;
-      audio.onerror = function () { deviceSpeak(units[idx], langCode, advance); };
-      audio.play().catch(function () { deviceSpeak(units[idx], langCode, advance); });
+      audio.onplaying = function () {
+        started = true;
+        stopClock();
+        if (token === playback.token) stateEl.textContent = 'speaking';
+      };
+      audio.onended = finishSegment;
+      audio.onerror = function () { deviceSpeak(units[idx], langCode, finishSegment); };
+      audio.play().catch(function () { deviceSpeak(units[idx], langCode, finishSegment); });
       // If the audio does not actually start within 3.5 seconds, the network is
       // holding a file that looked ready. Speak it instead of waiting.
-      setTimeout(function () {
+      var startWatch = setTimeout(function () {
         if (token !== playback.token || started) return;
         try { audio.pause(); } catch (e) {}
-        deviceSpeak(units[idx], langCode, advance);
+        deviceSpeak(units[idx], langCode, finishSegment);
       }, 3500);
+      playback.stoppers.push(function () { clearTimeout(startWatch); });
     }).catch(function () {
-      deviceSpeak(units[idx], langCode, advance);
+      deviceSpeak(units[idx], langCode, finishSegment);
     });
   }
 
-  next();
+  playSegment(0);
 }
 
 // Voice lists load asynchronously in most browsers; touching them at boot and
@@ -502,12 +526,16 @@ function stageFor(ms) {
 
 var waiting = null;
 
-function endWaiting() {
-  if (!waiting) return;
-  clearInterval(waiting.clock);
-  clearInterval(waiting.tick);
-  clearTimeout(waiting.watch);
-  waiting = null;
+// The clock belongs to one turn. Clearing "the current one" was the second
+// half of the timer bug: two turns in flight and the first one's ending would
+// clear the second one's clock, or worse, leave its own running.
+function endWaiting(w) {
+  var w2 = w || waiting;
+  if (!w2) return;
+  clearInterval(w2.clock);
+  clearInterval(w2.tick);
+  clearTimeout(w2.watch);
+  if (waiting === w2) waiting = null;
 }
 
 function setBusy(v) {
@@ -552,7 +580,7 @@ async function send(payload) {
   var timedOut = false;
 
   stateEl.textContent = stageFor(0) + ' 0.0s';
-  waiting = {
+  var mine = waiting = {
     clock: setInterval(function () {
       var ms = Date.now() - t0;
       stateEl.textContent = stageFor(ms) + ' ' + (ms / 1000).toFixed(1) + 's';
@@ -577,15 +605,17 @@ async function send(payload) {
     if (!d.ok) throw new Error(d.error || 'turn failed');
     tone(880, 70, 0.05);
     if (d.you_said) { say('you', d.you_said); turns.push({ role: 'you', content: d.you_said }); }
+    var secs = ((Date.now() - t0) / 1000).toFixed(1);
+    hintEl.textContent = 'tap once to start, tap again to send · last turn ' + secs + 's';
+    // Set before the voice starts, so "ready" cannot land on top of "preparing
+    // the voice" and leave the line contradicting itself.
+    stateEl.textContent = 'ready';
     if (d.reply) {
       var spoken = tighten(d.reply);
       say('engine', spoken, d.actions);
       turns.push({ role: 'engine', content: spoken });
       speak(spoken, d.reply_lang || 'en');
     }
-    var secs = ((Date.now() - t0) / 1000).toFixed(1);
-    hintEl.textContent = 'tap once to start, tap again to send · last turn ' + secs + 's';
-    stateEl.textContent = 'ready';
   } catch (e) {
     if (timedOut) {
       var msg = 'That took too long, Boss. Ask me again.';
@@ -600,7 +630,7 @@ async function send(payload) {
       stateEl.textContent = 'error: ' + (e.message || 'unknown');
     }
   } finally {
-    endWaiting();
+    endWaiting(mine);
     setBusy(false);
   }
 }
@@ -801,6 +831,12 @@ textform.addEventListener('submit', function (e) {
   e.preventDefault();
   var t = typed.value.trim();
   if (!t) return;
+  if (busy) {
+    // One turn at a time. Two overlapping turns is how the clock at the top
+    // ended up belonging to nobody. The words stay in the field, unsent.
+    hintEl.textContent = 'one moment — still working on the last one';
+    return;
+  }
   typed.value = '';
   send({ text: t });
 });
