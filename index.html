@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14110f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Effectra Intelligence — voice and text</title>
+<style>
+  :root { --gold:#b08d2f; --char:#14110f; --ink:#efe9df; --dim:#9a9184; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--char); color:var(--ink);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  body { display:flex; flex-direction:column; padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
+  header { padding:16px 0 6px; text-align:center; }
+  .wordmark { letter-spacing:.34em; font-size:11px; color:var(--gold); text-transform:uppercase; }
+  .state { margin-top:6px; font-size:13px; color:var(--ink); letter-spacing:.04em; min-height:18px; }
+  .warn { display:none; margin:8px 0 0; padding:10px 12px; border:1px solid #5a3a1c; background:#241a10;
+    color:#e8cfae; font-size:12.5px; line-height:1.5; border-radius:10px; text-align:left; }
+  .warn b { color:#f0dcbd; }
+  main { flex:1; overflow-y:auto; padding:10px 2px 4px; -webkit-overflow-scrolling:touch; }
+  .turn { margin:0 0 14px; max-width:92%; }
+  .turn.you { margin-left:auto; text-align:right; }
+  .who { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
+  .said { white-space:pre-wrap; }
+  .turn.you .said { color:#cfc6b6; }
+  .acts { margin-top:6px; font-size:12px; color:var(--gold); }
+  footer { text-align:center; padding-top:8px; }
+  button#mic { width:92px; height:92px; border-radius:50%; border:1px solid #3a332a; background:#1d1916;
+    color:var(--ink); display:grid; place-items:center; margin:0 auto 8px; transition:transform .12s, background .2s, border-color .2s; }
+  button#mic:active { transform:scale(.96); }
+  button#mic.live { background:#2a1614; border-color:var(--gold); box-shadow:0 0 0 8px rgba(176,141,47,.10); }
+  button#mic.work { opacity:.5; }
+  svg { width:36px; height:36px; }
+  .hint { font-size:11.5px; color:var(--dim); letter-spacing:.03em; min-height:15px; margin-bottom:8px; }
+  .typebar { display:flex; gap:8px; margin:0 0 6px; }
+  .typebar input { flex:1; min-width:0; background:#1d1916; border:1px solid #3a332a; color:var(--ink);
+    border-radius:10px; padding:10px 12px; font-size:15px; }
+  .typebar button { background:#2a2118; border:1px solid #4a3d24; color:var(--gold); border-radius:10px; padding:0 14px; font-size:14px; }
+  .brand { margin-top:6px; font-size:9px; letter-spacing:.22em; color:#5d564c; text-transform:uppercase; line-height:1.7; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">Effectra Intelligence</div>
+  <div class="state" id="state">Voice and text — tap the mic, or use the line below</div>
+  <div class="warn" id="warn"></div>
+</header>
+<main id="log"></main>
+<footer>
+  <button id="mic" aria-label="Record">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+      <path d="M12 3.5a3 3 0 0 1 3 3v5.5a3 3 0 0 1-6 0V6.5a3 3 0 0 1 3-3z"/>
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/>
+      <path d="M12 18v3"/>
+    </svg>
+  </button>
+  <div class="hint" id="hint">tap once to start, tap again to send</div>
+  <form class="typebar" id="textform" method="POST" action="https://solene-7ba0f3a1.base44.app/functions/eiVoiceText">
+    <input id="typed" name="text" placeholder="or type a turn" autocomplete="off">
+    <button id="sendTyped" type="submit">send</button>
+  </form>
+  <div class="brand">Powered by Effectra Intelligence<br>Proof on chain. Payload in the vault.<br>&copy; 2026 Effectra Intelligence</div>
+</footer>
+<script>
+var ENDPOINT = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceTurn';
+var stateEl = document.getElementById('state');
+var hintEl = document.getElementById('hint');
+var warnEl = document.getElementById('warn');
+var logEl = document.getElementById('log');
+var mic = document.getElementById('mic');
+var typed = document.getElementById('typed');
+var sendTyped = document.getElementById('sendTyped');
+
+var recorder = null, chunks = [], live = false, busy = false;
+var turns = [];
+var sessionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+
+function warn(msg) { warnEl.style.display = 'block'; warnEl.innerHTML = msg; }
+
+// A preview frame cannot open the microphone at all, so say it plainly up front.
+try {
+  if (window.self !== window.top) {
+    warn('<b>This is showing inside a preview frame.</b> Open the link directly in Safari or Chrome on your phone, otherwise the browser will refuse the microphone without asking.');
+  }
+} catch (e) { /* cross-origin parent: same conclusion */ 
+  warn('<b>This is showing inside a frame.</b> Open the link directly in your browser, otherwise the microphone is refused.');
+}
+
+if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+  warn('<b>This browser has no microphone access.</b> ' + (location.protocol === 'https:' ? 'Try Safari or Chrome directly.' : 'The page must be served over HTTPS.'));
+}
+if (typeof window.MediaRecorder === 'undefined') {
+  warn('<b>This browser cannot record audio.</b> Use the typed line below, or open in Safari on iOS 14.3 or newer.');
+}
+
+function esc(t) { return String(t == null ? '' : t); }
+
+function say(role, text, acts) {
+  var wrap = document.createElement('div');
+  wrap.className = 'turn ' + (role === 'engine' ? 'engine' : 'you');
+  var who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = role === 'engine' ? 'Effectra' : 'You';
+  var said = document.createElement('div');
+  said.className = 'said';
+  said.textContent = esc(text);
+  wrap.appendChild(who); wrap.appendChild(said);
+  if (acts && acts.length) {
+    var a = document.createElement('div');
+    a.className = 'acts';
+    a.textContent = acts.map(function (x) {
+      return x.tool === 'create_reminder' ? 'reminder set' : x.tool === 'capture' ? 'captured' : x.tool;
+    }).join(' · ');
+    wrap.appendChild(a);
+  }
+  logEl.appendChild(wrap);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window) || !text) return;
+  try { speechSynthesis.cancel(); } catch (e) {}
+  var u = new SpeechSynthesisUtterance(text);
+  var voices = speechSynthesis.getVoices() || [];
+  var pick = voices.filter(function (v) { return /en-ZA/i.test(v.lang); })[0]
+    || voices.filter(function (v) { return /en-GB/i.test(v.lang); })[0]
+    || voices.filter(function (v) { return /^en/i.test(v.lang); })[0];
+  if (pick) u.voice = pick;
+  u.rate = 1.02;
+  u.onstart = function () { stateEl.textContent = 'speaking'; };
+  u.onend = function () { stateEl.textContent = 'tap the mic'; };
+  speechSynthesis.speak(u);
+}
+
+function setBusy(v) {
+  busy = v;
+  if (v) { mic.classList.add('work'); stateEl.textContent = 'thinking…'; }
+  else { mic.classList.remove('work'); }
+}
+
+async function send(payload) {
+  setBusy(true);
+  hintEl.textContent = 'sending…';
+  try {
+    var r = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(Object.assign({ session_id: sessionId, history: turns }, payload))
+    });
+    var d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'turn failed');
+    if (d.you_said) { say('you', d.you_said); turns.push({ role: 'you', content: d.you_said }); }
+    if (d.reply) { say('engine', d.reply, d.actions); turns.push({ role: 'engine', content: d.reply }); speak(d.reply); }
+    hintEl.textContent = 'tap once to start, tap again to send';
+  } catch (e) {
+    hintEl.textContent = 'that turn failed';
+    stateEl.textContent = 'error: ' + (e.message || 'unknown');
+  } finally {
+    setBusy(false);
+  }
+}
+
+function blobToB64(blob) {
+  return new Promise(function (res, rej) {
+    var fr = new FileReader();
+    fr.onload = function () { res(String(fr.result).split(',')[1] || ''); };
+    fr.onerror = rej;
+    fr.readAsDataURL(blob);
+  });
+}
+
+async function start() {
+  if (busy) return;
+  stateEl.textContent = 'asking for the mic…';
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+    var type = '';
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) type = 'audio/webm;codecs=opus';
+    else if (MediaRecorder.isTypeSupported('audio/mp4')) type = 'audio/mp4';
+    recorder = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
+    recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = function () {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      var blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      if (blob.size > 1200) {
+        blobToB64(blob).then(function (b64) {
+          send({ audio_base64: b64, mime: blob.type || 'audio/webm' });
+        }).catch(function () { stateEl.textContent = 'could not read the recording'; });
+      } else {
+        hintEl.textContent = 'too short — hold on a moment longer';
+        stateEl.textContent = 'tap the mic';
+      }
+    };
+    recorder.start();
+    live = true;
+    mic.classList.add('live');
+    stateEl.textContent = 'listening';
+    hintEl.textContent = 'tap again to send';
+  } catch (e) {
+    var n = (e && e.name) || 'Error';
+    live = false;
+    mic.classList.remove('live');
+    stateEl.textContent = 'mic unavailable';
+    var why = {
+      NotAllowedError: 'You (or the browser) said no to the microphone. In Safari: tap the aA icon, Website Settings, set Microphone to Allow, then reload.',
+      PermissionDeniedError: 'The microphone is blocked for this site. Allow it in the browser settings, then reload.',
+      NotFoundError: 'No microphone was found.',
+      NotReadableError: 'Another app is holding the microphone.',
+      SecurityError: 'The browser refused for security reasons — this usually means the page is inside a frame or not on HTTPS.'
+    }[n] || ('The browser said: ' + n + '.');
+    hintEl.textContent = why;
+  }
+}
+
+function stop() {
+  if (recorder && live) {
+    live = false;
+    mic.classList.remove('live');
+    try { recorder.stop(); } catch (e) {}
+  }
+}
+
+mic.addEventListener('click', function () { if (live) stop(); else start(); });
+
+var textform = document.getElementById('textform');
+textform.addEventListener('submit', function (e) {
+  e.preventDefault();
+  var t = typed.value.trim();
+  if (!t) return;
+  typed.value = '';
+  send({ text: t });
+});
+
+window.addEventListener('beforeunload', stop);
+</script>
+</body>
+</html>
