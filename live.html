@@ -107,7 +107,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BRIEF =
-  'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. ' +
+  'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
   'Speak in at most three sentences, and put the substance in the first one. ' +
   'If you offer a next step, fold it into the last sentence. ' +
@@ -128,7 +128,7 @@ let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency
 // Echo bookkeeping. A phone speaker feeds its own voice back into its own microphone.
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
 // owner interrupting, so the page used to cut its own sentence off mid-word.
-let playRunStart = 0, loudFrames = 0;
+let playRunStart = 0, loudFrames = 0, looked = null;
 const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
 const BARGE_FRAMES = 3;      // sustained, not a click
@@ -215,6 +215,10 @@ async function openDoor() {
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
         },
         systemInstruction: { parts: [{ text: BRIEF }] },
+        // Eyes for public facts only: a match result, today's weather, a price.
+        // Nothing from his house can travel on this - it is a search of the open web,
+        // and the alternative is a model guessing confidently, which is worse.
+        tools: [{ googleSearch: {} }],
         // Give him room to think. The default half-second of silence made the engine
         // jump into a mid-sentence pause; a full second lets a breath pass, and the
         // lower end-sensitivity stops a room noise from looking like the end of a turn.
@@ -299,6 +303,16 @@ function handleFrame(text) {
   const sc = msg.serverContent;
   if (!sc) return;
 
+  // If it actually looked something up, say so on the turn. A chip is only ever a
+  // claim we can back with the metadata that produced it.
+  const gm = sc.groundingMetadata;
+  if (gm) {
+    const src = (gm.webSearchQueries || []).length
+      ? gm.webSearchQueries.join(' · ')
+      : ((gm.groundingChunks || []).length + ' sources');
+    looked = src;
+  }
+
   if (sc.inputTranscription && sc.inputTranscription.text) appendLive('you', sc.inputTranscription.text);
   if (sc.outputTranscription && sc.outputTranscription.text) appendLive('engine', sc.outputTranscription.text);
 
@@ -309,6 +323,13 @@ function handleFrame(text) {
   }
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    if (looked && turns.engine) {
+      const l = document.createElement('div');
+      l.className = 'lat';
+      l.textContent = 'looked up: ' + looked;
+      turns.engine.appendChild(l);
+    }
+    looked = null;
     setState(listening ? 'listening' : 'the door is shut');
   }
 }
