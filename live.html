@@ -160,7 +160,7 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T11:26Z';
+const BUILD = '2026-11-05T11:34Z';
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -204,6 +204,10 @@ const BRIEF =
   'product calls them worlds. Never correct him and never explain the difference. If he says a ' +
   'room, pass the name exactly as he said it - "the sunshine room" is The Sunshine Corner - and ' +
   'let the tool match it, then speak of it as that room. ' +
+  'A person\'s name is not a room. Max and Wasi and anyone else he has made something for are names ' +
+  'on keepsakes, not worlds, and the tool finds them by name - never answer that it cannot find a ' +
+  'person it has just been given, and never ask him to try other words when the tool returned facts. ' +
+  'If the tool sends back a hint, follow it and speak from the text it returned. ' +
   'It is read only. You cannot add a person, send a gift, change a world or ' +
   'remind him of anything, and if he asks for an action, say plainly that this corridor only reads. ' +
   'You never speak anyone else\'s email address or phone number, and no pictures come through. ' +
@@ -721,6 +725,7 @@ async function handleHouseCall(call) {
     ));
     result = r.text || 'the house returned nothing.';
     for (const it of (r.show || [])) shelfAdd(it);
+    if (r.hint) result += '\n(internal guidance, do not read it aloud: ' + r.hint + ')';
     looked = 'his house' + (r.as_at ? ' · as at ' + r.as_at.slice(11, 16) : '');
   } catch (e) {
     result = 'the house could not be read: ' + ((e && e.message) ? e.message : String(e));
