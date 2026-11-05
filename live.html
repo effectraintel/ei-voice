@@ -171,8 +171,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T11:51';
-const BUILD_NO = 11;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-05T12:03';
+const BUILD_NO = 12;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -824,22 +824,34 @@ function renderShelf() {
   }
   el.classList.add('on');
   if (line) { line.hidden = false; line.textContent = 'on the shelf · ' + shelf.length; }
+  try { drawCards(el); } catch (e) {
+    el.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'card';
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = 'shelf';
+    const t = document.createElement('span'); t.className = 't';
+    t.textContent = shelf[0].title + ' (this card could not be drawn: ' + String((e && e.message) || e) + ')';
+    card.appendChild(k); card.appendChild(t); el.appendChild(card);
+  }
+}
+
+function drawCards(el) {
   el.innerHTML = '';
   shelf.forEach((it, i) => {
     const card = document.createElement('div');
     card.className = 'card' + (it.kind === 'thought' ? ' thought' : '');
     const k = document.createElement('span'); k.className = 'k';
     k.textContent = it.kind === 'thought' ? 'thinking about' : (it.kind || 'link');
+    card.appendChild(k);
     const t = document.createElement('span'); t.className = 't'; t.textContent = it.title;
-    card.appendChild(k); card.appendChild(t);
+    const d = document.createElement('span'); d.className = 'd';
     if (it.url) {
-      const d = document.createElement('span'); d.className = 'd';
       let host = ''; try { host = new URL(it.url).hostname.replace(/^www\./, ''); } catch { host = 'link'; }
       d.textContent = host;
       const a = document.createElement('a');
       a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.appendChild(t); a.appendChild(d);
-      card.replaceChild(a, t);
+      card.appendChild(a);
       const copy = document.createElement('button');
       copy.className = 'copy'; copy.type = 'button'; copy.textContent = 'copy';
       copy.onclick = () => {
@@ -849,9 +861,9 @@ function renderShelf() {
         );
       };
       card.appendChild(copy);
-    } else if (it.note) {
-      const d = document.createElement('span'); d.className = 'd'; d.textContent = it.note;
-      card.appendChild(d);
+    } else {
+      card.appendChild(t);
+      if (it.note) { d.textContent = it.note; card.appendChild(d); }
     }
     el.appendChild(card);
   });
