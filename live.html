@@ -113,6 +113,17 @@
                 letter-spacing:.08em; border-radius:6px; padding:2px 7px; }
   .card .copy:active { background:#2b271f; color:#e8dfcc; }
   .card.thought { border-color:#4a3f26; }
+  footer { position:relative; }
+  button#fold { position:absolute; top:2px; right:12px; background:none; border:0; padding:8px 10px;
+                color:#5f584d; font:inherit; font-size:13px; line-height:1; cursor:pointer; }
+  button#fold:hover { color:var(--gold); }
+  /* folded: the paper goes, the controls that are used stay */
+  body.tight .voicebar { display:none; }
+  body.tight .footmark { margin-top:2px; padding-top:2px; font-size:8px; letter-spacing:.16em; }
+  body.tight .footmark span { margin-top:1px; letter-spacing:.08em; }
+  body.tight .sub { display:none; }
+  body.tight header { padding:4px 0 0; }
+  body.tight .wordmark { font-size:10px; letter-spacing:.24em; }
   .footmark { margin-top:10px; font-size:9.5px; letter-spacing:.28em; color:#4f4a41; text-transform:uppercase; }
   .footmark span { display:block; letter-spacing:.12em; margin-top:4px; color:#3f3a33; }
 
@@ -165,6 +176,7 @@
   <div id="bars"><i></i><i></i><i></i><i></i><i></i></div>
   <div class="hint" id="hint">one tap opens the microphone and the stream together</div>
   <div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build" id="build"></span></div>
+  <button id="fold" type="button" aria-label="more or less room for the words">▾</button>
 </footer>
 
 <div id="gate" class="shut" role="dialog" aria-label="the door">
@@ -197,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T12:17';
-const BUILD_NO = 17;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-05T12:19';
+const BUILD_NO = 18;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -266,6 +278,13 @@ const BRIEF =
 // If the page cannot say which build it is, every missing change becomes an argument with a cache.
 window.addEventListener('DOMContentLoaded', () => {
   fitHeight();
+  foldForDoor(false);
+  const foldBtn = document.getElementById('fold');
+  if (foldBtn) foldBtn.onclick = () => {
+    const next = !document.body.classList.contains('tight');
+    try { localStorage.setItem(FOLD_KEY, next ? '1' : '0'); } catch {}
+    applyFold(next);
+  };
   const b = document.getElementById('build');
   if (b) b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST';
   keepCurrent();
@@ -319,6 +338,21 @@ el('voicename').textContent = voice;
 /* ---------- small screen helpers ---------- */
 
 function setState(text) { stateEl.textContent = text; }
+
+/* Which panels are showing. 'pinned' is his choice, kept across reloads; with nothing pinned
+   the door does the obvious thing - paper away while it is listening, paper back when shut. */
+const FOLD_KEY = 'ei.door.fold';
+function foldChoice() { try { return localStorage.getItem(FOLD_KEY); } catch { return null; } }
+function applyFold(tight) {
+  document.body.classList.toggle('tight', !!tight);
+  const b = document.getElementById('fold');
+  if (b) { b.textContent = tight ? '▴' : '▾'; b.title = tight ? 'show the rest' : 'give the words more room'; }
+  fitHeight();
+}
+function foldForDoor(open) {
+  const c = foldChoice();
+  applyFold(c === null ? !!open : c === '1');
+}
 function startClock(label) {
   stopClock(); clockStart = Date.now();
   const tick = () => {
@@ -760,6 +794,7 @@ async function openDoor() {
       micBtn.classList.remove('live', 'arming');
       stopClock();
       closeMic();
+      foldForDoor(false);
       const reason = (e && e.reason ? e.reason : '').trim();
       if (reason) {
         setState('the door closed');
@@ -924,6 +959,7 @@ function handleFrame(text) {
     stampSession();
     stopClock();
     micBtn.classList.remove('arming'); micBtn.classList.add('live');
+    foldForDoor(true);
     setState('listening. speak whenever you like');
     hint('tap the circle again to close the door');
     return;
