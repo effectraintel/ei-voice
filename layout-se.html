@@ -89,11 +89,22 @@
     .state { margin-top:5px; font-size:12.5px; }
     main { padding-top:6px; }
     .turn { margin-bottom:10px; }
-    button#mic { width:74px; height:74px; margin-bottom:6px; }
-    #bars { margin-bottom:2px; }
-    .hint { font-size:10.5px; }
-    .voicebar { margin:0 0 6px; }
-    .footmark { padding-top:5px; }
+    button#mic { width:64px; height:64px; margin-bottom:5px; }
+    #bars { height:12px; margin-bottom:4px; }
+    .hint { font-size:10px; }
+    .voicebar { margin:0 0 4px; }
+    #voicechip { padding:3px 10px; font-size:10.5px; }
+    .footmark { padding-top:4px; margin-top:4px; font-size:8.5px; letter-spacing:.2em; }
+    .footmark span { margin-top:2px; }
+    #shelfline { padding:4px 0 0; font-size:9.5px; }
+    #shelf { padding:6px 0; }
+    #shelf.on { padding-top:6px; }
+    .card { padding:6px 34px 6px 9px; min-width:130px; max-width:200px; }
+    .card .k { display:none; }
+    .card .t { margin-top:0; font-size:12px; }
+    .card .copy { position:absolute; top:6px; right:6px; padding:2px 5px; font-size:9px; }
+    .lat { margin-top:3px; font-size:10.5px; }
+    .turn { margin-bottom:8px; }
   }
 
   /* The shelf: what the door hands over rather than says. A URL read aloud is noise,
@@ -108,7 +119,7 @@
   #shelf.on { display:flex; }
   #shelf::-webkit-scrollbar { display:none; }
   .card { flex:0 0 auto; min-width:150px; max-width:220px; background:#171412; border:1px solid #2e2a24;
-          border-radius:10px; padding:8px 10px; text-align:left; }
+          border-radius:10px; padding:8px 10px; text-align:left; position:relative; }
   .card .k { display:block; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:#7a7164; }
   .card .t { display:block; margin-top:3px; font-size:12.5px; line-height:1.35; color:#e8dfcc;
              overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2;
@@ -135,5 +146,5 @@
 <button id="mic"><span class="glyph">◍</span></button>
 <div id="bars"><i></i><i></i><i></i><i></i><i></i></div>
 <div class="hint">tap the circle again to close the door</div>
-<div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build">build 13 · 12:09 SAST</span></div></footer>
+<div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build">build 14 · 12:16 SAST</span></div></footer>
 </body></html>
