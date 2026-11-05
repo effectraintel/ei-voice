@@ -127,7 +127,7 @@
   <button id="mic" aria-label="open the door"><span class="glyph">◍</span></button>
   <div id="bars"><i></i><i></i><i></i><i></i><i></i></div>
   <div class="hint" id="hint">one tap opens the microphone and the stream together</div>
-  <div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span></div>
+  <div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build" id="build"></span></div>
 </footer>
 
 <div id="gate" class="shut" role="dialog" aria-label="the door">
@@ -160,7 +160,7 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T11:12Z';
+const BUILD = '2026-11-05T11:26Z';
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -217,6 +217,12 @@ const BRIEF =
   'and nothing before it is available to you. Never say that you remember, that you discussed ' +
   'something before, or that he told you something earlier. If he refers to a past conversation, ' +
   'say plainly that you hold only this session and ask him to repeat what matters.';
+
+// If the page cannot say which build it is, every missing change becomes an argument with a cache.
+window.addEventListener('DOMContentLoaded', () => {
+  const b = document.getElementById('build');
+  if (b) b.textContent = 'build ' + BUILD.slice(11, 16);
+});
 
 const el = (id) => document.getElementById(id);
 const stateEl = el('state'), logEl = el('log'), micBtn = el('mic'), hintEl = el('hint');
