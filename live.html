@@ -12,7 +12,8 @@
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; height:100%; background:var(--char); color:var(--ink);
     font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-  body { display:flex; flex-direction:column; padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
+  body { display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+         padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
   header { padding:16px 0 6px; text-align:center; }
   .wordmark { letter-spacing:.34em; font-size:11px; color:var(--gold); text-transform:uppercase; }
   .sub { margin-top:6px; font-size:12px; color:var(--dim); letter-spacing:.06em; }
@@ -21,7 +22,7 @@
   .warn { display:none; margin:10px 0 0; padding:10px 12px; border:1px solid #5a3a1c; background:#241a10;
     color:#e8cfae; font-size:12.5px; line-height:1.5; border-radius:10px; text-align:left; }
   .warn.show { display:block; }
-  main { flex:1; overflow-y:auto; padding:10px 2px 4px; -webkit-overflow-scrolling:touch; }
+  main { flex:1; min-height:0; overflow-y:auto; padding:10px 2px 4px; -webkit-overflow-scrolling:touch; }
   .turn { margin:0 0 14px; max-width:92%; }
   .turn.you { margin-left:auto; text-align:right; }
   .who { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
@@ -91,7 +92,9 @@
   /* The shelf: what the door hands over rather than says. A URL read aloud is noise,
      and a long exact string cannot be held in the ear. So links, addresses and
      references arrive here as cards you can tap or copy. */
-  #shelf { display:none; gap:8px; overflow-x:auto; padding:2px 12px 8px; scrollbar-width:none; }
+  #shelf { display:none; flex:0 0 auto; gap:8px; overflow-x:auto; overflow-y:hidden;
+           padding:8px 2px; scrollbar-width:none; }
+  #shelf.on { border-top:1px solid #26221d; }
   #shelf.on { display:flex; }
   #shelf::-webkit-scrollbar { display:none; }
   .card { flex:0 0 auto; min-width:150px; max-width:220px; background:#171412; border:1px solid #2e2a24;
@@ -160,8 +163,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T11:33';
-const BUILD_NO = 8;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-05T11:43';
+const BUILD_NO = 9;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -568,6 +571,12 @@ if (doorSession()) {
 
 /* ---------- the door ---------- */
 
+function demoCards() {
+  if (!/[?&]shelf=demo/.test(location.search)) return;
+  shelfAdd({ kind: 'song', title: 'This Life Reborn for Max', url: 'https://staticatrium.com' });
+  shelfAdd({ kind: 'source', title: 'Effectra Intelligence', url: 'https://effectraintel.github.io' });
+}
+
 async function openDoor() {
   if (busy) return;
   busy = true;
@@ -593,6 +602,7 @@ async function openDoor() {
       }
       session = doorSession();
       if (!session) throw new Error('the door did not take the fingerprint; try once more');
+      demoCards();
       hint('open · this tab closes again in thirty minutes');
       startClock('opening the door');
     }
