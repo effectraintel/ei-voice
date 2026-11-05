@@ -101,7 +101,8 @@
     #shelfline { padding:4px 0 0; font-size:9.5px; }
     #shelf { padding:6px 0; }
     #shelf.on { padding-top:6px; }
-    .card { padding:6px 34px 6px 9px; min-width:130px; max-width:200px; }
+    .card { padding:6px 34px 6px 9px; min-width:0; max-width:min(80vw, 260px); }
+    .card .t { -webkit-line-clamp:1; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
     .card .k { display:none; }
     .card .t { margin-top:0; font-size:12px; }
     .card .copy { position:absolute; top:6px; right:6px; padding:2px 5px; font-size:9px; }
@@ -148,5 +149,5 @@
 <button id="mic"><span class="glyph">◍</span></button>
 <div id="bars"><i></i><i></i><i></i><i></i><i></i></div>
 <div class="hint">tap the circle again to close the door</div>
-<div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build">build 15 · 12:14 SAST</span></div></footer>
+<div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build">build 16 · 12:15 SAST</span></div></footer>
 </body></html>
