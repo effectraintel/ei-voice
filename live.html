@@ -91,12 +91,14 @@
 
   /* On a short screen the header, mic and build line were eating the transcript. */
   @media (max-height: 720px) {
-    header { padding:8px 0 0; }
+    header { padding:5px 0 0; }
     .sub { display:none; }
-    .state { margin-top:5px; font-size:12.5px; }
+    .wordmark { font-size:10px; letter-spacing:.26em; }
+    .state { margin-top:3px; font-size:12px; min-height:16px; }
     main { padding-top:6px; }
     .turn { margin-bottom:10px; }
-    button#mic { width:64px; height:64px; margin-bottom:5px; }
+    button#mic { width:56px; height:56px; margin-bottom:4px; }
+    #mic .glyph { font-size:21px; }
     #bars { height:12px; margin-bottom:4px; }
     .hint { font-size:10px; }
     .voicebar { margin:0 0 4px; }
@@ -192,8 +194,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T12:11';
-const BUILD_NO = 14;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-05T12:13';
+const BUILD_NO = 15;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
