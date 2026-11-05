@@ -160,7 +160,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T11:45Z';
+const BUILD = '2026-11-05T11:33';
+const BUILD_NO = 8;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -228,7 +229,7 @@ const BRIEF =
 // If the page cannot say which build it is, every missing change becomes an argument with a cache.
 window.addEventListener('DOMContentLoaded', () => {
   const b = document.getElementById('build');
-  if (b) b.textContent = 'build ' + BUILD.slice(11, 16);
+  if (b) b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST';
 });
 
 const el = (id) => document.getElementById(id);
