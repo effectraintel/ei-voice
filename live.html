@@ -147,11 +147,8 @@ const BRIEF =
   'If you offer a next step, fold it into the last sentence. ' +
   'Never end with "anything else", never ask if there is anything more you can help with, ' +
   'never close like a call centre. When you are done, stop. ' +
-  'You can look inside his own house with the house tool: the rooms of his notes, read only, the map ' +
-  'and the summaries rather than the pages themselves. Use it before saying you do not know, and say ' +
-  'which room an answer came from. You cannot create, change or complete anything: no reminders, no ' +
-  'edits, no messages, and the vault stays shut. If he asks you to do something rather than tell him ' +
-  'something, say plainly that this corridor only reads. ' +
+  'This corridor does not reach his house yet. If he asks about his own life beyond the facts above, ' +
+  'say plainly that this door cannot see it. ' +
   'Never invent his schedule, his people or his numbers. ' +
   // He said it "felt like older conversations", and with no memory rail the only
   // ways that can happen are a socket that never closed or a model performing
@@ -547,26 +544,7 @@ async function openDoor() {
         // Eyes for public facts only: a match result, today's weather, a price.
         // Nothing from his house can travel on this - it is a search of the open web,
         // and the alternative is a model guessing confidently, which is worse.
-        tools: [
-          { googleSearch: {} },
-          {
-            // The corridor. Read-only, session-scoped, journaled server-side on every call.
-            functionDeclarations: [{
-              name: 'house',
-              description: 'Look inside Edwin\'s own house: the rooms of his notes, read only. Actions: rooms (the whole house), room (what is in one room), page (one page by title), find (search the house). Never an action, never a change.',
-              parameters: {
-                type: 'OBJECT',
-                properties: {
-                  action: { type: 'STRING', description: 'one of: rooms, room, page, find' },
-                  room: { type: 'STRING', description: 'the room name, when action is room' },
-                  page: { type: 'STRING', description: 'the page title, when action is page' },
-                  ask: { type: 'STRING', description: 'words to search for, when action is find' },
-                },
-                required: ['action'],
-              },
-            }],
-          },
-        ],
+        tools: [{ googleSearch: {} }],
         // Give him room to think. The default half-second of silence made the engine
         // jump into a mid-sentence pause; a full second lets a breath pass, and the
         // lower end-sensitivity stops a room noise from looking like the end of a turn.
@@ -629,28 +607,6 @@ function onMessage(ev) {
   handleFrame(text);
 }
 
-async function handleHouseCall(call) {
-  const s = doorSession();
-  let result = '';
-  try {
-    if (!s) throw new Error('the door session has gone');
-    const r = await gatePost('doorHouseRead', Object.assign(
-      { session_token: s.token },
-      call.args || {},
-      { action: (call.args && call.args.action) || 'rooms' },
-    ));
-    result = r.text || 'the house returned nothing.';
-    looked = 'the house' + (r.as_at ? ' · synced ' + r.as_at.slice(11, 16) : '');
-  } catch (e) {
-    result = 'the house could not be read: ' + ((e && e.message) ? e.message : String(e));
-  }
-  try {
-    ws.send(JSON.stringify({
-      toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
-    }));
-  } catch { /* the socket is gone; the turn will end on its own */ }
-}
-
 function handleFrame(text) {
   let msg; try { msg = JSON.parse(text); } catch { return; }
 
@@ -668,10 +624,6 @@ function handleFrame(text) {
     // that is the boundary worth clocking: the server's event can arrive in the same
     // instant as the first audio frame, which would print a meaningless zero.
     if (!awaitingFirstAudio && !speaking) { lastWordAt = Date.now(); awaitingFirstAudio = true; }
-  }
-  if (msg.toolCall && msg.toolCall.functionCalls) {
-    for (const call of msg.toolCall.functionCalls) handleHouseCall(call);
-    return;
   }
   if (msg.error) { warn(msg.error.message || 'the stream reported a problem'); return; }
 
