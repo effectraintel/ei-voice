@@ -160,6 +160,28 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
+const BUILD = '2026-11-05T11:12Z';
+
+// GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
+// ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
+// see it, maybe a caching issue?" It was.) So the page checks the live copy for a newer build stamp
+// and moves itself there once. A stale page cannot do this for itself - that is the one reload a
+// person still has to make - but every update from here on arrives on its own.
+(function selfBust() {
+  if (location.search.includes('v=')) return;
+  fetch(location.pathname + '?_=' + Date.now(), { cache: 'no-store' })
+    .then((r) => r.text())
+    .then((t) => {
+      const m = t.match(/const BUILD = '([^']+)'/);
+      if (!m || m[1] === BUILD) return;
+      const key = 'busted:' + m[1];
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+      location.replace(location.pathname + '?v=' + encodeURIComponent(m[1]));
+    })
+    .catch(() => {});
+})();
+
 const BRIEF =
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
