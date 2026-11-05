@@ -12,7 +12,7 @@
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; height:100%; background:var(--char); color:var(--ink);
     font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-  body { display:flex; flex-direction:column; height:100vh; height:100dvh; overflow:hidden;
+  body { display:flex; flex-direction:column; min-height:0; overflow:hidden;
          padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
   header { padding:16px 0 6px; text-align:center; }
   .wordmark { letter-spacing:.34em; font-size:11px; color:var(--gold); text-transform:uppercase; }
@@ -89,17 +89,27 @@
   #bars i.hot { background:var(--gold); }
   .hint { font-size:11.5px; color:#6f675b; letter-spacing:.04em; }
 
+  /* On a short screen the header, mic and build line were eating the transcript. */
+  @media (max-height: 720px) {
+    header { padding:8px 0 0; }
+    .sub { display:none; }
+    .state { margin-top:5px; font-size:12.5px; }
+    main { padding-top:6px; }
+    .turn { margin-bottom:10px; }
+    button#mic { width:74px; height:74px; margin-bottom:6px; }
+    #bars { margin-bottom:2px; }
+    .hint { font-size:10.5px; }
+    .voicebar { margin:0 0 6px; }
+    .footmark { padding-top:5px; }
+  }
+
   /* The shelf: what the door hands over rather than says. A URL read aloud is noise,
      and a long exact string cannot be held in the ear. So links, addresses and
      references arrive here as cards you can tap or copy. */
   #shelf { display:none; flex:0 0 auto; gap:8px; overflow-x:auto; overflow-y:hidden;
            padding:8px 2px; scrollbar-width:none; }
-  #shelf.on { position:fixed; left:0; right:0; z-index:30;
-              bottom:calc(env(safe-area-inset-bottom) + 172px);
-              padding:10px 18px; background:#13110d;
-              border-top:1px solid #26221d; border-bottom:1px solid #26221d;
-              box-shadow:0 -18px 30px rgba(0,0,0,.55); }
-  #shelfline { position:relative; z-index:31; flex:0 0 auto; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+  #shelf.on { border-top:1px solid #26221d; padding-top:10px; }
+  #shelfline { flex:0 0 auto; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
                color:var(--gold); padding:6px 2px 0; }
   #shelfline[hidden] { display:none; }
   #shelf.on { display:flex; }
@@ -171,8 +181,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T12:03';
-const BUILD_NO = 12;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-05T12:09';
+const BUILD_NO = 13;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -239,6 +249,7 @@ const BRIEF =
 
 // If the page cannot say which build it is, every missing change becomes an argument with a cache.
 window.addEventListener('DOMContentLoaded', () => {
+  fitHeight();
   const b = document.getElementById('build');
   if (b) b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST';
   keepCurrent();
@@ -334,9 +345,11 @@ function appendLive(who, text) {
 
 function attachLatency(turnEl) {
   if (pendingLatency === null) return;
+  const prev = turnEl.querySelector('.lat.time');
+  if (prev) prev.remove();
   const l = document.createElement('div');
-  l.className = 'lat';
-  l.textContent = 'first sound ' + pendingLatency.toFixed(2) + 's after your last word';
+  l.className = 'lat time';
+  l.textContent = 'first sound ' + pendingLatency.toFixed(2) + 's';
   turnEl.appendChild(l);
   pendingLatency = null;
 }
@@ -600,6 +613,15 @@ if (doorSession()) {
 }
 
 /* ---------- the door ---------- */
+
+function fitHeight() {
+  const vv = window.visualViewport;
+  const h = (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
+  if (h) document.body.style.height = Math.round(h) + 'px';
+}
+window.addEventListener('resize', fitHeight);
+window.addEventListener('orientationchange', () => setTimeout(fitHeight, 120));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', fitHeight);
 
 function demoCards() {
   if (!/[?&]shelf=demo/.test(location.search)) return;
@@ -927,8 +949,10 @@ function handleFrame(text) {
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
     if (looked && turns.engine) {
+      const prev = turns.engine.querySelector('.lat.chip');
+      if (prev) prev.remove();
       const l = document.createElement('div');
-      l.className = 'lat';
+      l.className = 'lat chip';
       l.textContent = 'looked up: ' + looked;
       turns.engine.appendChild(l);
     }
