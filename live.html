@@ -95,6 +95,9 @@
   #shelf { display:none; flex:0 0 auto; gap:8px; overflow-x:auto; overflow-y:hidden;
            padding:8px 2px; scrollbar-width:none; }
   #shelf.on { border-top:1px solid #26221d; }
+  #shelfline { flex:0 0 auto; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+               color:var(--gold); padding:6px 2px 0; }
+  #shelfline[hidden] { display:none; }
   #shelf.on { display:flex; }
   #shelf::-webkit-scrollbar { display:none; }
   .card { flex:0 0 auto; min-width:150px; max-width:220px; background:#171412; border:1px solid #2e2a24;
@@ -121,6 +124,7 @@
 </header>
 
 <main id="log"></main>
+<div id="shelfline" hidden>on the shelf</div>
 <div id="shelf" aria-live="polite"></div>
 
 <footer>
@@ -163,8 +167,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T11:43';
-const BUILD_NO = 9;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-05T11:50';
+const BUILD_NO = 10;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -233,7 +237,29 @@ const BRIEF =
 window.addEventListener('DOMContentLoaded', () => {
   const b = document.getElementById('build');
   if (b) b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST';
+  keepCurrent();
 });
+
+// One quiet check per load: if the published build is newer than the one running, take it.
+// Guarded so a stale CDN edge can never turn this into a reload loop, and never done while
+// a conversation is open.
+async function keepCurrent() {
+  try {
+    const last = Number(sessionStorage.getItem('ei-build-check') || 0);
+    if (Date.now() - last < 60000) return;
+    sessionStorage.setItem('ei-build-check', String(Date.now()));
+    if (doorSession && doorSession()) return;
+    const url = location.pathname + '?fresh=' + Date.now();
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return;
+    const t = await r.text();
+    const m = t.match(/const BUILD_NO = (\d+)/);
+    if (m && Number(m[1]) > BUILD_NO) {
+      sessionStorage.setItem('ei-build-check', '0');
+      location.replace(location.pathname);
+    }
+  } catch { /* a check that cannot run must never stand in the way of the door */ }
+}
 
 const el = (id) => document.getElementById(id);
 const stateEl = el('state'), logEl = el('log'), micBtn = el('mic'), hintEl = el('hint');
@@ -786,8 +812,14 @@ function shelfAdd(item) {
 function renderShelf() {
   const el = document.getElementById('shelf');
   if (!el) return;
-  if (!shelf.length) { el.classList.remove('on'); el.innerHTML = ''; return; }
+  const line = document.getElementById('shelfline');
+  if (!shelf.length) {
+    el.classList.remove('on'); el.innerHTML = '';
+    if (line) line.hidden = true;
+    return;
+  }
   el.classList.add('on');
+  if (line) { line.hidden = false; line.textContent = 'on the shelf · ' + shelf.length; }
   el.innerHTML = '';
   shelf.forEach((it, i) => {
     const card = document.createElement('div');
