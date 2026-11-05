@@ -160,7 +160,7 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T11:34Z';
+const BUILD = '2026-11-05T11:48Z';
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -638,15 +638,15 @@ async function openDoor() {
             // journaled server-side on every call.
             functionDeclarations: [{
               name: 'house',
-              description: 'Walk Edwin\'s own house as it stands in his Known For Me account: his worlds, the people in them, the places, the keepsakes. Read only, never an action, never a change.',
+              description: 'Walk Edwin\'s own house in his Known For Me account. USE THIS FIRST for any question about his rooms/worlds, the people in them, his keepsakes, songs and gifts, and what he has sent or not sent to anyone. Never web-search his own family details, and never say a person or room is missing before calling this. Read only.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
-                  action: { type: 'STRING', description: 'one of: worlds, world, find' },
-                  world: { type: 'STRING', description: 'the world name, when action is world' },
-                  ask: { type: 'STRING', description: 'words to look for, when action is find' },
+                  action: { type: 'STRING', description: 'worlds = list his rooms; world = what is inside one room; find = search the whole house, including by a person\'s name' },
+                  world: { type: 'STRING', description: 'the room name exactly as he said it, e.g. "the sunshine room"' },
+                  ask: { type: 'STRING', description: 'the words to search for, e.g. a person\'s name or "song"' },
                 },
-                required: ['action'],
+                required: [],
               },
             }],
           },
@@ -713,20 +713,35 @@ function onMessage(ev) {
   handleFrame(text);
 }
 
+// The model is a caller, not a contract. If it leaves the action out, invents one, or puts the
+// name in the wrong field, infer what it meant instead of answering a different question - that
+// is exactly how "what did I send Max" once came back as a list of the nine rooms.
+function houseIntent(args) {
+  const a = String((args && args.action) || '').toLowerCase().trim();
+  const words = String(
+    (args && (args.ask || args.world || args.room || args.name || args.query || args.who || args.person)) || ''
+  ).trim();
+  let action;
+  if (/^(worlds|rooms|list|all)$/.test(a)) action = 'worlds';
+  else if (/^(world|room|space|area)$/.test(a)) action = 'world';
+  else if (/^(find|search|lookup|who|person|gift|gifts|keepsakes?)$/.test(a)) action = 'find';
+  else action = words ? 'find' : 'worlds';
+  return { action, ask: words, world: words };
+}
+
 async function handleHouseCall(call) {
   const s = doorSession();
   let result = '';
   try {
     if (!s) throw new Error('the door session has gone');
-    const r = await gatePost('doorHouseRead', Object.assign(
-      { session_token: s.token },
-      call.args || {},
-      { action: (call.args && call.args.action) || 'worlds' },
-    ));
+    const intent = houseIntent(call.args || {});
+    const r = await gatePost('doorHouseRead', { session_token: s.token, ...intent });
     result = r.text || 'the house returned nothing.';
     for (const it of (r.show || [])) shelfAdd(it);
     if (r.hint) result += '\n(internal guidance, do not read it aloud: ' + r.hint + ')';
-    looked = 'his house' + (r.as_at ? ' · as at ' + r.as_at.slice(11, 16) : '');
+    // Say what the house actually returned, so "it cannot find it" can never hide a wrong call.
+    looked = 'his house · ' + intent.action + (intent.ask ? ' ' + intent.ask : '')
+      + (r.show && r.show.length ? ' · ' + r.show.length + ' on the shelf' : '');
   } catch (e) {
     result = 'the house could not be read: ' + ((e && e.message) ? e.message : String(e));
   }
