@@ -89,33 +89,6 @@
   #bars i.hot { background:var(--gold); }
   .hint { font-size:11.5px; color:#6f675b; letter-spacing:.04em; }
 
-  /* On a short screen the header, mic and build line were eating the transcript. */
-  @media (max-height: 720px) {
-    header { padding:5px 0 0; }
-    .sub { display:none; }
-    .wordmark { font-size:10px; letter-spacing:.26em; }
-    .state { margin-top:3px; font-size:12px; min-height:16px; }
-    main { padding-top:6px; }
-    .turn { margin-bottom:10px; }
-    button#mic { width:56px; height:56px; margin-bottom:4px; }
-    #mic .glyph { font-size:21px; }
-    #bars { height:12px; margin-bottom:4px; }
-    .hint { font-size:10px; }
-    .voicebar { margin:0 0 4px; }
-    #voicechip { padding:3px 10px; font-size:10.5px; }
-    .footmark { padding-top:4px; margin-top:4px; font-size:8.5px; letter-spacing:.2em; }
-    .footmark span { margin-top:2px; }
-    #shelfline { padding:4px 0 0; font-size:9.5px; }
-    #shelf { padding:6px 0; }
-    #shelf.on { padding-top:6px; }
-    .card { padding:6px 34px 6px 9px; min-width:0; max-width:min(80vw, 260px); }
-    .card .t { -webkit-line-clamp:1; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
-    .card .k { display:none; }
-    .card .t { margin-top:0; font-size:12px; }
-    .card .copy { position:absolute; top:6px; right:6px; padding:2px 5px; font-size:9px; }
-    .lat { margin-top:3px; font-size:10.5px; }
-    .turn { margin-bottom:8px; }
-  }
 
   /* The shelf: what the door hands over rather than says. A URL read aloud is noise,
      and a long exact string cannot be held in the ear. So links, addresses and
@@ -142,6 +115,35 @@
   .card.thought { border-color:#4a3f26; }
   .footmark { margin-top:10px; font-size:9.5px; letter-spacing:.28em; color:#4f4a41; text-transform:uppercase; }
   .footmark span { display:block; letter-spacing:.12em; margin-top:4px; color:#3f3a33; }
+
+  /* A short screen must give its height to the words. This block sat above the rules it
+     overrides, which is why the first attempt changed nothing: same specificity, later wins. */
+  @media (max-height: 720px) {
+    header { padding:5px 0 0; }
+    .sub { display:none; }
+    .wordmark { font-size:10px; letter-spacing:.26em; }
+    .state { margin-top:3px; font-size:12px; min-height:16px; }
+    main { padding-top:6px; }
+    .turn { margin-bottom:10px; }
+    button#mic { width:56px; height:56px; margin-bottom:4px; }
+    #mic .glyph { font-size:21px; }
+    #bars { height:12px; margin-bottom:4px; }
+    .hint { font-size:10px; }
+    .voicebar { margin:0 0 4px; }
+    #voicechip { padding:3px 10px; font-size:10.5px; }
+    .footmark { padding-top:4px; margin-top:4px; font-size:8.5px; letter-spacing:.2em; }
+    .footmark span { margin-top:2px; }
+    #shelfline { padding:4px 0 0; font-size:9.5px; }
+    #shelf { padding:6px 0; }
+    #shelf.on { padding-top:6px; }
+    .card { padding:6px 34px 6px 9px; min-width:0; max-width:min(80vw, 260px); }
+    .card .t { -webkit-line-clamp:1; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+    .card .k { display:none; }
+    .card .t { margin-top:0; font-size:12px; }
+    .card .copy { position:absolute; top:6px; right:6px; padding:2px 5px; font-size:9px; }
+    .lat { margin-top:3px; font-size:10.5px; }
+    .turn { margin-bottom:8px; }
+  }
 </style>
 </head>
 <body>
@@ -195,8 +197,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T12:14';
-const BUILD_NO = 16;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-05T12:17';
+const BUILD_NO = 17;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
