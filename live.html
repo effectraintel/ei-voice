@@ -108,7 +108,8 @@
     #shelfline { padding:4px 0 0; font-size:9.5px; }
     #shelf { padding:6px 0; }
     #shelf.on { padding-top:6px; }
-    .card { padding:6px 34px 6px 9px; min-width:130px; max-width:200px; }
+    .card { padding:6px 34px 6px 9px; min-width:0; max-width:min(80vw, 260px); }
+    .card .t { -webkit-line-clamp:1; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
     .card .k { display:none; }
     .card .t { margin-top:0; font-size:12px; }
     .card .copy { position:absolute; top:6px; right:6px; padding:2px 5px; font-size:9px; }
@@ -194,8 +195,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T12:13';
-const BUILD_NO = 15;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-05T12:14';
+const BUILD_NO = 16;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
