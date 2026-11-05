@@ -160,7 +160,7 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T11:48Z';
+const BUILD = '2026-11-05T11:45Z';
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -204,6 +204,9 @@ const BRIEF =
   'product calls them worlds. Never correct him and never explain the difference. If he says a ' +
   'room, pass the name exactly as he said it - "the sunshine room" is The Sunshine Corner - and ' +
   'let the tool match it, then speak of it as that room. ' +
+  'When the house tool answers, that answer IS the answer: speak its facts, never add rooms or ' +
+  'people it did not name, and never say you cannot read the corridor while you are holding its ' +
+  'reply. If it names nine rooms, all nine exist. ' +
   'A person\'s name is not a room. Max and Wasi and anyone else he has made something for are names ' +
   'on keepsakes, not worlds, and the tool finds them by name - never answer that it cannot find a ' +
   'person it has just been given, and never ask him to try other words when the tool returned facts. ' +
@@ -736,9 +739,11 @@ async function handleHouseCall(call) {
     if (!s) throw new Error('the door session has gone');
     const intent = houseIntent(call.args || {});
     const r = await gatePost('doorHouseRead', { session_token: s.token, ...intent });
-    result = r.text || 'the house returned nothing.';
+    // Short on purpose: a long tool result is what made the voice say it could not read the
+    // corridor while holding the answer. The ear gets one sentence; the eye gets the shelf.
+    result = (r.text || 'the house returned nothing.').slice(0, 300);
     for (const it of (r.show || [])) shelfAdd(it);
-    if (r.hint) result += '\n(internal guidance, do not read it aloud: ' + r.hint + ')';
+    if (r.hint) result += ' (note to yourself, do not read aloud: ' + String(r.hint).slice(0, 100) + ')';
     // Say what the house actually returned, so "it cannot find it" can never hide a wrong call.
     looked = 'his house · ' + intent.action + (intent.ask ? ' ' + intent.ask : '')
       + (r.show && r.show.length ? ' · ' + r.show.length + ' on the shelf' : '');
