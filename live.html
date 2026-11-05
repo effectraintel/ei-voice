@@ -87,6 +87,25 @@
   #bars i { width:3px; height:4px; background:#4a4237; border-radius:2px; transition:height .08s linear, background .2s; }
   #bars i.hot { background:var(--gold); }
   .hint { font-size:11.5px; color:#6f675b; letter-spacing:.04em; }
+
+  /* The shelf: what the door hands over rather than says. A URL read aloud is noise,
+     and a long exact string cannot be held in the ear. So links, addresses and
+     references arrive here as cards you can tap or copy. */
+  #shelf { display:none; gap:8px; overflow-x:auto; padding:2px 12px 8px; scrollbar-width:none; }
+  #shelf.on { display:flex; }
+  #shelf::-webkit-scrollbar { display:none; }
+  .card { flex:0 0 auto; min-width:150px; max-width:220px; background:#171412; border:1px solid #2e2a24;
+          border-radius:10px; padding:8px 10px; text-align:left; }
+  .card .k { display:block; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:#7a7164; }
+  .card .t { display:block; margin-top:3px; font-size:12.5px; line-height:1.35; color:#e8dfcc;
+             overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2;
+             -webkit-box-orient:vertical; }
+  .card .d { display:block; margin-top:4px; font-size:10.5px; color:var(--gold); letter-spacing:.04em; }
+  .card a { text-decoration:none; color:inherit; }
+  .card .copy { margin-top:6px; background:none; border:1px solid #3a352d; color:#9b9182; font-size:10px;
+                letter-spacing:.08em; border-radius:6px; padding:2px 7px; }
+  .card .copy:active { background:#2b271f; color:#e8dfcc; }
+  .card.thought { border-color:#4a3f26; }
   .footmark { margin-top:10px; font-size:9.5px; letter-spacing:.28em; color:#4f4a41; text-transform:uppercase; }
   .footmark span { display:block; letter-spacing:.12em; margin-top:4px; color:#3f3a33; }
 </style>
@@ -99,6 +118,7 @@
 </header>
 
 <main id="log"></main>
+<div id="shelf" aria-live="polite"></div>
 
 <footer>
   <div class="voicebar">
@@ -143,6 +163,11 @@ const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 const BRIEF =
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
+  // A URL spelled out letter by letter is the clearest example of speech being the wrong
+  // channel: it is unlistenable and unusable. The door shows it instead, on the shelf.
+  'Never read a web address, a URL, an email address, a phone number or a long code aloud, even ' +
+  'if you have it: say that it is on the shelf, name the source in a few words, and let him tap it. ' +
+  'If he asks for a link, say it is on the shelf now rather than describing it. ' +
   'Speak in at most three sentences, and put the substance in the first one. ' +
   'If you offer a next step, fold it into the last sentence. ' +
   'Never end with "anything else", never ask if there is anything more you can help with, ' +
@@ -641,6 +666,7 @@ async function handleHouseCall(call) {
       { action: (call.args && call.args.action) || 'worlds' },
     ));
     result = r.text || 'the house returned nothing.';
+    for (const it of (r.show || [])) shelfAdd(it);
     looked = 'his house' + (r.as_at ? ' · as at ' + r.as_at.slice(11, 16) : '');
   } catch (e) {
     result = 'the house could not be read: ' + ((e && e.message) ? e.message : String(e));
@@ -650,6 +676,68 @@ async function handleHouseCall(call) {
       toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
     }));
   } catch { /* the socket is gone; the turn will end on its own */ }
+}
+
+/* ---------- the shelf: what the door hands over ---------- */
+
+// One list per tab, kept for the session, cleared when the door shuts. Nothing here is
+// spoken; everything here is tappable or copyable. A card is a claim with a source on it.
+const shelf = [];
+
+function shelfAdd(item) {
+  if (!item || !item.title) return;
+  const key = (item.url || item.title).slice(0, 300);
+  if (shelf.some(x => (x.url || x.title) === key)) { renderShelf(); return; }
+  shelf.unshift({ ...item, at: Date.now() });
+  while (shelf.length > 8) shelf.pop();
+  renderShelf();
+}
+
+function renderShelf() {
+  const el = document.getElementById('shelf');
+  if (!el) return;
+  if (!shelf.length) { el.classList.remove('on'); el.innerHTML = ''; return; }
+  el.classList.add('on');
+  el.innerHTML = '';
+  shelf.forEach((it, i) => {
+    const card = document.createElement('div');
+    card.className = 'card' + (it.kind === 'thought' ? ' thought' : '');
+    const k = document.createElement('span'); k.className = 'k';
+    k.textContent = it.kind === 'thought' ? 'thinking about' : (it.kind || 'link');
+    const t = document.createElement('span'); t.className = 't'; t.textContent = it.title;
+    card.appendChild(k); card.appendChild(t);
+    if (it.url) {
+      const d = document.createElement('span'); d.className = 'd';
+      let host = ''; try { host = new URL(it.url).hostname.replace(/^www\./, ''); } catch { host = 'link'; }
+      d.textContent = host;
+      const a = document.createElement('a');
+      a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.appendChild(t); a.appendChild(d);
+      card.replaceChild(a, t);
+      const copy = document.createElement('button');
+      copy.className = 'copy'; copy.type = 'button'; copy.textContent = 'copy';
+      copy.onclick = () => {
+        navigator.clipboard.writeText(it.url).then(
+          () => { copy.textContent = 'copied'; setTimeout(() => { copy.textContent = 'copy'; }, 1400); },
+          () => { copy.textContent = 'select it'; },
+        );
+      };
+      card.appendChild(copy);
+    } else if (it.note) {
+      const d = document.createElement('span'); d.className = 'd'; d.textContent = it.note;
+      card.appendChild(d);
+    }
+    el.appendChild(card);
+  });
+}
+
+// Web results arrive with their own URIs. They go to the shelf and nowhere else.
+function shelfFromGrounding(gm) {
+  const chunks = (gm && gm.groundingChunks) || [];
+  for (const c of chunks) {
+    const w = c.web || {};
+    if (w.uri) shelfAdd({ kind: 'source', title: w.title || w.uri, url: w.uri });
+  }
 }
 
 function handleFrame(text) {
@@ -683,6 +771,7 @@ function handleFrame(text) {
   // claim we can back with the metadata that produced it.
   const gm = sc.groundingMetadata;
   if (gm) {
+    shelfFromGrounding(gm);
     const src = (gm.webSearchQueries || []).length
       ? gm.webSearchQueries.join(' · ')
       : ((gm.groundingChunks || []).length + ' sources');
