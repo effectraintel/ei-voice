@@ -532,8 +532,26 @@ async function openDoor() {
   hint('');
   startClock('opening the door');
   try {
-    const session = doorSession();
-    if (!session) throw new Error('the door is locked: give it your fingerprint first');
+    // The thirty minutes can run out while the tab is simply left open, which is normal life,
+    // not an error. The tap must be able to carry on by itself: ask for the finger here, mint a
+    // fresh session, and keep going. (Edwin, 5 Nov: "No way to step back in directly, will have
+    // to go out and back again?") A reload should never be the price of coming back.
+    let session = doorSession();
+    if (!session) {
+      hint('the thirty minutes are up · one fingerprint opens it again');
+      try {
+        await unlockWithFingerprint('unlock', null);
+        gatePassed();
+      } catch (e) {
+        const why = String((e && e.message) || e);
+        showGate(/not a key/.test(why) ? 'this phone is not a key to this door yet' : why);
+        throw new Error(/no fingerprint/.test(why) ? 'the door stayed shut: no fingerprint was given' : why);
+      }
+      session = doorSession();
+      if (!session) throw new Error('the door did not take the fingerprint; try once more');
+      hint('open · this tab closes again in thirty minutes');
+      startClock('opening the door');
+    }
     const r = await fetch(FN, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
