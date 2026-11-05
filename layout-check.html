@@ -1,7 +1,34 @@
 <!doctype html><html><head><meta charset="utf-8"><title>layout check</title>
-<style>body{margin:0;background:#2a2622;display:flex;gap:18px;padding:18px;font:12px monospace;color:#ccc}
+<style>body{margin:0;background:#2a2622;display:flex;gap:18px;padding:18px;font:12px monospace;color:#ddd}
 figure{margin:0}figcaption{margin-bottom:6px}
-iframe{border:1px solid #555;display:block;background:#13110d}</style></head><body>
-<figure><figcaption>iPhone SE 320x568</figcaption><iframe src="layout-se.html" width="320" height="568"></iframe></figure>
-<figure><figcaption>iPhone 375x667</figcaption><iframe src="layout-mid.html" width="375" height="667"></iframe></figure>
-</body></html>
+iframe{border:1px solid #555;display:block;background:#13110d}#report{margin:0}</style></head><body>
+<figure><figcaption>iPhone SE 320x568</figcaption><iframe id="se" src="layout-se.html" width="320" height="568"></iframe></figure>
+<figure><figcaption>iPhone 375x667</figcaption><iframe id="mid" src="layout-mid.html" width="375" height="667"></iframe></figure>
+<pre id="report">measuring…</pre>
+<script>
+function measure(id) {
+  const f = document.getElementById(id);
+  const d = f.contentDocument, w = f.contentWindow;
+  const body = d.body;
+  const r = el => { const b = el.getBoundingClientRect(); return {top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height)}; };
+  const header = d.querySelector('header'), main = d.querySelector('main'),
+        shelf = d.getElementById('shelf'), line = d.getElementById('shelfline'), footer = d.querySelector('footer');
+  const out = { frame: id, viewport: w.innerHeight,
+    bodyH: Math.round(body.getBoundingClientRect().height),
+    header: r(header), main: r(main), mainScroll: main.scrollHeight, mainClient: main.clientHeight,
+    shelf: r(shelf), label: r(line), footer: r(footer),
+    scrolls: main.scrollHeight > main.clientHeight,
+    fit: main.scrollHeight > 0 && main.clientHeight > 40 };
+  out.overlapShelfFooter = out.shelf.bottom > out.footer.top;
+  out.overflowPastBody = out.footer.bottom > out.bodyH + 1;
+  out.shelfVisible = w.getComputedStyle(shelf).display !== 'none';
+  out.cards = shelf.querySelectorAll('.card').length;
+  out.cardWidth = Math.round(shelf.querySelector('.card').getBoundingClientRect().width);
+  out.mainRoom = out.main.h;
+  return out;
+}
+window.addEventListener('load', () => setTimeout(() => {
+  const rows = [measure('se'), measure('mid')];
+  document.getElementById('report').textContent = JSON.stringify(rows, null, 1);
+}, 500));
+</script></body></html>
