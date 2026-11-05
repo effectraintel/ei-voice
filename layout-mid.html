@@ -84,12 +84,14 @@
 
   /* On a short screen the header, mic and build line were eating the transcript. */
   @media (max-height: 720px) {
-    header { padding:8px 0 0; }
+    header { padding:5px 0 0; }
     .sub { display:none; }
-    .state { margin-top:5px; font-size:12.5px; }
+    .wordmark { font-size:10px; letter-spacing:.26em; }
+    .state { margin-top:3px; font-size:12px; min-height:16px; }
     main { padding-top:6px; }
     .turn { margin-bottom:10px; }
-    button#mic { width:64px; height:64px; margin-bottom:5px; }
+    button#mic { width:56px; height:56px; margin-bottom:4px; }
+    #mic .glyph { font-size:21px; }
     #bars { height:12px; margin-bottom:4px; }
     .hint { font-size:10px; }
     .voicebar { margin:0 0 4px; }
@@ -146,5 +148,5 @@
 <button id="mic"><span class="glyph">◍</span></button>
 <div id="bars"><i></i><i></i><i></i><i></i><i></i></div>
 <div class="hint">tap the circle again to close the door</div>
-<div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build">build 14 · 12:16 SAST</span></div></footer>
+<div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build">build 15 · 12:14 SAST</span></div></footer>
 </body></html>
