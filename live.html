@@ -519,6 +519,17 @@ async function openDoor() {
       throw new Error(d.error || 'the door did not open');
     }
 
+    // The corridor's first slice (card #167): facts from the session record, built
+    // server-side, handed to the voice before the socket opens. If it cannot be had,
+    // say so rather than letting the model guess at the clock.
+    let brief = BRIEF;
+    try {
+      const np = await gatePost('doorNowPack', { session_token: session.token });
+      if (np && np.text) brief = BRIEF + '\n\n' + np.text;
+    } catch (e) {
+      brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)';
+    }
+
     await openMic();
 
     ws = new WebSocket(d.ws + '?access_token=' + encodeURIComponent(d.token));
@@ -529,7 +540,7 @@ async function openDoor() {
           responseModalities: ['AUDIO'],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
         },
-        systemInstruction: { parts: [{ text: BRIEF }] },
+        systemInstruction: { parts: [{ text: brief }] },
         // Eyes for public facts only: a match result, today's weather, a price.
         // Nothing from his house can travel on this - it is a search of the open web,
         // and the alternative is a model guessing confidently, which is worse.
