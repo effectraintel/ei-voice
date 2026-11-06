@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-06T19:02';
-const BUILD_NO = 19;   // 6 Nov: the song tool; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-06T19:14';
+const BUILD_NO = 20;   // 6 Nov: the song tool, and a reply from every path; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -870,39 +870,70 @@ let lastSongRequest = '';
 
 async function handleSongCall(call) {
   const args = call.args || {};
-  let result;
-  const s = session;
-  if (!s || !s.token) {
-    result = 'the door is shut, so nothing can be made right now.';
-  } else {
-    try {
-      if ((args.action || 'make') === 'check') {
-        const r = await gatePost('giftSongStart', { action: 'check', request_id: lastSongRequest || '' });
-        result = r.line + ' (status: ' + r.status + (r.title ? ', title: ' + r.title : '') + ')';
+  let result = '';
+  // A tool call that never gets an answer leaves the model waiting for a reply that is
+  // never coming, which is what "stuck, and it just repeats me" looks like from his side.
+  // So every path below ends in exactly one toolResponse, including the failures.
+  try {
+    // doorSession(), not a captured variable: the house handler taught this the hard way.
+    // A `session` bound in the door-opening function is not in scope out here, and a
+    // ReferenceError here used to swallow the reply entirely.
+    const s = doorSession();
+    if (!s || !s.token) throw new Error('the door session has gone');
+
+    if ((args.action || 'make') === 'check') {
+      const r = await withTimeout(
+        gatePost('giftSongStart', { action: 'check', request_id: lastSongRequest || '' }), 12000,
+        'the record did not answer in time');
+      result = r.line + ' (status: ' + r.status + (r.title ? ', title: ' + r.title : '') + ')';
+      railNote('music rail · checked · ' + r.status);
+    } else {
+      const words = String(args.words || '').trim();
+      if (!words) {
+        result = 'he never actually said what the song is about, so ask him one short question and call again.';
       } else {
-        const words = String(args.words || '').trim();
-        if (!words) {
-          result = 'he never actually said what the song is about, so ask him one short question and call again.';
-        } else {
-          const r = await gatePost('giftSongStart', {
+        const r = await withTimeout(
+          gatePost('giftSongStart', {
             action: 'make',
             text: words,
             who: String(args.who || '').trim(),
             session_id: s.token.slice(0, 24),
-          });
-          lastSongRequest = r.request_id || '';
-          result = r.line + ' (request ' + lastSongRequest + ')';
-          looked = 'the music rail · asked';
-        }
+          }), 20000, 'the music rail did not answer in time');
+        lastSongRequest = r.request_id || '';
+        result = r.line + ' (request ' + lastSongRequest + ')';
+        looked = 'the music rail · asked';
+        railNote('music rail · asked · ' + words.slice(0, 40));
       }
-    } catch (e) {
-      result = 'the music rail refused: ' + ((e && e.message) ? e.message : String(e));
     }
+  } catch (e) {
+    result = 'the music rail refused: ' + ((e && e.message) ? e.message : String(e))
+      + '. Tell him plainly that it did not take, and do not claim a song was made.';
+    railNote('music rail · refused');
+  } finally {
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch (e) { /* the socket is already gone; nothing to answer on */ }
   }
+}
+
+function withTimeout(p, ms, why) {
+  return Promise.race([
+    p,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(why)), ms)),
+  ]);
+}
+
+// One quiet line in the transcript when the rail was actually touched, so "it said it made
+// a song" and "a song was asked for" can never be confused on screen.
+function railNote(text) {
   try {
-    ws.send(JSON.stringify({
-      toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
-    }));
+    const d = document.createElement('div');
+    d.className = 'lat chip';
+    d.textContent = text;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
   } catch (e) {}
 }
 
