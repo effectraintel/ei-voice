@@ -252,13 +252,14 @@ const DECLS = [{
               // The music rail, reached by voice. Making is a real generation in his
                 // own account, so it only ever happens because he asked for it aloud.
                 name: 'song',
-                description: 'Ask the music rail to make a song from his own words, or report what became of one already asked for. Use make whenever he asks for a song, a tune, something sung, or to make it sing. Use check when he asks whether his song is done or has arrived. Never write the lyric yourself and never summarise his words: the words are the seed.',
+                description: 'Ask the music rail to make a song from his own words, send him one he already has, or report what became of one already asked for. Use make whenever he asks for a song, a tune, something sung, or to make it sing. If make answers that he already has a similar song, ask him back exactly as it tells you, then use resend if he wants that one, new if he wants a fresh song anyway, or again if he wants another version. Use check when he asks whether his song is done or has arrived. Never write the lyric yourself and never summarise his words: the words are the seed.',
                 parameters: {
                   type: 'OBJECT',
                   properties: {
-                    action: { type: 'STRING', description: 'make = start a new song from his words; check = report what happened to the one already asked for' },
-                    words: { type: 'STRING', description: 'for make: what he asked for, in his own words, exactly as he said it' },
+                    action: { type: 'STRING', description: 'make = start a new song from his words; resend = send him the song he already has, again, making nothing new; new = make a fresh song even though a similar one exists (only after he has said so); again = another version of the same words; check = report what happened to the one already asked for' },
+                    words: { type: 'STRING', description: 'for make, new or again: what he asked for, in his own words, exactly as he said it' },
                     who: { type: 'STRING', description: 'for make: the person it is for, if he named one' },
+                    prior: { type: 'STRING', description: 'for resend: the request id the last answer named for the song he already has' },
                   },
                   required: ['action'],
                 },
@@ -883,9 +884,16 @@ const SONG_SCRIPT =
   'sentences, and stop. Do not describe how it will sound, do not promise more than a few minutes, and ' +
   'never imply it is already in his inbox. If he asks whether it is done, call song with check before ' +
   'answering, and state only what check returns. When it is delivered, say the title once, plainly, and ' +
-  'let that be enough. ';
+  'let that be enough. ' +
+  'If the song tool answers that he already has a similar song, do not make anything and do not apologise: ' +
+  'ask him back exactly as the tool tells you, in one short question, and wait. Then take his answer: ' +
+  '"send it again", "the same one" or "resend" means call song with resend; "a new one", "a different song" ' +
+  'or "no, make a new one" means call song with new; "again", "another take" or "a different version" means ' +
+  'call song with again. Only then say the line the tool returns, in one sentence. Never claim a song was ' +
+  'made or sent before the tool has told you so. ';
 
 let lastSongRequest = '';
+let lastPriorId = '';   // the take he already has, named by the last prompt-back
 
 async function handleSongCall(call) {
   const args = call.args || {};
@@ -900,28 +908,51 @@ async function handleSongCall(call) {
     const s = doorSession();
     if (!s || !s.token) throw new Error('the door session has gone');
 
-    if ((args.action || 'make') === 'check') {
+    const action = String(args.action || 'make').toLowerCase().trim();
+    if (action === 'check') {
       const r = await withTimeout(
         gatePost('giftSongStart', { action: 'check', request_id: lastSongRequest || '' }), 12000,
         'the record did not answer in time');
       result = r.line + ' (status: ' + r.status + (r.title ? ', title: ' + r.title : '') + ')';
       railNote('music rail · checked · ' + r.status);
+    } else if (action === 'resend') {
+      // Sending him something he already has makes nothing, so it needs no words: the
+      // take is named by the last prompt-back, or by the record itself.
+      const prior = String(args.prior || lastPriorId || '').trim();
+      const r = await withTimeout(
+        gatePost('giftSongStart', {
+          action: 'resend',
+          request_id: prior,
+          session_id: s.token.slice(0, 24),
+        }), 20000, 'the record did not answer in time');
+      result = r.line + (r.title ? ' (title: ' + r.title + ')' : '');
+      railNote('music rail · sent again' + (r.title ? ' · ' + r.title : ''));
     } else {
       const words = String(args.words || '').trim();
-      if (!words) {
+      // "again" needs no new words: it is a version of what he already asked for.
+      if (!words && action !== 'again') {
         result = 'he never actually said what the song is about, so ask him one short question and call again.';
       } else {
+        const payload = {
+          action: 'make',
+          text: words || 'again',
+          who: String(args.who || '').trim(),
+          session_id: s.token.slice(0, 24),
+        };
+        // "new" is his decision after being asked, so it overrides the similarity guard.
+        if (action === 'new') payload.force = true;
         const r = await withTimeout(
-          gatePost('giftSongStart', {
-            action: 'make',
-            text: words,
-            who: String(args.who || '').trim(),
-            session_id: s.token.slice(0, 24),
-          }), 20000, 'the music rail did not answer in time');
-        lastSongRequest = r.request_id || '';
-        result = r.line + ' (request ' + lastSongRequest + ')';
-        looked = 'the music rail · asked';
-        railNote('music rail · asked · ' + words.slice(0, 40));
+          gatePost('giftSongStart', payload), 20000, 'the music rail did not answer in time');
+        if (r.needs_word && r.prior_id) lastPriorId = r.prior_id;
+        if (r.request_id) lastSongRequest = r.request_id;
+        result = r.line + (lastSongRequest ? ' (request ' + lastSongRequest + ')' : '');
+        if (r.needs_word) {
+          looked = 'the music rail · asked him back';
+          railNote('music rail · already has ' + (r.prior_title || 'one like this'));
+        } else {
+          looked = 'the music rail · asked';
+          railNote('music rail · asked · ' + (words || 'again').slice(0, 40));
+        }
       }
     }
   } catch (e) {
