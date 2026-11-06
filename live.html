@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-06T19:14';
-const BUILD_NO = 20;   // 6 Nov: the song tool, and a reply from every path; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-06T19:31';
+const BUILD_NO = 21;   // 6 Nov: the song tool, and a reply from every path; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -354,6 +354,8 @@ const bars = [...document.querySelectorAll('#bars i')];
 // must fall back to Kore rather than open a door that fails on the setup frame.
 const stored = localStorage.getItem('ei-live-voice');
 let ws = null, voice = VOICES.includes(stored) ? stored : 'Kore';
+let connecting = false;   // a door is being opened and has not answered yet
+let doorGen = 0;          // bumped by anything that cancels an opening in flight
 if (stored !== voice) localStorage.setItem('ei-live-voice', voice);
 let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
 let listening = false, busy = false, sessionUp = false;
@@ -447,7 +449,7 @@ function resetTurns() { turns = { you: null, engine: null }; said = { you: '', e
    door is shut, so what is on screen is never mistaken for what is happening. */
 function shutDoor() {
   try { ws && ws.close(); } catch {}
-  ws = null; sessionUp = false; listening = false; busy = false;
+  ws = null; sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
   micBtn.classList.remove('live', 'arming');
   stopClock(); closeMic(); resetTurns();
   setState('the door is shut');
@@ -714,8 +716,13 @@ function demoCards() {
 }
 
 async function openDoor() {
-  if (busy) return;
-  busy = true;
+  if (busy || connecting) return;
+  // One door, one socket. Anything already open is closed here rather than left to run
+  // beside the new one: two sockets sharing one token is what made a reopened door give
+  // nothing back, because the replaced socket's handlers kept acting on the live one.
+  if (ws || sessionUp) shutDoor();
+  const gen = ++doorGen;
+  busy = true; connecting = true;
   micBtn.classList.add('arming');
   bars.forEach(b => b.classList.remove('hot'));
   hint('');
@@ -769,8 +776,16 @@ async function openDoor() {
 
     await openMic();
 
-    ws = new WebSocket(d.ws + '?access_token=' + encodeURIComponent(d.token));
-    ws.onopen = () => ws.send(JSON.stringify({
+    // Between the tap and here there are two network round trips. If he tapped again in
+    // that window, the door was cancelled, and opening it now would leave a socket running
+    // that no control on the page owns any more.
+    if (gen !== doorGen) { closeMic(); stopClock(); busy = false; connecting = false; return; }
+
+    const sock = new WebSocket(d.ws + '?access_token=' + encodeURIComponent(d.token));
+    ws = sock;
+    sock.onopen = () => {
+      if (sock !== ws) { try { sock.close(); } catch (e) {} return; }
+      sock.send(JSON.stringify({
       setup: {
         model: 'models/' + d.model,
         generationConfig: {
@@ -803,11 +818,13 @@ async function openDoor() {
         inputAudioTranscription: {},
         outputAudioTranscription: {},
       },
-    }));
-    ws.binaryType = 'arraybuffer';   // the server sends binary frames, not text
-    ws.onmessage = onMessage;
-    ws.onerror = () => warn('the stream dropped. tap the circle to open the door again.');
-    ws.onclose = (e) => {
+      }));
+    };
+    sock.binaryType = 'arraybuffer';   // the server sends binary frames, not text
+    sock.onmessage = (ev) => { if (sock !== ws) return; onMessage(ev); };
+    sock.onerror = () => { if (sock !== ws) return; warn('the stream dropped. tap the circle to open the door again.'); };
+    sock.onclose = (e) => {
+      if (sock !== ws) return;   // a socket that has been replaced must never shut the live door
       // A socket can open and then be refused a session (an exhausted API balance,
       // a model that has been retired). Without this the page would sit on
       // "opening the door" forever, which is the one thing it must never do.
@@ -838,6 +855,8 @@ async function openDoor() {
       ? 'the browser refused the microphone. allow it for this page, then tap the circle again.'
       : msg);
     closeMic();
+  } finally {
+    connecting = false;
   }
 }
 
@@ -1305,8 +1324,8 @@ micBtn.addEventListener('click', async () => {
     s.buffer = b; s.connect(unlock.destination); s.start(0);
     unlock.resume();
   } catch {}
-  if (listening || sessionUp) {
-    listening = false; sessionUp = false;
+  if (listening || sessionUp || connecting) {
+    listening = false; sessionUp = false; connecting = false; doorGen++;
     try { ws && ws.close(); } catch {}
     ws = null;
     closeMic(); stopClock();
@@ -1333,8 +1352,8 @@ VOICES.forEach(v => {
     el('voicename').textContent = v;
     [...el('vgrid').children].forEach(x => x.classList.toggle('on', x.dataset.voice === v));
     el('voicesheet').classList.remove('open');
-    if (sessionUp || listening) {
-      listening = false; sessionUp = false;
+    if (sessionUp || listening || connecting) {
+      listening = false; sessionUp = false; connecting = false; doorGen++;
       try { ws && ws.close(); } catch {}
       ws = null; closeMic();
     }
