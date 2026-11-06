@@ -725,7 +725,7 @@ async function openDoor() {
     // The corridor's first slice (card #167): facts from the session record, built
     // server-side, handed to the voice before the socket opens. If it cannot be had,
     // say so rather than letting the model guess at the clock.
-    let brief = BRIEF;
+    let brief = BRIEF + SONG_SCRIPT;
     try {
       const np = await gatePost('doorNowPack', { session_token: session.token });
       if (np && np.text) brief = BRIEF + '\n\n' + np.text;
@@ -764,7 +764,23 @@ async function openDoor() {
                 },
                 required: [],
               },
-            }],
+            },
+            {
+              // The music rail, reached by voice. Making is a real generation in his
+                // own account, so it only ever happens because he asked for it aloud.
+                name: 'song',
+                description: 'Ask the music rail to make a song from his own words, or report what became of one already asked for. Use make whenever he asks for a song, a tune, something sung, or to make it sing. Use check when he asks whether his song is done or has arrived. Never write the lyric yourself and never summarise his words: the words are the seed.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    action: { type: 'STRING', description: 'make = start a new song from his words; check = report what happened to the one already asked for' },
+                    words: { type: 'STRING', description: 'for make: what he asked for, in his own words, exactly as he said it' },
+                    who: { type: 'STRING', description: 'for make: the person it is for, if he named one' },
+                  },
+                  required: ['action'],
+                },
+              },
+            ],
           },
         ],
         // Give him room to think. The default half-second of silence made the engine
@@ -833,6 +849,56 @@ function onMessage(ev) {
 // The model is a caller, not a contract. If it leaves the action out, invents one, or puts the
 // name in the wrong field, infer what it meant instead of answering a different question - that
 // is exactly how "what did I send Max" once came back as a list of the nine rooms.
+// What the door says about making music, and what it must never say. Kept apart from
+// the house rules so it can be read, tested and changed on its own.
+const SONG_SCRIPT =
+  'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
+  'make and hand it exactly what he said. Then say the line it returns, in your own voice, in one or two ' +
+  'sentences, and stop. Do not describe how it will sound, do not promise more than a few minutes, and ' +
+  'never imply it is already in his inbox. If he asks whether it is done, call song with check before ' +
+  'answering, and state only what check returns. When it is delivered, say the title once, plainly, and ' +
+  'let that be enough. ';
+
+let lastSongRequest = '';
+
+async function handleSongCall(call) {
+  const args = call.args || {};
+  let result;
+  const s = session;
+  if (!s || !s.token) {
+    result = 'the door is shut, so nothing can be made right now.';
+  } else {
+    try {
+      if ((args.action || 'make') === 'check') {
+        const r = await gatePost('giftSongStart', { action: 'check', request_id: lastSongRequest || '' });
+        result = r.line + ' (status: ' + r.status + (r.title ? ', title: ' + r.title : '') + ')';
+      } else {
+        const words = String(args.words || '').trim();
+        if (!words) {
+          result = 'he never actually said what the song is about, so ask him one short question and call again.';
+        } else {
+          const r = await gatePost('giftSongStart', {
+            action: 'make',
+            text: words,
+            who: String(args.who || '').trim(),
+            session_id: s.token.slice(0, 24),
+          });
+          lastSongRequest = r.request_id || '';
+          result = r.line + ' (request ' + lastSongRequest + ')';
+          looked = 'the music rail · asked';
+        }
+      }
+    } catch (e) {
+      result = 'the music rail refused: ' + ((e && e.message) ? e.message : String(e));
+    }
+  }
+  try {
+    ws.send(JSON.stringify({
+      toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+    }));
+  } catch (e) {}
+}
+
 function houseIntent(args) {
   const a = String((args && args.action) || '').toLowerCase().trim();
   const words = String(
@@ -971,7 +1037,10 @@ function handleFrame(text) {
     if (!awaitingFirstAudio && !speaking) { lastWordAt = Date.now(); awaitingFirstAudio = true; }
   }
   if (msg.toolCall && msg.toolCall.functionCalls) {
-    for (const call of msg.toolCall.functionCalls) handleHouseCall(call);
+    for (const call of msg.toolCall.functionCalls) {
+      if (call.name === 'song') handleSongCall(call);
+      else handleHouseCall(call);
+    }
     return;
   }
   if (msg.error) { warn(msg.error.message || 'the stream reported a problem'); return; }
