@@ -670,8 +670,8 @@ async function send(payload) {
 function wantsSong(text) {
   var t = String(text || '').toLowerCase();
   if (!t) return false;
-  var song = /(song|sing|tune|melody|lyric)/.test(t);
-  var making = /(make|write|create|compose)/.test(t) || /sing/.test(t);
+  var song = /\b(song|sing|tune|melody|lyric)/.test(t);
+  var making = /(make|write|create|compose)/.test(t) || /\bsing\b/.test(t);
   var toInbox = /(my inbox|inbox|email me|send it|send that|put it in)/.test(t);
   return song && (making || toInbox);
 }
