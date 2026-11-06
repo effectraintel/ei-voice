@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-05T12:19';
-const BUILD_NO = 18;   // 5 Nov sequence; the clock alone once put me 12 minutes into the future
+const BUILD = '2026-11-06T19:02';
+const BUILD_NO = 19;   // 6 Nov: the song tool; the clock alone once put me 12 minutes into the future
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -231,6 +231,39 @@ const BUILD_NO = 18;   // 5 Nov sequence; the clock alone once put me 12 minutes
     })
     .catch(() => {});
 })();
+
+
+// The declarations the door actually sends, kept in one place so that what it claims
+// on screen and what it hands the model cannot drift apart.
+const DECLS = [{
+              name: 'house',
+              description: 'Walk Edwin\'s own house in his Known For Me account. USE THIS FIRST for any question about his rooms/worlds, the people in them, his keepsakes, songs and gifts, and what he has sent or not sent to anyone. Never web-search his own family details, and never say a person or room is missing before calling this. Read only.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  action: { type: 'STRING', description: 'worlds = list his rooms; world = what is inside one room; find = search the whole house, including by a person\'s name' },
+                  world: { type: 'STRING', description: 'the room name exactly as he said it, e.g. "the sunshine room"' },
+                  ask: { type: 'STRING', description: 'the words to search for, e.g. a person\'s name or "song"' },
+                },
+                required: [],
+              },
+            },
+            {
+              // The music rail, reached by voice. Making is a real generation in his
+                // own account, so it only ever happens because he asked for it aloud.
+                name: 'song',
+                description: 'Ask the music rail to make a song from his own words, or report what became of one already asked for. Use make whenever he asks for a song, a tune, something sung, or to make it sing. Use check when he asks whether his song is done or has arrived. Never write the lyric yourself and never summarise his words: the words are the seed.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    action: { type: 'STRING', description: 'make = start a new song from his words; check = report what happened to the one already asked for' },
+                    words: { type: 'STRING', description: 'for make: what he asked for, in his own words, exactly as he said it' },
+                    who: { type: 'STRING', description: 'for make: the person it is for, if he named one' },
+                  },
+                  required: ['action'],
+                },
+              },
+            ];
 
 const BRIEF =
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
@@ -286,7 +319,8 @@ window.addEventListener('DOMContentLoaded', () => {
     applyFold(next);
   };
   const b = document.getElementById('build');
-  if (b) b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST';
+  if (b) b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST · '
+    + DECLS.map((d) => d.name).join('+');
   keepCurrent();
 });
 
@@ -752,35 +786,7 @@ async function openDoor() {
           {
             // The corridor into his Known For Me house. Read only, session-scoped,
             // journaled server-side on every call.
-            functionDeclarations: [{
-              name: 'house',
-              description: 'Walk Edwin\'s own house in his Known For Me account. USE THIS FIRST for any question about his rooms/worlds, the people in them, his keepsakes, songs and gifts, and what he has sent or not sent to anyone. Never web-search his own family details, and never say a person or room is missing before calling this. Read only.',
-              parameters: {
-                type: 'OBJECT',
-                properties: {
-                  action: { type: 'STRING', description: 'worlds = list his rooms; world = what is inside one room; find = search the whole house, including by a person\'s name' },
-                  world: { type: 'STRING', description: 'the room name exactly as he said it, e.g. "the sunshine room"' },
-                  ask: { type: 'STRING', description: 'the words to search for, e.g. a person\'s name or "song"' },
-                },
-                required: [],
-              },
-            },
-            {
-              // The music rail, reached by voice. Making is a real generation in his
-                // own account, so it only ever happens because he asked for it aloud.
-                name: 'song',
-                description: 'Ask the music rail to make a song from his own words, or report what became of one already asked for. Use make whenever he asks for a song, a tune, something sung, or to make it sing. Use check when he asks whether his song is done or has arrived. Never write the lyric yourself and never summarise his words: the words are the seed.',
-                parameters: {
-                  type: 'OBJECT',
-                  properties: {
-                    action: { type: 'STRING', description: 'make = start a new song from his words; check = report what happened to the one already asked for' },
-                    words: { type: 'STRING', description: 'for make: what he asked for, in his own words, exactly as he said it' },
-                    who: { type: 'STRING', description: 'for make: the person it is for, if he named one' },
-                  },
-                  required: ['action'],
-                },
-              },
-            ],
+            functionDeclarations: DECLS,
           },
         ],
         // Give him room to think. The default half-second of silence made the engine
@@ -852,6 +858,7 @@ function onMessage(ev) {
 // What the door says about making music, and what it must never say. Kept apart from
 // the house rules so it can be read, tested and changed on its own.
 const SONG_SCRIPT =
+  'This corridor is not read-only, whatever the house rules sound like: with the song tool you can make real music in his own account and have it delivered to his inbox. ' +
   'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
   'make and hand it exactly what he said. Then say the line it returns, in your own voice, in one or two ' +
   'sentences, and stop. Do not describe how it will sound, do not promise more than a few minutes, and ' +
