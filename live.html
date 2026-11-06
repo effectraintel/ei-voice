@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-06T21:44';
-const BUILD_NO = 22;   // 6 Nov: he is asked back before a song he already has is made again, and told his three answers: resend it, a new one, or another version
+const BUILD = '2026-11-06T21:49';
+const BUILD_NO = 23;   // 6 Nov: a wish for music is not a subject. "I want to make a song" now gets a question, not a generation
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -257,7 +257,7 @@ const DECLS = [{
                   type: 'OBJECT',
                   properties: {
                     action: { type: 'STRING', description: 'make = start a new song from his words; resend = send him the song he already has, again, making nothing new; new = make a fresh song even though a similar one exists (only after he has said so); again = another version of the same words; check = report what happened to the one already asked for' },
-                    words: { type: 'STRING', description: 'for make, new or again: what he asked for, in his own words, exactly as he said it' },
+                    words: { type: 'STRING', description: 'for make, new or again: what the song should be about, in his own words, exactly as he said it. If he has only asked for a song without saying what it is about, do not call make with that sentence: ask him what it should be about first' },
                     who: { type: 'STRING', description: 'for make: the person it is for, if he named one' },
                     prior: { type: 'STRING', description: 'for resend: the request id the last answer named for the song he already has' },
                   },
@@ -882,7 +882,9 @@ const SONG_SCRIPT =
   'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
   'make and hand it exactly what he said. Then say the line it returns, in your own voice, in one or two ' +
   'sentences, and stop. Do not describe how it will sound, do not promise more than a few minutes, and ' +
-  'never imply it is already in his inbox. If he asks whether it is done, call song with check before ' +
+  'never imply it is already in his inbox. If he only asks for a song without saying what it should be about ' +
+  '("I want to make a song"), do not call the tool at all: ask him one short question, "What should it be about, ', ' +
+  'Boss?", and wait for his answer. If he asks whether it is done, call song with check before ' +
   'answering, and state only what check returns. When it is delivered, say the title once, plainly, and ' +
   'let that be enough. ' +
   'If the song tool answers that he already has a similar song, do not make anything and do not apologise: ' +
@@ -929,9 +931,13 @@ async function handleSongCall(call) {
       railNote('music rail · sent again' + (r.title ? ' · ' + r.title : ''));
     } else {
       const words = String(args.words || '').trim();
-      // "again" needs no new words: it is a version of what he already asked for.
-      if (!words && action !== 'again') {
-        result = 'he never actually said what the song is about, so ask him one short question and call again.';
+      // "again" needs no new words: it is a version of what he already asked for. Anything
+      // else has to carry a subject: "I want to make a song" is a wish, not a subject, and
+      // the page says so itself rather than trusting the caller to have noticed.
+      const onlyIntent = /^(i\s+)?(want|wanna|would like|can you|could you|please)?\s*(to\s+)?(make|write|sing|do|create)?\s*(me\s+)?(a|another|one)?\s*(song|tune|something|music)\s*(please|for me|now)?[\s.!?]*$/i.test(words);
+      if (action !== 'again' && (!words || onlyIntent)) {
+        result = 'nothing was made: he has not said what the song should be about. Ask him one short question, '
+          + '"What should it be about, Boss?", and call again only when he has told you.';
       } else {
         const payload = {
           action: 'make',
