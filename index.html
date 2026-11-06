@@ -221,6 +221,7 @@ function voiceFor(lang) {
 //
 // If the voice service is unreachable the device voice takes over, so the
 // channel never goes silent. The voice name is provisional until Edwin picks.
+var GIFT_SONG_ENDPOINT = 'https://solene-7ba0f3a1.base44.app/functions/giftSongStart';
 var SPEAK_ENDPOINT = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceSpeak';
 var AUDITION_PAGE = 'https://effectraintel.github.io/ei-voice/audition.html';
 
@@ -627,6 +628,26 @@ async function send(payload) {
       turns.push({ role: 'engine', content: spoken });
       speak(spoken, d.reply_lang || 'en');
     }
+    // A song asked for out loud goes to the music rail, never to the mouth.
+    // The engine answers here with one honest line; the making happens server side.
+    var asked = String(d.you_said || '');
+    if (wantsSong(asked)) {
+      try {
+        var gr = await fetch(GIFT_SONG_ENDPOINT, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text: asked, session_id: sessionId })
+        });
+        var gd = await gr.json();
+        if (gd && gd.ok && gd.line) {
+          setTimeout(function () {
+            say('engine', gd.line);
+            turns.push({ role: 'engine', content: gd.line });
+            speak(gd.line, 'en');
+          }, 1400);
+        }
+      } catch (e2) {}
+    }
   } catch (e) {
     if (timedOut) {
       var msg = 'That took too long, Boss. Ask me again.';
@@ -644,6 +665,14 @@ async function send(payload) {
     endWaiting(mine);
     setBusy(false);
   }
+}
+
+function wantsSong(text) {
+  var t = String(text || '').toLowerCase();
+  if (!t) return false;
+  var asking = /(make|write|create|put|send|do)\b/.test(t) || /just sing|sing it|sing me/.test(t);
+  var song = /\b(song|sing|lyric|tune|melody)\b/.test(t);
+  return asking && song;
 }
 
 function blobToB64(blob) {
