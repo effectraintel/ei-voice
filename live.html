@@ -229,8 +229,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T19:20';
-const BUILD_NO = 37;   // 7 Nov: the mic is silent until the door answers; a cleared card stays cleared by its own code; a song in the making is named.
+const BUILD = '2026-11-07T19:48';
+const BUILD_NO = 38;   // 7 Nov: a song is made to a brief. The door asks what it should say, who for and what kind before it makes anything.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -277,7 +277,7 @@ const DECLS = [{
                   type: 'OBJECT',
                   properties: {
                     action: { type: 'STRING', description: 'make = start a new song from his words; resend = send him the song he already has, again, making nothing new; new = make a fresh song even though a similar one exists (only after he has said so); again = another version of the same words; check = report what happened to the one already asked for' },
-                    words: { type: 'STRING', description: 'for make, new or again: what the song should be about, in his own words, exactly as he said it. If he has only asked for a song without saying what it is about, do not call make with that sentence: ask him what it should be about first' },
+                    words: { type: 'STRING', description: 'for make, new or again: what the song should SAY, in his own words, exactly as he said it. A person is not a subject: "a song for a friend" needs what it should say to them, so ask before calling make. The tool will hand back the next question if the brief is still thin, and you must ask it as given rather than making anything' },
                     who: { type: 'STRING', description: 'for make: the person it is for, if he named one' },
                     prior: { type: 'STRING', description: 'for resend: the request id the last answer named for the song he already has' },
                   },
@@ -960,9 +960,20 @@ const SONG_SCRIPT =
   'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
   'make and hand it exactly what he said. Then say the line it returns, in your own voice, in one or two ' +
   'sentences, and stop. Do not describe how it will sound, do not promise more than a few minutes, and ' +
-  'never imply it is already in his inbox. If he only asks for a song without saying what it should be about ' +
-  '("I want to make a song"), do not call the tool at all: ask him one short question: what should it be about, ' +
-  'Boss?", and wait for his answer. If he asks whether it is done, call song with check before ' +
+  'never imply it is already in his inbox. ' +
+  // Build 38. A song is made to a brief, not to a phrase. The web portal used to ask him
+  // who it was for, what it should say and how it should sound before anything was made;
+  // the door must ask the same three things, in the same order, one question at a time.
+  // A person is not a subject: "a song for a friend" says who, not what. So never treat a
+  // recipient as a subject, and never let the tool make anything from a name alone.
+  'A song is made to a brief, so ask before you make. THREE things, one short question at a time, ' +
+  'and never more than one question in a turn: (1) what should it say, in his own words - this is the ' +
+  'one that matters; (2) who is it for, if he has not said; (3) what kind of song - rock, country, soul, ' +
+  'something to dance to - and "you choose" is a good enough answer. A person is not a subject: ' +
+  '"a song for a friend" tells you the who and nothing about the what, so ask what it should say to them. ' +
+  'When he has answered, say the brief back in one line before making it, then call song with make. ' +
+  'If he changes his mind, take the new answer. If he says make it now, make it with what you have. ' +
+  'If he asks whether it is done, call song with check before ' +
   'answering, and state only what check returns. When it is delivered, say the title once, plainly, and ' +
   'let that be enough. ' +
   'If the song tool answers that he already has a similar song, do not make anything and do not apologise: ' +
@@ -974,6 +985,46 @@ const SONG_SCRIPT =
 
 let lastSongRequest = '';
 let lastPriorId = '';   // the take he already has, named by the last prompt-back
+
+/* ---------- the song journey, in the door (build 38) ----------
+   The web portal asked before it made: who it is for, what it should say, how it should
+   sound - and only then a song. The door had a regex instead, and a regex is not a journey.
+   It caught "make a song" and let "a song for a friend" straight through, so the rail took
+   the phrase literally and wrote a song about a friend.
+   (Edwin, 7 Nov: "it just takes everything literally without prompting me back to ensure we
+   are on the right track. So the song making journey we had on the web portal doesn't exist
+   at all. We should fix that so that it asks me the question to make the song.")
+   So the door keeps a draft across turns and asks for the one thing it is missing, once per
+   turn, in the order that matters: what it should say, who it is for, how it should sound.
+   Nothing reaches the rail until the first is answered, whatever the model decides. */
+
+const songDraft = { who: '', said: '', feel: '', asks: 0, at: 0 };
+const SONG_FILLER = /\b(i|we|you|want|wanna|would|like|please|can|could|will|make|making|write|create|sing|do|need|give|me|us|a|an|the|to|for|about|of|on|in|with|some|song|songs|tune|tracks|track|music|thing|something|anything|one|another|new|it|that|this|and|my|our|his|her|their|just|now|again|actually|really|be|is|are|it's|its)\b/gi;
+const SONG_PERSON = /\b(friend|mate|buddy|girlfriend|boyfriend|wife|husband|partner|mom|mum|mother|dad|father|sister|brother|son|daughter|kid|child|family|someone|somebody|person|people|colleague|boss|client|gran|grandma|grandpa)\b/i;
+const SONG_FEEL = /\b(rock|alternative|country|soul|jazz|blues|pop|folk|acoustic|piano|guitar|ballad|club|dance|house|hip hop|rap|metal|indie|gospel|reggae|swing|lullaby|orchestral|cinematic|drum|bass)\b/i;
+
+function songWho(raw) {
+  const named = raw.match(SONG_PERSON);
+  if (named) return named[0].toLowerCase();
+  // A name carries punctuation when it is spoken inside a sentence ("about Goran, always
+  // busy"), so the token is cleaned before it is judged.
+  const cap = raw.split(/\s+/).slice(1)
+    .map(w => w.replace(/[^A-Za-z]/g, ''))
+    .find(w => /^[A-Z][a-z]{2,}$/.test(w));
+  return cap || '';
+}
+
+// What is left of his words once the asking is taken out. "a song for a friend" leaves
+// nothing, which is the whole point: it names a person and says nothing about the song.
+function songSaid(raw) {
+  return String(raw || '')
+    .replace(SONG_FILLER, ' ')
+    .replace(SONG_PERSON, ' ')
+    .replace(/[^a-z' ]/gi, ' ')
+    .split(/\s+/).filter(w => w.length > 2).join(' ');
+}
+
+function songDraftReset() { songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.asks = 0; songDraft.at = 0; }
 
 async function handleSongCall(call) {
   const args = call.args || {};
@@ -1009,18 +1060,62 @@ async function handleSongCall(call) {
       railNote('music rail · sent again' + (r.title ? ' · ' + r.title : ''));
     } else {
       const words = String(args.words || '').trim();
-      // "again" needs no new words: it is a version of what he already asked for. Anything
-      // else has to carry a subject: "I want to make a song" is a wish, not a subject, and
-      // the page says so itself rather than trusting the caller to have noticed.
-      const onlyIntent = /^(i\s+)?(want|wanna|would like|can you|could you|please)?\s*(to\s+)?(make|write|sing|do|create)?\s*(me\s+)?(a|another|one)?\s*(song|tune|something|music)\s*(please|for me|now)?[\s.!?]*$/i.test(words);
-      if (action !== 'again' && (!words || onlyIntent)) {
-        result = 'nothing was made: he has not said what the song should be about. Ask him one short question, '
-          + '"What should it be about, Boss?", and call again only when he has told you.';
+      // A draft older than twenty minutes is not the same conversation any more.
+      if (songDraft.at && Date.now() - songDraft.at > 20 * 60 * 1000) songDraftReset();
+
+      const who = String(args.who || '').trim() || songWho(words);
+      const said = songSaid(words);
+      const feel = (words.match(SONG_FEEL) || [])[0] || '';
+      if (who) songDraft.who = who;
+      if (feel) songDraft.feel = feel;
+
+      // Is this turn an answer to the question we asked? A bare name answers "who"; a
+      // sentence answers "what should it say"; a genre word answers "how should it sound".
+      const answersWhoOnly = !!who && !said;
+      if (said && said.split(' ').length >= 2) songDraft.said = words;
+      else if (said && !songDraft.said) songDraft.said = words;
+
+      const hasSaid = !!songDraft.said && songSaid(songDraft.said).split(' ').length >= 2;
+      const asked = songDraft.asks;
+
+      // One question a turn, in the order that matters, and never more than three. After
+      // three the brief he has given is the brief he gets: refusing to make his song is a
+      // worse failure than making it from a thin brief.
+      let ask = '';
+      if (!hasSaid && asked < 3) {
+        // "for a friend" is a role, not a person: asking "what should it say to friend"
+        // sounds like a machine reading a field.
+        const role = /^(friend|mate|buddy|partner|someone|somebody|person|people|client)$/i.test(songDraft.who);
+        ask = songDraft.who
+          ? '"What should it say to ' + (role ? 'them' : songDraft.who) + '?"'
+          : '"What should the song be about?"';
+      } else if (!songDraft.who && asked < 3) {
+        ask = '"Who is it for?"';
+      } else if (!songDraft.feel && asked < 3) {
+        ask = '"What kind of song - rock, country, soul, something to dance to? Or say you choose."';
+      }
+
+      if (ask) {
+        songDraft.asks = asked + 1;
+        songDraft.at = Date.now();
+        result = 'Nothing has been made, and nothing should be yet. Ask him this one question and stop, '
+          + 'in your own voice, short: ' + ask + ' Do not describe the song, do not name a style you '
+          + 'were not given, and do not call this tool again until he has answered.';
+        looked = 'song · asking first';
+        railNote('asking first · ' + (songDraft.who && !hasSaid ? 'what should it say' : (!hasSaid ? 'what is it about' : (!songDraft.who ? 'who for' : 'what kind'))));
+      } else if (!hasSaid && action !== 'again') {
+        // Three questions asked and still no subject: he is not giving one, so say so rather
+        // than making a song about nothing.
+        result = 'Nothing has been made: three questions in and he still has not said what the song '
+          + 'should say. Tell him plainly that you need one line from him about what it should say, '
+          + 'and that you will make it the moment he gives it.';
+        looked = 'song · waiting on his words';
+        railNote('no song made · still no subject');
       } else {
         const payload = {
           action: 'make',
-          text: words || 'again',
-          who: String(args.who || '').trim(),
+          text: songDraft.said || words || 'again',
+          who: songDraft.who || String(args.who || '').trim(),
           session_id: s.token.slice(0, 24),
         };
         // "new" is his decision after being asked, so it overrides the similarity guard.
@@ -1029,6 +1124,7 @@ async function handleSongCall(call) {
           gatePost('giftSongStart', payload), 20000, 'the music rail did not answer in time');
         if (r.needs_word && r.prior_id) lastPriorId = r.prior_id;
         if (r.request_id) lastSongRequest = r.request_id;
+        if (!r.needs_word) songDraftReset();   // the brief became a song; the next one starts clean
         result = r.line + (lastSongRequest ? ' (request ' + lastSongRequest + ')' : '');
         if (r.needs_word) {
           looked = 'the rail already has one like this';
