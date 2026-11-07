@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T21:58';
-const BUILD_NO = 54;   // 7 Nov: the shelf draws his songs and wrapped store links, not only money.
+const BUILD = '2026-11-07T22:06';
+const BUILD_NO = 55;   // 7 Nov: clear puts records away for the tab, and the door brings them back.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1647,10 +1647,15 @@ function watchRequest(code, tries) {
 // card from the wrapped link. Nothing is invented, and a rail that cannot be read draws no
 // card rather than an empty one.
 let cardsAt = 0;
+// Put away for this tab only. A payment request that reappears on every door is a nag
+// (his complaint on 7 Nov), but a song he made is a record: clearing the shelf should not
+// delete it, and opening the door again should bring it back.
+const shelfHidden = new Set();
 function cardKey(c) { return String(c.song_id || c.code || c.url || c.title || ''); }
 function mergeCard(c) {
   if (!c || !c.title) return;
   const k = cardKey(c);
+  if (shelfHidden.has(k)) return;   // he put it away a moment ago in this tab
   const i = shelf.findIndex(x => cardKey(x) === k);
   // Same song, same link: the card is updated where it sits, never stacked. A fresh play
   // token is minted on every read, so matching on the url would make a new card every minute.
@@ -1797,7 +1802,11 @@ function stillCleared(it) {
 
 function clearShelf() {
   const n = shelf.length;
-  rememberCleared(shelf.map(x => x.code).filter(Boolean));
+  // What is remembered across doors is a REQUEST: an open payment that keeps coming back is a
+  // nag. A song or a wrapped link is a RECORD, so it is only put away for this tab and returns
+  // when the door is opened again. (Edwin, 7 Nov: "I cleared the shelf now to test fresh.")
+  rememberCleared(shelf.filter(x => x.kind !== 'song' && x.kind !== 'store').map(x => x.code).filter(Boolean));
+  for (const x of shelf) if (x.kind === 'song' || x.kind === 'store') shelfHidden.add(cardKey(x));
   shelf.length = 0;
   try { localStorage.setItem(CLEARED_KEY, String(Date.now())); } catch (e) { /* private mode */ }
   renderShelf();
