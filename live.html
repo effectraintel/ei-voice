@@ -113,6 +113,18 @@
                 letter-spacing:.08em; border-radius:6px; padding:2px 7px; }
   .card .copy:active { background:#2b271f; color:#e8dfcc; }
   .card.thought { border-color:#4a3f26; }
+  /* The receipt opens over the door, not on someone else's address (7 Nov 2026:
+     Edwin - "it does view the certificate or receipt on the base44 url so we have
+     to correct that"). The frame is temporary while the plane has no name of its
+     own; the address bar never leaves the door. */
+  #sheetview { position:fixed; inset:0; z-index:60; display:none; flex-direction:column;
+    background:rgba(10,9,8,.96); padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 10px); }
+  #sheetview.on { display:flex; }
+  #sheetview .bar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:2px 4px 10px; }
+  #sheetview .bar .who { font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold); }
+  #sheetview .bar button { background:none; border:1px solid #3a352d; color:#cfc6b6; font-size:12px;
+    padding:7px 12px; border-radius:999px; }
+  #sheetview iframe { flex:1; width:100%; border:1px solid #2e2a24; border-radius:12px; background:#14141c; }
   footer { position:relative; }
   button#fold { position:absolute; top:2px; right:12px; background:none; border:0; padding:8px 10px;
                 color:#5f584d; font:inherit; font-size:13px; line-height:1; cursor:pointer; }
@@ -209,8 +221,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T14:12';
-const BUILD_NO = 28;   // 7 Nov: the shelf reads its own cards back from the record, so a paid card can never sit there saying open.
+const BUILD = '2026-11-07T14:31';
+const BUILD_NO = 29;   // 7 Nov: a paid card opens its receipt over the door, so no address of someone else's is ever the last thing he sees.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1126,8 +1138,11 @@ function payCard(it) {
       kind: 'paid',
       code: it.code,
       title: 'Paid ' + amt + ' \u00b7 ' + (it.receipt_no || it.code),
-      url: FNBASE + 'payRequestShelf?code=' + encodeURIComponent(it.code),
+      url: it.receipt_no
+        ? FNBASE + 'paymentReceiptView?no=' + encodeURIComponent(it.receipt_no)
+        : FNBASE + 'payRequestShelf?code=' + encodeURIComponent(it.code),
       sub: 'tap for the receipt',
+      sheet: !!it.receipt_no,
       note: it.item,
     };
   }
@@ -1197,6 +1212,26 @@ setInterval(() => { if (shelf.length) shelfSync(); }, 15000);
 // spoken; everything here is tappable or copyable. A card is a claim with a source on it.
 const shelf = [];
 
+function openSheet(url, heading) {
+  let el = document.getElementById('sheetview');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sheetview';
+    const bar = document.createElement('div'); bar.className = 'bar';
+    const who = document.createElement('span'); who.className = 'who';
+    const close = document.createElement('button'); close.type = 'button'; close.textContent = 'close';
+    close.onclick = () => { el.classList.remove('on'); const f = el.querySelector('iframe'); if (f) f.src = 'about:blank'; };
+    bar.appendChild(who); bar.appendChild(close);
+    const frame = document.createElement('iframe');
+    frame.setAttribute('title', 'receipt');
+    el.appendChild(bar); el.appendChild(frame);
+    document.body.appendChild(el);
+  }
+  el.querySelector('.who').textContent = heading || 'the receipt';
+  el.querySelector('iframe').src = url;
+  el.classList.add('on');
+}
+
 function shelfAdd(item) {
   if (!item || !item.title) return;
   const key = (item.url || item.title).slice(0, 300);
@@ -1244,10 +1279,19 @@ function drawCards(el) {
     if (it.url) {
       let host = ''; try { host = new URL(it.url).hostname.replace(/^www\./, ''); } catch { host = 'link'; }
       d.textContent = it.sub || host;
-      const a = document.createElement('a');
-      a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      a.appendChild(t); a.appendChild(d);
-      card.appendChild(a);
+      if (it.sheet) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.style.cssText = 'all:unset;display:block;cursor:pointer';
+        b.onclick = () => openSheet(it.url, it.kind === 'paid' ? 'receipt ' + it.title.replace(/^Paid\s+/, '') : 'the record');
+        b.appendChild(t); b.appendChild(d);
+        card.appendChild(b);
+      } else {
+        const a = document.createElement('a');
+        a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.appendChild(t); a.appendChild(d);
+        card.appendChild(a);
+      }
       const copy = document.createElement('button');
       copy.className = 'copy'; copy.type = 'button'; copy.textContent = 'copy';
       copy.onclick = () => {
