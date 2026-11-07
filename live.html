@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T21:02';
-const BUILD_NO = 52;   // 7 Nov: the door writes a real log line per event, out of the app.
+const BUILD = '2026-11-07T21:14';
+const BUILD_NO = 53;   // 7 Nov: every call through the door is written down, ask and answer.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -742,16 +742,60 @@ function gateSay(text, tone) {
   gMsg.style.color = tone === 'bad' ? '#e0907e' : '#e8cfae';
 }
 
+/* Every call through the door to a rail is written down as it is made - Edwin, 7 Nov 2026:
+   "Can I see more detail like when there is actually a call going through the door to Knownforme".
+   The ask and the answer both, minus anything that could move value or open the door: tokens and
+   challenges never leave, long strings are clipped, and the answer becomes counts and names
+   rather than a payload. So a line can say "doorHouseRead · ok, show 0, text 108 chars, 412ms"
+   and never carries a key. */
+function digest(d) {
+  if (!d || typeof d !== 'object') return String(d).slice(0, 120);
+  const out = {};
+  if (d.ok !== undefined) out.ok = d.ok;
+  if (d.error) out.error = String(d.error).slice(0, 140);
+  if (d.action) out.action = d.action;
+  if (d.code) out.code = d.code;
+  if (d.receipt_no) out.receipt_no = d.receipt_no;
+  if (d.status) out.status = String(d.status).slice(0, 24);
+  if (d.text) out.text = String(d.text).length + ' chars: ' + String(d.text).slice(0, 120);
+  for (const k of ['show', 'cards', 'requests', 'items', 'rooms', 'shelf']) {
+    if (Array.isArray(d[k])) out[k] = d[k].length;
+  }
+  if (d.hint) out.hint = String(d.hint).slice(0, 80);
+  const left = Object.keys(d).filter(k => !(k in out));
+  if (left.length) out.also = left.slice(0, 8).join(',');
+  return JSON.stringify(out).slice(0, 420);
+}
+
+function askOf(body) {
+  const o = Object.assign({}, body || {});
+  for (const k of ['session_token', 'token', 'challenge', 'code', 'credential_id']) delete o[k];
+  for (const k of Object.keys(o)) {
+    if (typeof o[k] === 'string' && o[k].length > 60) o[k] = o[k].slice(0, 40) + '...';
+  }
+  return JSON.stringify(o).slice(0, 300);
+}
+
 async function gatePost(fn, body) {
-  const r = await fetch(FNBASE + fn, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  let d = {};
-  try { d = await r.json(); } catch {}
-  if (!d || d.ok !== true) throw new Error((d && d.error) || ('the door refused (' + r.status + ')'));
-  return d;
+  const t0 = Date.now();
+  logLine('call.ask', fn + ' ' + askOf(body), { target: fn, ask: askOf(body), gate: '1' });
+  try {
+    const r = await fetch(FNBASE + fn, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    let d = {};
+    try { d = await r.json(); } catch {}
+    if (!d || d.ok !== true) throw new Error((d && d.error) || ('the door refused (' + r.status + ')'));
+    logLine('call.back', fn + ' \u2192 ' + digest(d), { target: fn, ms: Date.now() - t0, status: r.status });
+    return d;
+  } catch (e) {
+    logLine('call.fail', fn + ' \u2192 ' + ((e && e.message) ? e.message : String(e)), {
+      target: fn, ms: Date.now() - t0, level: 'warn',
+    });
+    throw e;
+  }
 }
 
 async function unlockWithFingerprint(mode, enrolCode) {
@@ -1491,9 +1535,12 @@ function watchRequest(code, tries) {
     // After a few seconds of nothing, ask the provider directly: a refused checkout sends no
     // webhook at all, so waiting on one leaves a link that can never be paid.
     const ask = (left % 3 === 0) ? '&verify=1' : '';
+    const wt0 = Date.now();
+    logLine('call.ask', 'payRequestShelf ?code=' + code + ask, { target: 'payRequestShelf', ask: code + ask, shelf: '1' });
     fetch(FNBASE + 'payRequestShelf?json=1&code=' + encodeURIComponent(code) + ask)
       .then(r => r.json())
       .then(d => {
+        logLine('call.back', 'payRequestShelf \u2192 ' + digest(d), { target: 'payRequestShelf', ms: Date.now() - wt0, shelf: '1' });
         if (d && d.found && d.status === 'paid') {
           shelfReplace(key, { ...payCard(d), code: key });
           railNote('paid \u00b7 ' + (d.receipt_no || key));
@@ -1522,8 +1569,11 @@ function watchRequest(code, tries) {
 // lying, not the record, so the record wins every time this runs.
 async function shelfSync() {
   try {
+    const st0 = Date.now();
+    logLine('call.ask', 'payRequestShelf ?hours=6 (what is still his)', { target: 'payRequestShelf', ask: 'hours=6', shelf: '1' });
     const r = await fetch(FNBASE + 'payRequestShelf?json=1&hours=6');
     const d = await r.json();
+    logLine('call.back', 'payRequestShelf \u2192 ' + digest(d), { target: 'payRequestShelf', ms: Date.now() - st0, shelf: '1' });
     if (!d || !d.ok || !Array.isArray(d.requests)) return;
     for (const it of d.requests.slice().reverse()) {
       // Build 37: the card itself remembers being cleared, so a reload, a fresh door or a
