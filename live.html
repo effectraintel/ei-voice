@@ -245,8 +245,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T00:44';
-const BUILD_NO = 61;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD = '2026-11-08T01:05';
+const BUILD_NO = 62;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -358,6 +358,8 @@ const DECLS = [{
                   to: { type: 'STRING', description: 'who it is for: their email address or their WhatsApp number, exactly as he gave it' },
                   channel: { type: 'STRING', description: 'email or whatsapp, only if he has said which' },
                   message: { type: 'STRING', description: 'the words he wants sent with it. An empty string means send it with no message' },
+                  to_name: { type: 'STRING', description: 'the name of the person it is going to, as he said it. Needed for the greeting and the cover' },
+                  cover: { type: 'BOOLEAN', description: 'true if he wants a cover image drawn to go with it, false if he does not. Leave it out until you have asked him' },
                 },
                 required: [],
               },
@@ -1743,23 +1745,52 @@ async function handleShareToCall(call) {
       looked = 'sharing · what to say';
       return;
     }
+    // Edwin, 8 Nov 00:05: after the words, the picture. "we ask do you want to include a cover image to
+    // accompany the song to Edwin? (or whoever it is sent to, and if we don't have a name please ask
+    // politely)". So the question names the person when we have a name, and asks for one when we do not.
+    if (typeof a.cover !== 'boolean') {
+      const who = String(a.to_name || '').trim();
+      result = who
+        ? 'Ask if he wants a cover image drawn to accompany it to ' + who + ', in one short question. '
+          + 'Nothing is sent until he answers: if yes, call this again with cover true; if no, with cover false.'
+        : 'You do not have the name of the person it is going to. Ask politely, in one short question, '
+          + 'who it is for by name, so the picture and the greeting can carry it. Nothing is sent yet.';
+      looked = 'sharing · a cover?';
+      return;
+    }
+    if (a.cover === true && !String(a.to_name || '').trim()) {
+      result = 'Ask politely, in one short question, what the name of the person is, so the picture and the '
+        + 'greeting can carry it. Then call this again with that name. Nothing is sent yet.';
+      looked = 'sharing · who by name';
+      return;
+    }
 
     const r = await withTimeout(railPost('shelfShare', {
       action: 'send', card: cardPayload(card), to, channel, message: String(a.message || ''),
-    }), 60000, 'the sending rail did not answer in time');
+      to_name: String(a.to_name || ''), cover: a.cover === true,
+    }), 120000, 'the sending rail did not answer in time');
 
     if (r && r.ok && r.channel === 'email') {
-      result = 'It is on its way by email to ' + (r.to_masked || 'them') + ', sent under his own name, and the '
-        + 'mail service gave it id ' + (r.message_id || 'unknown') + '. Say in one line that it has gone and '
-        + 'what it was. Do not read the address aloud.';
+      if (r.cover_url) {
+        // The picture he paid a question for should be visible, not described.
+        mergeCard({ kind: 'cover', title: (card.title || 'the cover'), sub: 'the cover that went with it', url: r.link || card.url, img: r.cover_url });
+      }
+      result = 'It is on its way by email to ' + (r.to_masked || 'them') + (r.to_name ? ' (' + r.to_name + ')' : '')
+        + ', sent under his own name' + (r.cover_url ? ' with the cover drawn into it' : '')
+        + ', and the mail service gave it id ' + (r.message_id || 'unknown') + '. Say in one line that it has gone'
+        + (r.cover_url ? ', and that the picture is on the shelf to look at' : '') + '. Do not read the address aloud.';
       looked = 'sharing · sent by email';
-      railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
+      railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || '') + (r.cover_url ? ' · with a cover' : ''));
     } else if (r && r.ok && r.need === 'tap' && r.wa_link) {
       mergeCard({ kind: 'send', title: 'WhatsApp to ' + (r.to_masked || 'them'), sub: 'tap to send · nothing has left yet', url: r.wa_link });
       result = 'Written and ready: it is on the shelf as a WhatsApp message, with the link and his words in it. '
         + 'Say that it is ready and that he taps it to send, and that nothing has left yet. Do not read the link.';
       looked = 'sharing · ready to tap';
       railNote('shared · whatsapp prepared · ' + (card.title || ''));
+    } else if (r && r.need === 'cover') {
+      result = 'The picture did not come through. Ask him, in one short question, whether to send it without '
+        + 'one or to try the picture again. Nothing has been sent.';
+      looked = 'sharing · cover failed';
     } else if (r && r.need === 'address') {
       result = 'That was not a usable email address. Ask for their email address again, one short question, and stop.';
       looked = 'sharing · address needed';
@@ -2429,6 +2460,12 @@ function drawCards(el) {
     const k = document.createElement('span'); k.className = 'k';
     k.textContent = it.kind === 'thought' ? 'thinking about' : (it.kind || 'link');
     card.appendChild(k);
+    if (it.img) {
+      const im = document.createElement('img');
+      im.src = it.img; im.alt = ''; im.loading = 'lazy';
+      im.style.cssText = 'display:block;width:100%;max-width:230px;height:auto;border-radius:8px;margin-bottom:7px';
+      card.appendChild(im);
+    }
     const t = document.createElement('span'); t.className = 't'; t.textContent = it.title;
     const d = document.createElement('span'); d.className = 'd';
     if (it.url) {
