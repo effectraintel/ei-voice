@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T20:12';
-const BUILD_NO = 46;   // 7 Nov: replies and openings counted per door, so a duplicate is a reading not a guess.
+const BUILD = '2026-11-07T20:31';
+const BUILD_NO = 47;   // 7 Nov: the door stops answering its own voice and a quiet room.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -419,7 +419,8 @@ setInterval(() => {
   if (!(sessionUp || listening)) { b.textContent = base; return; }
   b.textContent = base + ' · mic ' + (micCtx ? micCtx.state : 'none') +
     ' · frames ' + dbgFrames + ' · peak ' + Math.round(dbgPeak * 1000) +
-    ' · sent ' + dbgSent + ' · opens ' + dbgOpens + ' · replies ' + dbgReplies;
+    ' · sent ' + dbgSent + ' · opens ' + dbgOpens + ' · replies ' + dbgReplies +
+    ' · unsought ' + dbgUnsought;
 }, 500);
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -477,13 +478,14 @@ let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
 // owner interrupting, so the page used to cut its own sentence off mid-word.
 let playRunStart = 0, loudFrames = 0, looked = null;
+let ourSoundEndsAt = 0, lastVoicedAt = 0;   // ms on the page clock (build 47)
 // Build 39. The engine says one line before the microphone opens, so the boundary between
 // "not listening" and "listening" is something he can HEAR. Without it, a sentence already
 // in his mouth arrives half-eaten and its tail gets stuck to the front of the next thing he
 // says - the anomaly he reported. (Edwin, 7 Nov: "there is an anomaly that we need to cater
 // for... I think the best way is actually to say something before it goes open for inputs.")
 let greeting = false, greetWatch = null;
-let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0, dbgReplies = 0;
+let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0, dbgReplies = 0, dbgHeard = 0, dbgUnsought = 0;
 const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
 const BARGE_FRAMES = 3;      // sustained, not a click
@@ -876,7 +878,7 @@ async function openDoor() {
   // These count the door that is open now. Cumulative counts across a day read as a fault
   // (he saw "opens 2" and it meant nothing), and a detector that cannot be trusted is worse
   // than none. Build 46.
-  dbgFrames = 0; dbgSent = 0; dbgPeak = 0; dbgOpens = 0; dbgReplies = 0;
+  dbgFrames = 0; dbgSent = 0; dbgPeak = 0; dbgOpens = 0; dbgReplies = 0; dbgHeard = 0; dbgUnsought = 0;
   busy = true; connecting = true;
   micBtn.classList.add('arming');
   bars.forEach(b => b.classList.remove('hot'));
@@ -1757,7 +1759,7 @@ function handleFrame(text) {
     looked = src;
   }
 
-  if (sc.inputTranscription && sc.inputTranscription.text) appendLive('you', sc.inputTranscription.text);
+  if (sc.inputTranscription && sc.inputTranscription.text) { dbgHeard++; appendLive('you', sc.inputTranscription.text); }
   if (sc.outputTranscription && sc.outputTranscription.text) appendLive('engine', sc.outputTranscription.text);
 
   const parts = (sc.modelTurn && sc.modelTurn.parts) || [];
@@ -1771,7 +1773,13 @@ function handleFrame(text) {
 
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
-    if (!greeting) dbgReplies++;   // one question, one reply; two means the server answered twice
+    if (!greeting) {
+      dbgReplies++;   // one question, one reply; two means the server answered twice
+      // A reply that follows no transcription at all is the engine answering itself or the
+      // room. Counted, not hidden: if this ever rises, the echo gate has a hole in it.
+      if (!dbgHeard) dbgUnsought++;
+    }
+    dbgHeard = 0;
     // One bubble per turn. Seen on his phone 7 Nov: every reply after the first was appended
     // to the previous one - "...another name?Understood, Boss..." - because the bubble was
     // never closed. His own words piled into a single YOU block the same way.
@@ -1837,8 +1845,12 @@ async function openMic() {
     // microphone is mostly hearing the loudspeaker. Real speech still wins, but it
     // has to be clearly louder than bleed and it has to last, or every "um" of a
     // speaker tail would end our own sentence.
-    const ours = playing();
+    // Ours means our voice is in the air NOW, and for a moment after it stops: playing()
+    // knows about scheduled buffers, ourSoundEndsAt knows about the tail that follows them.
+    const tail = ourSoundEndsAt && performance.now() < ourSoundEndsAt + 400;
+    const ours = playing() || tail;
     const voiced = rms > (ours ? ECHO_RMS : OPEN_RMS);
+    if (voiced && !ours) lastVoicedAt = Date.now();
 
     if (voiced) {
       loudFrames++;
@@ -1861,6 +1873,17 @@ async function openMic() {
     // us. Otherwise the server hears its own output, decides it was interrupted, and
     // stops generating half a sentence in. That is the other way a sentence dies.
     if (ours && !speaking) {
+      sendPcm(new Int16Array(640));
+      return;
+    }
+    // A quiet room is not a turn. Rain on a window, a fan, a passing car - the server's own
+    // voice detection is deliberately loose, and a door that answers the weather is worse
+    // than one that misses a word. So when he is not speaking we send silence, and we keep
+    // sending it until 700ms after the last frame that looked like a voice, so an ending is
+    // never clipped by the gate itself. (Edwin, 7 Nov: "I said absolutely nothing but got
+    // another response.")
+    const quiet = !speaking && rms < OPEN_RMS && (Date.now() - lastVoicedAt > 700);
+    if (quiet) {
       sendPcm(new Int16Array(640));
       return;
     }
@@ -1981,6 +2004,10 @@ function playPcm(b64) {
   src.connect(ctx.destination);
   src.start(playAt);
   playAt += buf.duration;
+  // When our own last syllable will be in the air, on the page's clock. The speaker and the
+  // room keep sounding for a moment after that, and that tail is what the microphone was
+  // picking up and sending back as if he had spoken. (Build 47)
+  ourSoundEndsAt = performance.now() + Math.max(0, playAt - ctx.currentTime) * 1000;
 }
 
 /* Barge-in: he speaks, our voice stops where it is. The server interrupts itself
@@ -1988,6 +2015,9 @@ function playPcm(b64) {
 function barge() {
   try { playCtx && playCtx.close(); } catch {}
   playCtx = null; playAt = 0; playRunStart = 0; loudFrames = 0;
+  // He cut in, so our sound stopped now. The tail that would follow it did not happen, and
+  // leaving it set would make the gate swallow the end of the sentence he is in the middle of.
+  ourSoundEndsAt = 0;
   awaitingFirstAudio = false;
 }
 
