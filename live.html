@@ -245,8 +245,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T01:52';
-const BUILD_NO = 64;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD = '2026-11-08T02:20';
+const BUILD_NO = 65;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -367,7 +367,15 @@ const DECLS = [{
             },
             ];
 
-const BRIEF =
+// Edwin's log, 8 Nov 22:13, lines 1409-1410: nothing was called, and the engine said "I have just sent
+// ... It's all taken care of." No mail left. A door that can announce a delivery it never made is worse than
+// one that asks twice, so the brief forbids the sentence and the door checks it afterwards.
+const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send exists only as the result of the '
+  + 'sharing tool: if you have not called it in this turn and read its answer, nothing has been sent, and you must '
+  + 'not say it has, or that it is on its way, or that he should look for it. Never fill a silence with a claim. '
+  + 'If he has not answered the question you asked, ask it again in fewer words. ';
+
+const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
   // A URL spelled out letter by letter is the clearest example of speech being the wrong
@@ -1512,6 +1520,12 @@ async function handleHouseCall(call) {
 // when more than one song answers to that name it comes back here and the door asks which one. Edwin:
 // "we need to remember that you will get back more than one song in some instances. So you will have
 // to prompt me back so that i can confirm the right one." Nothing is wrapped or minted until he does.
+let lastShare = null;          // the last delivery this session actually made
+let shareSentThisTurn = false;   // set only by a send the rail confirmed
+let userTurns = 0;             // one per thing he says, so an answer can be told from a guess
+let shareCoverAskedTurn = -1;  // the turn the cover question was asked on
+let shareAddrAskedTurn = -1;   // the turn the address was read back on
+let shareNoMessageTurn = -1;   // the turn the message question was asked on
 let shareChoices = [];
 let shareCoverAsked = false;   // the door asks for the picture once, and does not take the model's word for it
 let shareAddrOk = false;       // set only by a known address, or by him hearing it and saying yes
@@ -1555,7 +1569,9 @@ function shareResultLine(r) {
     + (r.found === 'shelf'
       ? 'It plays from the vault, good for a day, and no file is handed over.'
       : 'It opens on ' + (r.platform_text || 'whichever store the listener uses') + (r.found === 'wrapped' ? ', powered by MTShare' : '.'))
-    + ' Say the title once and that it is on the shelf, then ask if he wants it sent to someone. Do not read the url out loud.';
+    + ' Say the title once and that it is on the shelf. Then offer the whole thing in one question, in your own'
+    + ' words: sending it to someone with his own message and a cover drawing made for it, and that you will read'
+    + ' the address back before anything leaves. Do not read the url out loud.';
 }
 
 
@@ -1745,7 +1761,8 @@ async function handleShareToCall(call) {
       looked = 'sharing · which way';
       return;
     }
-    if (!hasMessage) {
+    if (!hasMessage || (String(a.message || '').trim() === '' && a.no_message !== true)) {
+      shareNoMessageTurn = userTurns;
       result = 'Ask what he wants it to say, one short question, and say he can also send it with no '
         + 'message. Then call this again with what he says. Nothing is sent yet.';
       looked = 'sharing · what to say';
@@ -1759,8 +1776,9 @@ async function handleShareToCall(call) {
     // called send with cover already false, the guard saw a boolean and let it through, and he had to ask
     // for the picture himself afterwards. The door now owns that turn. A cover value that arrives before
     // the question was asked is discarded, whatever the model thought it knew.
-    if (!shareCoverAsked) {
+    if (!shareCoverAsked || userTurns <= shareCoverAskedTurn) {
       shareCoverAsked = true;
+      shareCoverAskedTurn = userTurns;
       const who = String(a.to_name || '').trim();
       result = who
         ? 'Ask if he wants a cover image drawn to accompany it to ' + who + ', in one short question. '
@@ -1770,7 +1788,7 @@ async function handleShareToCall(call) {
       looked = 'sharing · a cover?';
       return;
     }
-    if (typeof a.cover !== 'boolean') {
+    if (typeof a.cover !== 'boolean' || userTurns <= shareCoverAskedTurn) {
       const who = String(a.to_name || '').trim();
       result = who
         ? 'Ask if he wants a cover image drawn to accompany it to ' + who + ', in one short question. '
@@ -1801,26 +1819,27 @@ async function handleShareToCall(call) {
         } catch { /* the correction matters more than the bookkeeping */ }
         shareAddrReadBack = '';
       }
-      let known = false;
-      try {
-        const k = await railPost('shelfShare', { action: 'known', to });
-        known = !!(k && k.known);
-        if (k && k.to_masked) railNote('share · address ' + (known ? 'known' : 'new') + ' · ' + k.to_masked);
-      } catch { /* if the rail cannot answer, asking is still the safe side */ }
-      if (known) {
+      if (shareAddrReadBack === to && a.confirmed === true && userTurns > shareAddrAskedTurn) {
         shareAddrOk = true;
-        shareAddrReadBack = to;
       } else {
-        result = 'Read the address back to him exactly as it is, spelled out: ' + to + ' - and ask if that is '
-          + 'right, in one short question. Nothing has been sent. Only when he says yes, call this again with '
-          + 'confirmed true. If he corrects it, take his correction exactly as he says it and call this again '
-          + 'with the corrected address, and it will be read back once more.';
+        let known = false;
+        try {
+          const k = await railPost('shelfShare', { action: 'known', to });
+          known = !!(k && k.known);
+          if (k && k.to_masked) railNote('share · address ' + (known ? 'known' : 'new') + ' · ' + k.to_masked);
+        } catch { /* if the rail cannot answer, asking is still the safe side */ }
+        result = 'Read the address back to him exactly as it is and ask if it is right, in one short question: '
+          + to + '. '
+          + (known ? 'This one has carried a send before, so you can tell him that - and still get a yes. ' : '')
+          + 'Nothing has been sent. Only when he says yes, call this again with confirmed true and the same address. '
+          + 'If he corrects it, take his correction exactly as he says it, and it will be read back once more.';
         shareAddrReadBack = to;
+        shareAddrAskedTurn = userTurns;
         looked = 'sharing · is that address right?';
         return;
       }
     }
-    if (channel === 'email' && a.confirmed === true) shareAddrOk = true;
+    if (channel === 'email' && a.confirmed === true && userTurns > shareAddrAskedTurn) shareAddrOk = true;
 
     const r = await withTimeout(railPost('shelfShare', {
       action: 'send', card: cardPayload(card), to, channel, message: String(a.message || ''),
@@ -1840,6 +1859,8 @@ async function handleShareToCall(call) {
         + ', and the mail service gave it id ' + (r.message_id || 'unknown') + '. Say in one line that it has gone'
         + (r.cover_url ? ', and that the picture is on the shelf to look at' : '') + '. Do not read the address aloud.';
       looked = 'sharing · sent by email';
+      shareSentThisTurn = true;
+      lastShare = { title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' };
       railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || '') + (r.cover_url ? ' · with a cover' : ''));
     } else if (r && r.ok && r.need === 'tap' && r.wa_link) {
       mergeCard({ kind: 'send', title: 'WhatsApp to ' + (r.to_masked || 'them'), sub: 'tap to send · nothing has left yet', url: r.wa_link });
@@ -1918,6 +1939,12 @@ async function handleWrapCall(call) {
       + 'nothing is on his shelf. Say that in one line.';
     looked = 'store · no answer';
   } finally {
+    if (result && lastShare) {
+      result += ' (What this session has already delivered: "' + lastShare.title + '" to ' + lastShare.to_masked
+        + (lastShare.cover ? ' with a cover' : ' without one') + ', at '
+        + new Date(lastShare.at).toTimeString().slice(0, 5) + '. If he wants something added or changed, that is '
+        + 'the message being amended, not a new mystery.)';
+    }
     try {
       ws.send(JSON.stringify({
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
@@ -2357,6 +2384,8 @@ function openShareSheet(card) {
       });
       if (r && r.ok && r.channel === 'email') {
         status.textContent = 'sent by email to ' + (r.to_masked || 'them') + '.';
+        shareSentThisTurn = true;
+        lastShare = { title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' };
         railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
         setTimeout(() => el.remove(), 1400);
       } else if (r && r.ok && r.need === 'tap' && r.wa_link) {
@@ -2718,6 +2747,7 @@ function handleFrame(text) {
 
   if (sc.inputTranscription && sc.inputTranscription.text) {
     dbgHeard++;
+    userTurns++;
     appendLive('you', sc.inputTranscription.text);
     logLine('turn.you', sc.inputTranscription.text, { role: 'you' });
   }
@@ -2739,6 +2769,15 @@ function handleFrame(text) {
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
       greeting: greeting ? '1' : '',
     });
+    // A claim of delivery with no delivery behind it. The log catches it, the door says it plainly once,
+    // and nothing pretends afterwards.
+    const claimedSend = /\b(i have (just )?sent|i've (just )?sent|it's on its way|it is on its way|that's gone|has been sent|just sent it)\b/i
+      .test(String(said.engine || ''));
+    if (claimedSend && !shareSentThisTurn) {
+      logLine('share.claim', 'claimed a send that never happened', { level: 'warn' });
+      warn('No send was recorded, Boss. Nothing has left.');
+    }
+    shareSentThisTurn = false;
     if (!greeting) {
       dbgReplies++;   // one question, one reply; two means the server answered twice
       // A reply that follows no transcription at all is the engine answering itself or the
