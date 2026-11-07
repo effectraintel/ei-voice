@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T22:06';
-const BUILD_NO = 55;   // 7 Nov: clear puts records away for the tab, and the door brings them back.
+const BUILD = '2026-11-07T22:19';
+const BUILD_NO = 56;   // 7 Nov: clear means clear, and the shelf offers them back when he wants them.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1647,6 +1647,28 @@ function watchRequest(code, tries) {
 // card from the wrapped link. Nothing is invented, and a rail that cannot be read draws no
 // card rather than an empty one.
 let cardsAt = 0;
+// Clear means clear. (Edwin, 7 Nov 2026: "Ok but I want to clear the shelve? But when I do it
+// just comes back!") So what he puts away is remembered in the browser and stays away, across
+// reloads and across doors. Nothing is deleted: the records are untouched, and the row offers
+// them back with one tap when he wants them. Only something NEW - a song he has not seen, a link
+// he has not wrapped - arrives on a cleared shelf, which is the point of clearing it.
+const PUT_KEY = 'ei.shelf.putaway.v1';
+function putAwayMap() { try { return JSON.parse(localStorage.getItem(PUT_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function isPutAway(k) { return !!putAwayMap()[k]; }
+function putAwayCount() { return Object.keys(putAwayMap()).length; }
+function putAwayAdd(keys) {
+  const m = putAwayMap();
+  for (const k of keys) if (k) m[k] = Date.now();
+  try { localStorage.setItem(PUT_KEY, JSON.stringify(m)); } catch (e) { /* private mode: the row simply cannot remember */ }
+}
+function bringBack() {
+  try { localStorage.removeItem(PUT_KEY); } catch (e) {}
+  shelfHidden.clear();
+  renderShelf();
+  refreshCards(true);
+  railNote('shelf · brought back');
+}
+
 // Put away for this tab only. A payment request that reappears on every door is a nag
 // (his complaint on 7 Nov), but a song he made is a record: clearing the shelf should not
 // delete it, and opening the door again should bring it back.
@@ -1655,7 +1677,7 @@ function cardKey(c) { return String(c.song_id || c.code || c.url || c.title || '
 function mergeCard(c) {
   if (!c || !c.title) return;
   const k = cardKey(c);
-  if (shelfHidden.has(k)) return;   // he put it away a moment ago in this tab
+  if (shelfHidden.has(k) || isPutAway(k)) return;   // he put it away; only something new lands on a cleared shelf
   const i = shelf.findIndex(x => cardKey(x) === k);
   // Same song, same link: the card is updated where it sits, never stacked. A fresh play
   // token is minted on every read, so matching on the url would make a new card every minute.
@@ -1715,6 +1737,13 @@ const shelf = [];
 document.getElementById('shelfclear').addEventListener('click', (e) => {
   e.preventDefault(); e.stopPropagation();
   clearShelf();
+});
+
+// The counter is where the way back lives, so a clear never feels like a deletion.
+document.getElementById('shelfcount').addEventListener('click', (e) => {
+  if (!putAwayCount()) return;
+  e.preventDefault(); e.stopPropagation();
+  bringBack();
 });
 
 function openSheet(url, heading) {
@@ -1806,7 +1835,8 @@ function clearShelf() {
   // nag. A song or a wrapped link is a RECORD, so it is only put away for this tab and returns
   // when the door is opened again. (Edwin, 7 Nov: "I cleared the shelf now to test fresh.")
   rememberCleared(shelf.filter(x => x.kind !== 'song' && x.kind !== 'store').map(x => x.code).filter(Boolean));
-  for (const x of shelf) if (x.kind === 'song' || x.kind === 'store') shelfHidden.add(cardKey(x));
+  putAwayAdd(shelf.map(cardKey));          // every card: songs, links and requests
+  shelfHidden.clear();                      // the map above is the memory now
   shelf.length = 0;
   try { localStorage.setItem(CLEARED_KEY, String(Date.now())); } catch (e) { /* private mode */ }
   renderShelf();
@@ -1825,7 +1855,14 @@ function renderShelf() {
     // The shelf keeps its place on the door even with nothing on it, so he knows where
     // things will appear rather than discovering the row the first time it fills.
     if (line) { line.hidden = false; line.style.color = ''; }
-    if (count) count.textContent = 'the shelf · empty';
+    // An empty shelf that still holds his things says so, and hands them back on a tap.
+    // Nothing is deleted by a clear; it is only put away.
+    const away = putAwayCount();
+    if (count) {
+      count.textContent = away ? 'the shelf · empty · ' + away + ' put away · tap to bring back' : 'the shelf · empty';
+      count.style.cursor = away ? 'pointer' : '';
+      count.title = away ? 'tap to put them back on the shelf' : '';
+    }
     if (clearBtn) clearBtn.hidden = true;
     return;
   }
