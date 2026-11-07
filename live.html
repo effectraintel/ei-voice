@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T08:35';
-const BUILD_NO = 25;   // 6 Nov: a wish for music is not a subject. "I want to make a song" now gets a question, not a generation
+const BUILD = '2026-11-07T11:45';
+const BUILD_NO = 26;   // 7 Nov: the door can put a payment request on the shelf. A request is not a payment.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -264,6 +264,22 @@ const DECLS = [{
                   required: ['action'],
                 },
               },
+            {
+              // The one write the door may make. It puts a request on his shelf; the money
+              // moves only when he opens it and pays, and only the signed webhook may call
+              // that settled. Added 7 Nov 2026 at his instruction: "I want to pay myself R10,
+              // and then it will create a payment request on my shelf that I can open and pay."
+              name: 'pay',
+              description: 'Put a payment request on his shelf: an amount he can open and pay himself. Use whenever he says he wants to pay himself, charge himself, send himself a payment, or asks for a payment request or a link to pay. This only ever creates the request. It never pays, never moves money, never refunds and never asks for a card.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  amount: { type: 'NUMBER', description: 'the amount in rands, e.g. 10' },
+                  item: { type: 'STRING', description: 'what the payment is for, in a few words, in his words' },
+                },
+                required: ['amount'],
+              },
+            },
             ];
 
 const BRIEF =
@@ -295,8 +311,12 @@ const BRIEF =
   'on keepsakes, not worlds, and the tool finds them by name - never answer that it cannot find a ' +
   'person it has just been given, and never ask him to try other words when the tool returned facts. ' +
   'If the tool sends back a hint, follow it and speak from the text it returned. ' +
-  'It is read only. You cannot add a person, send a gift, change a world or ' +
-  'remind him of anything, and if he asks for an action, say plainly that this corridor only reads. ' +
+  'The house tool is read only: through it you cannot add a person, send a gift, change a world ' +
+  'or remind him of anything. The one thing you can make exist is a payment request. When he says ' +
+  'he wants to pay himself, or asks for a payment link or a request on his shelf, call pay, then ' +
+  'tell him the amount is on his shelf waiting for him. A payment request is not a payment: never ' +
+  'say that money moved, that anything was paid, or that you refunded anything, and never read the ' +
+  'code or the link aloud. ' +
   'You never speak anyone else\'s email address or phone number, and no pictures come through. ' +
   'If he asks about his own life beyond these facts, say plainly that this door cannot see it. ' +
   'Never invent his schedule, his people or his numbers. ' +
@@ -1054,6 +1074,42 @@ async function handleHouseCall(call) {
   } catch { /* the socket is gone; the turn will end on its own */ }
 }
 
+// The one write the door may make. A request is minted, never paid: the money moves on the
+// provider's own page, and only the signed webhook may call it settled. The card on the shelf
+// is the tap-to-pay link, so his next move is one touch rather than a spoken address.
+async function handlePayCall(call) {
+  const s = doorSession();
+  let result = '';
+  try {
+    if (!s) throw new Error('the door session has gone');
+    const a = call.args || {};
+    const amount = Number(a.amount);
+    if (!isFinite(amount) || amount <= 0) throw new Error('no amount was given');
+    const r = await withTimeout(
+      gatePost('payRequestFromDoor', {
+        session_token: s.token,
+        amount,
+        item: String(a.item || 'Payment to Effectra Intelligence').slice(0, 200),
+      }),
+      20000,
+      'the shelf did not answer in time'
+    );
+    if (!r || !r.ok) throw new Error((r && r.error) ? r.error : 'the shelf would not make one');
+    shelfAdd({ title: 'Open and pay R' + r.amount + ' \u00b7 ' + r.code, url: r.checkout_url, note: r.item });
+    railNote('payment request ' + r.code + ' \u00b7 nothing paid yet');
+    result = 'A payment request for R' + r.amount + ' is on his shelf as ' + r.code
+      + '. Nothing has been paid: he opens the card and pays himself. Do not read the code or the link aloud.';
+    looked = 'the shelf \u00b7 request ' + r.code;
+  } catch (e) {
+    result = 'the payment request could not be made: ' + ((e && e.message) ? e.message : String(e));
+  }
+  try {
+    ws.send(JSON.stringify({
+      toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+    }));
+  } catch { /* the socket is gone; the turn will end on its own */ }
+}
+
 /* ---------- the shelf: what the door hands over ---------- */
 
 // One list per tab, kept for the session, cleared when the door shuts. Nothing here is
@@ -1160,6 +1216,7 @@ function handleFrame(text) {
   if (msg.toolCall && msg.toolCall.functionCalls) {
     for (const call of msg.toolCall.functionCalls) {
       if (call.name === 'song') handleSongCall(call);
+      else if (call.name === 'pay') handlePayCall(call);
       else handleHouseCall(call);
     }
     return;
