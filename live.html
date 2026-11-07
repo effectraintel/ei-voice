@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T20:41';
-const BUILD_NO = 40;   // 7 Nov: the shelf keeps its place on the door even when empty, and breathes once when something lands.
+const BUILD = '2026-11-07T21:05';
+const BUILD_NO = 41;   // 7 Nov: a sleeping landing is woken by the first tap instead of looking broken.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1393,7 +1393,14 @@ function openSheet(url, heading) {
     const bar = document.createElement('div'); bar.className = 'bar';
     const who = document.createElement('span'); who.className = 'who';
     const close = document.createElement('button'); close.type = 'button'; close.textContent = 'close';
-    close.onclick = () => { el.classList.remove('on'); const f = el.querySelector('iframe'); if (f) f.src = 'about:blank'; };
+    close.onclick = () => {
+    el.classList.remove('on');
+    const f = el.querySelector('iframe'); if (f) f.src = 'about:blank';
+    // Back from a card is a gesture: the platform may have suspended audio while he was in
+    // there, so wake it and let the door listen again if it was waiting.
+    ensureAudio();
+    if (sessionUp && !listening && !greeting) openListening();
+  };
     bar.appendChild(who); bar.appendChild(close);
     const frame = document.createElement('iframe');
     frame.setAttribute('title', 'receipt');
@@ -1599,6 +1606,9 @@ function openListening() {
 // turnComplete for a reply means its audio is queued, not finished. The input opens when the
 // last sample has actually left the speaker, plus a breath, so his first word is not clipped.
 function openAfterSpeech() {
+  // A suspended output context never advances its clock, so waiting for the greeting to
+  // finish would wait for nothing. Open now; the greeting was never audible anyway.
+  if (playCtx && playCtx.state === 'suspended') { openListening(); return; }
   const t0 = Date.now();
   const check = () => {
     if (!greeting) return;                       // already open
@@ -1891,11 +1901,36 @@ function barge() {
 let autoStarted = false;
 const SILENCED = 'ei.voice.silenced';
 
+// Everything that can be asleep, woken in one place. A page load is not a gesture, so on
+// iOS and Android every audio context can come up suspended: the greeting is silent, the
+// microphone carries nothing, and the door looks broken until some other tap unlocks it -
+// which is exactly what he saw when opening a shelf card and coming back made it work.
+// (Edwin, 7 Nov: "It doesn't load correctly with the first landing, but after I opened
+// something on the shelve and came back it worked.")
+function ensureAudio() {
+  let woke = false;
+  try { if (playCtx && playCtx.state === 'suspended') { playCtx.resume(); woke = true; } } catch (e) {}
+  try { if (micCtx && micCtx.state === 'suspended') { micCtx.resume(); woke = true; } } catch (e) {}
+  return woke;
+}
+
+function soundAsleep() {
+  return !!((playCtx && playCtx.state === 'suspended') || (micCtx && micCtx.state === 'suspended'));
+}
+
 function armFirstGesture() {
   // A page load is not a gesture, and iOS/Android refuse to start audio without one.
   // The first touch or key on the page unlocks playback, wherever it lands.
   const once = async () => {
     try { const c = playCtxEnsure(); await c.resume(); } catch {}
+    ensureAudio();
+    // If a landing left the door open but waiting, the gesture is what it was waiting for.
+    if (sessionUp && !listening) { greeting = false; if (greetWatch) { clearTimeout(greetWatch); greetWatch = null; } openListening(); }
+    // And if the landing never opened the channel at all, this touch is the second chance.
+    else if (!sessionUp && !connecting && sessionStorage.getItem(SILENCED) !== '1' && doorSession()) {
+      autoStarted = false;
+      startChannel('the first touch');
+    }
     window.removeEventListener('pointerdown', once, true);
     window.removeEventListener('keydown', once, true);
   };
@@ -1912,8 +1947,20 @@ async function startChannel(where) {
   lastWordAt = 0; awaitingFirstAudio = false; pendingLatency = null; speaking = false;
   try {
     await openDoor();
+    // A first landing can come up with everything suspended. Rather than look broken, say
+    // what is true and give the one action that fixes it.
+    setTimeout(() => {
+      if (!sessionUp || listening) return;
+      if (soundAsleep()) {
+        setState('the door is open · the sound is asleep');
+        hint('touch the circle once to wake it');
+      }
+    }, 1500);
   } catch (e) {
-    // openDoor puts its own refusal on screen; say the plain next step, once.
+    // openDoor puts its own refusal on screen; say the plain next step, once. The latch is
+    // released here on purpose: a first landing that failed must still be able to start on
+    // the first touch, instead of waiting for a reload. (Build 41)
+    autoStarted = false;
     setState('the door is open · the voice did not start');
     hint('tap the circle to open the voice');
   }
@@ -1921,7 +1968,27 @@ async function startChannel(where) {
 
 /* ---------- controls ---------- */
 
+// Coming back to the tab, or back from a card, is a chance to wake what the platform
+// suspended while it was away.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) ensureAudio();
+});
+
 micBtn.addEventListener('click', async () => {
+  // Waking is not silencing. On a landing where the platform kept audio asleep, the first
+  // tap on the circle must open the voice, not close the door he just opened.
+  if (sessionUp && !listening) {
+    const unlock0 = playCtxEnsure();
+    try {
+      const b0 = unlock0.createBuffer(1, 1, unlock0.sampleRate);
+      const s0 = unlock0.createBufferSource(); s0.buffer = b0; s0.connect(unlock0.destination); s0.start(0);
+      unlock0.resume();
+    } catch (e) {}
+    ensureAudio();
+    greeting = false; if (greetWatch) { clearTimeout(greetWatch); greetWatch = null; }
+    openListening();
+    return;
+  }
   if (busy) return;
   // iOS and Android only start audio that was unlocked inside the tap, and iOS
   // wants a buffer actually played inside that gesture, not just a resume. So the
