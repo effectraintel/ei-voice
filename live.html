@@ -134,6 +134,7 @@
   .card .copy { margin-top:6px; background:none; border:1px solid #3a352d; color:#9b9182; font-size:10px;
                 letter-spacing:.08em; border-radius:6px; padding:2px 7px; }
   .card .copy:active { background:#2b271f; color:#e8dfcc; }
+  .card .copy.share { margin-left:6px; color:#c9a86a; border-color:#4a3f26; }
   .card.thought { border-color:#4a3f26; }
   /* The receipt opens over the door, not on someone else's address (7 Nov 2026:
      Edwin - "it does view the certificate or receipt on the base44 url so we have
@@ -186,6 +187,7 @@
     .card .k { display:none; }
     .card .t { margin-top:0; font-size:12px; }
     .card .copy { position:absolute; top:6px; right:6px; padding:2px 5px; font-size:9px; }
+    .card .copy.share { right:auto; left:9px; top:auto; bottom:6px; margin:0; }
     .lat { margin-top:3px; font-size:10.5px; }
     .turn { margin-bottom:8px; }
   }
@@ -243,8 +245,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T23:58';
-const BUILD_NO = 59;   // 7 Nov: when more than one song answers, it asks which one before making anything.
+const BUILD = '2026-11-08T00:12';
+const BUILD_NO = 60;   // 8 Nov: anything on the shelf can be sent to a person, by email or WhatsApp.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -342,6 +344,22 @@ const DECLS = [{
                   choice: { type: 'STRING', description: 'after he has confirmed which one, what he confirmed: the title, the artist, or the number he picked' },
                 },
                 required: ['query'],
+              },
+            },
+            {
+              // Anything on the shelf can be sent on. The door asks, he answers, and only his answer
+              // sends anything: this tool never guesses a recipient and never invents a message.
+              name: 'shareTo',
+              description: 'Send something that is already on his shelf to a person, with his message. Use it when he says yes to sending a card on, or asks to send/share something to someone. Call it with what you have; if you do not have their address, call it with just the person and it will tell you what to ask. Never invent an address, a number or a message.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  which: { type: 'STRING', description: 'which thing on the shelf, in his words. Leave out for the one that just landed' },
+                  to: { type: 'STRING', description: 'who it is for: their email address or their WhatsApp number, exactly as he gave it' },
+                  channel: { type: 'STRING', description: 'email or whatsapp, only if he has said which' },
+                  message: { type: 'STRING', description: 'the words he wants sent with it. An empty string means send it with no message' },
+                },
+                required: [],
               },
             },
             ];
@@ -804,6 +822,27 @@ function askOf(body) {
     if (typeof o[k] === 'string' && o[k].length > 60) o[k] = o[k].slice(0, 40) + '...';
   }
   return JSON.stringify(o).slice(0, 300);
+}
+
+// Some rails answer with a question instead of a failure - an address is missing, or WhatsApp has to be
+// tapped by him - so those replies must reach the caller whole. gatePost throws on ok:false, which is
+// right for a payment and wrong for a sender that is asking who it is for.
+async function railPost(fn, body) {
+  const t0 = Date.now();
+  logLine('call.ask', fn + ' ' + askOf(body), { target: fn, ask: askOf(body), rail: '1' });
+  try {
+    const r = await fetch(FNBASE + fn, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    logLine('call.back', fn + ' \u2192 ' + digest(d), { target: fn, ms: Date.now() - t0, status: r.status });
+    return d;
+  } catch (e) {
+    logLine('call.fail', fn + ' \u00b7 ' + String((e && e.message) || e), { target: fn });
+    throw e;
+  }
 }
 
 async function gatePost(fn, body) {
@@ -1510,7 +1549,7 @@ function shareResultLine(r) {
     + (r.found === 'shelf'
       ? 'It plays from the vault, good for a day, and no file is handed over.'
       : 'It opens on ' + (r.platform_text || 'whichever store the listener uses') + (r.found === 'wrapped' ? ', powered by MTShare' : '.'))
-    + ' Say the title once and that it is on the shelf. Do not read the url out loud.';
+    + ' Say the title once and that it is on the shelf, then ask if he wants it sent to someone. Do not read the url out loud.';
 }
 
 async function handleShareCall(call) {
@@ -1599,6 +1638,116 @@ async function handleShareCall(call) {
   } catch (e) {
     result = 'The sharing rail did not answer: ' + String((e && e.message) || e) + '. Nothing was found and '
       + 'nothing is on his shelf. Say that in one line.';
+    looked = 'sharing · no answer';
+  } finally {
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch (e) { /* the socket is already gone */ }
+  }
+}
+
+
+// Anything on the shelf can be sent on (build 60, 8 Nov 2026). His own words for the order:
+// "anything on the shelve should be shareable from there ... the user should be prompted - do you
+// want to share this to someone with a message? ... we ask to whatsapp or email (depending if we have
+// both) and send. If we don't have the details we obviously ask for it."
+//
+// So the door asks in that order and never fills a gap itself: who, then which way, then the words.
+// A missing address is a question, not a guess, and an absent message is only treated as "no message"
+// when he has actually said so (the model passes an empty string, not nothing).
+let shareCardTarget = null;      // the card he last got, or the one he named
+
+function shelfFind(words) {
+  const q = shareTokens(words);
+  if (!q.length) return null;
+  let best = null, bestHit = 0;
+  for (const c of shelf) {
+    const hay = shareTokens((c.title || '') + ' ' + (c.sub || '') + ' ' + (c.code || ''));
+    let hit = 0;
+    for (const t of q) if (hay.includes(t)) hit++;
+    if (hit > bestHit) { bestHit = hit; best = c; }
+  }
+  return bestHit ? best : null;
+}
+
+function cardPayload(c) {
+  return { title: c.title || '', sub: c.sub || '', url: c.url || '', code: c.code || '', song_id: c.song_id || '' };
+}
+
+async function handleShareToCall(call) {
+  const s = doorSession();
+  let result = '';
+  try {
+    if (!s || !s.token) throw new Error('the door session has gone');
+    const a = call.args || {};
+
+    // which card
+    let card = a.which ? shelfFind(a.which) : null;
+    if (!card) card = shareCardTarget || shelf.find(c => c.url) || null;
+    if (!card) {
+      result = 'There is nothing on the shelf to send yet. Say that in one line and stop.';
+      looked = 'sharing · nothing to send';
+      return;
+    }
+    shareCardTarget = card;
+
+    const to = String(a.to || '').trim();
+    let channel = String(a.channel || '').toLowerCase();
+    const hasMessage = typeof a.message === 'string';
+
+    if (!to) {
+      result = 'Ask who it is for, in one short question, and say you will need their email address or '
+        + 'their WhatsApp number. Stop there. Nothing is sent until he answers.';
+      looked = 'sharing · who to';
+      return;
+    }
+    if (!channel) {
+      if (to.includes('@')) channel = 'email';
+      else if (to.replace(/[^0-9]/g, '').length >= 9) channel = 'whatsapp';
+    }
+    if (!channel) {
+      result = 'He named a person but not how to reach them. Ask for their email address or their '
+        + 'WhatsApp number, one short question, and stop.';
+      looked = 'sharing · which way';
+      return;
+    }
+    if (!hasMessage) {
+      result = 'Ask what he wants it to say, one short question, and say he can also send it with no '
+        + 'message. Then call this again with what he says. Nothing is sent yet.';
+      looked = 'sharing · what to say';
+      return;
+    }
+
+    const r = await withTimeout(railPost('shelfShare', {
+      action: 'send', card: cardPayload(card), to, channel, message: String(a.message || ''),
+    }), 60000, 'the sending rail did not answer in time');
+
+    if (r && r.ok && r.channel === 'email') {
+      result = 'It is on its way by email to ' + (r.to_masked || 'them') + ', sent under his own name, and the '
+        + 'mail service gave it id ' + (r.message_id || 'unknown') + '. Say in one line that it has gone and '
+        + 'what it was. Do not read the address aloud.';
+      looked = 'sharing · sent by email';
+      railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
+    } else if (r && r.ok && r.need === 'tap' && r.wa_link) {
+      mergeCard({ kind: 'send', title: 'WhatsApp to ' + (r.to_masked || 'them'), sub: 'tap to send · nothing has left yet', url: r.wa_link });
+      result = 'Written and ready: it is on the shelf as a WhatsApp message, with the link and his words in it. '
+        + 'Say that it is ready and that he taps it to send, and that nothing has left yet. Do not read the link.';
+      looked = 'sharing · ready to tap';
+      railNote('shared · whatsapp prepared · ' + (card.title || ''));
+    } else if (r && r.need === 'address') {
+      result = 'That was not a usable email address. Ask for their email address again, one short question, and stop.';
+      looked = 'sharing · address needed';
+    } else if (r && r.need === 'number') {
+      result = 'That was not a usable number. Ask for their WhatsApp number again, one short question, and stop.';
+      looked = 'sharing · number needed';
+    } else {
+      result = 'It did not send: ' + ((r && (r.error || r.ask)) || 'no answer') + '. Nothing has left. Say that in one line.';
+      looked = 'sharing · did not send';
+    }
+  } catch (e) {
+    result = 'The sending rail did not answer: ' + String((e && e.message) || e) + '. Nothing has left. Say that in one line.';
     looked = 'sharing · no answer';
   } finally {
     try {
@@ -2035,6 +2184,80 @@ function openSheet(url, heading) {
   try { localStorage.setItem(SHELF_TOLD, String(Date.now())); } catch (e) {}
 }
 
+
+/* Sending a card on, by hand (build 60). The same rail the voice uses: this only decides who, which
+   way and what it says, and the answer comes back in the sheet rather than being announced. */
+function openShareSheet(card) {
+  let el = document.getElementById('sharesheet');
+  if (el) el.remove();
+  el = document.createElement('div');
+  el.id = 'sharesheet';
+  el.style.cssText = 'position:fixed;inset:0;z-index:60;background:rgba(12,11,9,.86);display:flex;'
+    + 'align-items:center;justify-content:center;padding:18px;font-family:inherit;color:#e8dfcc';
+  const box = document.createElement('div');
+  box.style.cssText = 'width:100%;max-width:420px;background:#191713;border:1px solid #3a352d;'
+    + 'border-radius:14px;padding:16px';
+  const h = document.createElement('div');
+  h.textContent = 'send "' + (card.title || 'this') + '"';
+  h.style.cssText = 'font-size:12px;letter-spacing:.1em;color:#c9a86a;text-transform:lowercase;margin-bottom:12px';
+  const to = document.createElement('input');
+  to.type = 'text'; to.placeholder = 'their email, or their WhatsApp number';
+  to.style.cssText = 'width:100%;box-sizing:border-box;background:#0f0e0b;border:1px solid #3a352d;'
+    + 'border-radius:9px;color:#e8dfcc;font-size:13px;padding:10px;margin-bottom:9px;outline:none';
+  const msg = document.createElement('textarea');
+  msg.rows = 3; msg.placeholder = 'say something (leave it empty to send without a message)';
+  msg.style.cssText = to.style.cssText + 'resize:none';
+  const status = document.createElement('div');
+  status.style.cssText = 'font-size:11px;color:#9b9182;min-height:15px;margin:8px 0';
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+  const close = document.createElement('button');
+  close.type = 'button'; close.textContent = 'cancel';
+  close.style.cssText = 'background:none;border:1px solid #3a352d;color:#9b9182;border-radius:8px;'
+    + 'padding:8px 12px;font-size:11px;letter-spacing:.06em';
+  close.onclick = () => el.remove();
+  const send = document.createElement('button');
+  send.type = 'button'; send.textContent = 'send';
+  send.style.cssText = 'background:#b8873f;border:0;color:#171410;border-radius:8px;padding:8px 14px;'
+    + 'font-size:11px;letter-spacing:.06em;font-weight:600';
+  send.onclick = async () => {
+    const addr = to.value.trim();
+    if (!addr) { status.textContent = 'who is it for?'; to.focus(); return; }
+    send.disabled = true; status.textContent = 'sending\u2026';
+    try {
+      const r = await railPost('shelfShare', {
+        action: 'send', card: cardPayload(card), to: addr, message: msg.value.trim(),
+      });
+      if (r && r.ok && r.channel === 'email') {
+        status.textContent = 'sent by email to ' + (r.to_masked || 'them') + '.';
+        railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
+        setTimeout(() => el.remove(), 1400);
+      } else if (r && r.ok && r.need === 'tap' && r.wa_link) {
+        status.textContent = '';
+        const a = document.createElement('a');
+        a.href = r.wa_link; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.textContent = 'open WhatsApp and press send';
+        a.style.cssText = 'display:block;background:#b8873f;color:#171410;text-align:center;'
+          + 'border-radius:8px;padding:10px;font-size:12px;font-weight:600;text-decoration:none';
+        row.replaceWith(a);
+        railNote('shared · whatsapp prepared · ' + (card.title || ''));
+      } else {
+        status.textContent = (r && (r.error || r.ask)) || 'it did not send.';
+        send.disabled = false;
+      }
+    } catch (e) {
+      status.textContent = 'the rail did not answer.';
+      send.disabled = false;
+    }
+  };
+  row.appendChild(close); row.appendChild(send);
+  box.appendChild(h); box.appendChild(to); box.appendChild(msg); box.appendChild(status); box.appendChild(row);
+  el.appendChild(box);
+  el.onclick = (e) => { if (e.target === el) el.remove(); };
+  document.body.appendChild(el);
+  setTimeout(() => to.focus(), 60);
+}
+
 function shelfAdd(item) {
   if (!item || !item.title) return;
   const key = (item.url || item.title).slice(0, 300);
@@ -2197,6 +2420,12 @@ function drawCards(el) {
         );
       };
       card.appendChild(copy);
+      // Anything on the shelf can be sent on (build 60). The chip opens the same questions the voice
+      // asks, so a card he is looking at can be shared without saying a word.
+      const share = document.createElement('button');
+      share.className = 'copy share'; share.type = 'button'; share.textContent = 'share';
+      share.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openShareSheet(it); };
+      card.appendChild(share);
     } else {
       card.appendChild(t);
       if (it.note) { d.textContent = it.note; card.appendChild(d); }
@@ -2333,6 +2562,7 @@ function handleFrame(text) {
       else if (call.name === 'pay') handlePayCall(call);
       else if (call.name === 'wrap') handleWrapCall(call);
       else if (call.name === 'share') handleShareCall(call);
+      else if (call.name === 'shareTo') handleShareToCall(call);
       else handleHouseCall(call);
     }
     return;
