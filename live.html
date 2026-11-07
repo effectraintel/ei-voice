@@ -96,8 +96,10 @@
   #shelf { display:none; flex:0 0 auto; gap:8px; overflow-x:auto; overflow-y:hidden;
            padding:8px 2px; scrollbar-width:none; }
   #shelf.on { border-top:1px solid #26221d; padding-top:10px; }
+  /* A permanent row must be quiet at rest: gold is what an arrival uses, not what a label
+     wears all day. (Build 40) */
   #shelfline { flex:0 0 auto; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
-               color:var(--gold); padding:6px 2px 0; }
+               color:#7a7164; padding:6px 2px 0; }
   #shelfline { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
   #shelfline #shelfcount { flex:1 1 auto; }
   /* Clearing hides what he has already dealt with. It removes nothing: the record keeps
@@ -107,6 +109,18 @@
     color:#7a7164; font:inherit; font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; cursor:pointer; }
   #shelfline #shelfclear:active { color:var(--gold); }
   #shelfline[hidden] { display:none; }
+  /* Build 40. He could not tell when something landed, because the whole shelf woke up
+     only once it had something on it. The row is now always present, and an arrival is
+     marked by one slow breath of the line's own colour - no badge, no bounce, no sound.
+     (Edwin, 7 Nov: "the shelf is not accessible or visible when it lands. it should be
+     even if it is empty.") */
+  #shelfline.arrived { animation:shelfBreath 1400ms ease-out 1; }
+  @keyframes shelfBreath {
+    0%   { color:var(--gold); }
+    30%  { color:var(--gold); }
+    100% { color:#7a7164; }
+  }
+  #shelfline #shelfclear[hidden] { display:none; }
   #shelf.on { display:flex; }
   #shelf::-webkit-scrollbar { display:none; }
   .card { flex:0 0 auto; min-width:150px; max-width:220px; background:#171412; border:1px solid #2e2a24;
@@ -185,7 +199,7 @@
 </header>
 
 <main id="log"></main>
-<div id="shelfline" hidden><span id="shelfcount">on the shelf</span><button id="shelfclear" type="button">clear</button></div>
+<div id="shelfline"><span id="shelfcount">the shelf</span><button id="shelfclear" type="button" hidden>clear</button></div>
 <div id="shelf" aria-live="polite"></div>
 
 <footer>
@@ -229,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T20:22';
-const BUILD_NO = 39;   // 7 Nov: the engine speaks one line before the microphone opens, so a half-said sentence cannot be caught and prepended.
+const BUILD = '2026-11-07T20:41';
+const BUILD_NO = 40;   // 7 Nov: the shelf keeps its place on the door even when empty, and breathes once when something lands.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1401,6 +1415,7 @@ function shelfAdd(item) {
   shelf.unshift({ ...item, at: Date.now() });
   while (shelf.length > 8) shelf.pop();
   renderShelf();
+  shelfArrived();
 }
 
 // A crowded shelf is a shelf he stops reading, so he can clear it. What he clears is the
@@ -1458,21 +1473,21 @@ function renderShelf() {
   const el = document.getElementById('shelf');
   if (!el) return;
   const line = document.getElementById('shelfline');
+  const count = document.getElementById('shelfcount');
+  const clearBtn = document.getElementById('shelfclear');
   if (!shelf.length) {
     el.classList.remove('on'); el.innerHTML = '';
-    if (line) line.hidden = true;
+    // The shelf keeps its place on the door even with nothing on it, so he knows where
+    // things will appear rather than discovering the row the first time it fills.
+    if (line) { line.hidden = false; line.style.color = ''; }
+    if (count) count.textContent = 'the shelf · empty';
+    if (clearBtn) clearBtn.hidden = true;
     return;
   }
   el.classList.add('on');
-  if (line) {
-    line.hidden = false;
-    // Write the number into its own span: the row also holds the clear link, and setting
-    // the whole line's text would delete it on the first draw. (This is what ate it in
-    // build 31 - the build number was right, the link was never drawn.)
-    const count = document.getElementById('shelfcount');
-    if (count) count.textContent = 'on the shelf · ' + shelf.length;
-    else line.textContent = 'on the shelf · ' + shelf.length;
-  }
+  if (line) line.hidden = false;
+  if (count) count.textContent = 'the shelf · ' + shelf.length;
+  if (clearBtn) clearBtn.hidden = false;
   try { drawCards(el); } catch (e) {
     el.innerHTML = '';
     const card = document.createElement('div');
@@ -1482,6 +1497,19 @@ function renderShelf() {
     t.textContent = shelf[0].title + ' (this card could not be drawn: ' + String((e && e.message) || e) + ')';
     card.appendChild(k); card.appendChild(t); el.appendChild(card);
   }
+}
+
+// One breath of colour on the shelf line when something lands, so an arrival that happens
+// while he is reading something else is still seen. It says nothing new; it draws the eye.
+let shelfFlash = null;
+function shelfArrived() {
+  const line = document.getElementById('shelfline');
+  if (!line) return;
+  line.classList.remove('arrived');
+  void line.offsetWidth;                 // restart the animation if two land together
+  line.classList.add('arrived');
+  if (shelfFlash) clearTimeout(shelfFlash);
+  shelfFlash = setTimeout(() => { line.classList.remove('arrived'); line.style.color = ''; }, 1500);
 }
 
 function drawCards(el) {
