@@ -229,8 +229,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T15:41';
-const BUILD_NO = 32;   // 7 Nov: the clear link is actually drawn - the count goes in its own span instead of being written over the row.
+const BUILD = '2026-11-07T14:51';
+const BUILD_NO = 33;   // 7 Nov: a request settled from our own credits says so, and opens its record, never a provider receipt it does not have.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1149,8 +1149,11 @@ function payCard(it) {
       url: it.receipt_no
         ? FNBASE + 'paymentReceiptView?no=' + encodeURIComponent(it.receipt_no)
         : FNBASE + 'payRequestShelf?code=' + encodeURIComponent(it.code),
-      sub: 'tap for the receipt',
-      sheet: !!it.receipt_no,
+      // A receipt exists only when money arrived on the provider rail. A request settled
+      // from our own credits has a ledger entry instead, and the card must say which.
+      sub: it.receipt_no ? 'tap for the receipt'
+        : (it.source === 'credits' ? 'settled from credits \u00b7 no card' : 'paid \u00b7 no receipt on this record'),
+      sheet: !!it.receipt_no || it.source === 'credits',
       note: it.item,
     };
   }
