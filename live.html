@@ -98,6 +98,14 @@
   #shelf.on { border-top:1px solid #26221d; padding-top:10px; }
   #shelfline { flex:0 0 auto; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
                color:var(--gold); padding:6px 2px 0; }
+  #shelfline { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  #shelfline #shelfcount { flex:1 1 auto; }
+  /* Clearing hides what he has already dealt with. It removes nothing: the record keeps
+     every request, and the shelf comes back from it. (7 Nov 2026: "the shelf does become
+     a bit crowded now".) */
+  #shelfline #shelfclear { flex:0 0 auto; background:none; border:0; padding:2px 0 2px 10px;
+    color:#7a7164; font:inherit; font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; cursor:pointer; }
+  #shelfline #shelfclear:active { color:var(--gold); }
   #shelfline[hidden] { display:none; }
   #shelf.on { display:flex; }
   #shelf::-webkit-scrollbar { display:none; }
@@ -177,7 +185,7 @@
 </header>
 
 <main id="log"></main>
-<div id="shelfline" hidden>on the shelf</div>
+<div id="shelfline" hidden><span id="shelfcount">on the shelf</span><button id="shelfclear" type="button">clear</button></div>
 <div id="shelf" aria-live="polite"></div>
 
 <footer>
@@ -221,8 +229,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T15:02';
-const BUILD_NO = 30;   // 7 Nov: a refused request closes on the shelf, and an open one is checked against the provider instead of waiting for a webhook that never comes.
+const BUILD = '2026-11-07T15:19';
+const BUILD_NO = 31;   // 7 Nov: the shelf can be cleared. The view empties, the record does not.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1211,9 +1219,15 @@ async function shelfSync() {
     const r = await fetch(FNBASE + 'payRequestShelf?json=1&hours=6');
     const d = await r.json();
     if (!d || !d.ok || !Array.isArray(d.requests)) return;
+    const cleared = shelfClearedAt();
     for (const it of d.requests.slice().reverse()) {
       const card = payCard(it);
       if (!card) continue;
+      // He cleared the shelf: only what has happened since earns a card back. A payment
+      // that lands on an open request is the exception - money arriving is never noise.
+      const born = new Date(it.created_date || it.paid_at || 0).getTime() || 0;
+      const fresh = !cleared || born > cleared || String(it.status) === 'paid';
+      if (!fresh) continue;
       if (!shelfReplace(it.code, card)) shelfAdd(card);
       if (it.status === 'open') watchRequest(it.code, 6);
     }
@@ -1229,6 +1243,11 @@ setInterval(() => { if (shelf.length) shelfSync(); }, 15000);
 // One list per tab, kept for the session, cleared when the door shuts. Nothing here is
 // spoken; everything here is tappable or copyable. A card is a claim with a source on it.
 const shelf = [];
+
+document.getElementById('shelfclear').addEventListener('click', (e) => {
+  e.preventDefault(); e.stopPropagation();
+  clearShelf();
+});
 
 function openSheet(url, heading) {
   let el = document.getElementById('sheetview');
@@ -1260,6 +1279,22 @@ function shelfAdd(item) {
   shelf.unshift({ ...item, at: Date.now() });
   while (shelf.length > 8) shelf.pop();
   renderShelf();
+}
+
+// A crowded shelf is a shelf he stops reading, so he can clear it. What he clears is the
+// view, never the record: the requests stay, and anything new still arrives. The mark is
+// kept locally so a reload does not undo what he just did.
+const CLEARED_KEY = 'ei.shelf.clearedAt';
+function shelfClearedAt() {
+  try { return Number(localStorage.getItem(CLEARED_KEY) || 0) || 0; } catch (e) { return 0; }
+}
+function clearShelf() {
+  const n = shelf.length;
+  shelf.length = 0;
+  try { localStorage.setItem(CLEARED_KEY, String(Date.now())); } catch (e) { /* private mode */ }
+  renderShelf();
+  railNote(n ? 'shelf cleared \u00b7 ' + n + ' card' + (n === 1 ? '' : 's') + ' \u00b7 records kept' : 'shelf already empty');
+  looked = 'the shelf \u00b7 cleared';
 }
 
 function renderShelf() {
