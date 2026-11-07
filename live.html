@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T20:44';
-const BUILD_NO = 51;   // 7 Nov: a paid card is settled, whatever a tool thinks.
+const BUILD = '2026-11-07T21:02';
+const BUILD_NO = 52;   // 7 Nov: the door writes a real log line per event, out of the app.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -538,7 +538,11 @@ function startClock(label) {
   tick(); clockT = setInterval(tick, 100);
 }
 function stopClock() { if (clockT) clearInterval(clockT); clockT = null; }
-function warn(text) { hintEl.textContent = text; hintEl.style.color = '#e8cfae'; }
+function warn(text) {
+  hintEl.textContent = text;
+  hintEl.style.color = '#e8cfae';
+  logLine('door.warn', text, { level: 'warn' });
+}
 function hint(text) { hintEl.textContent = text; hintEl.style.color = ''; }
 
 let turns = { you: null, engine: null };
@@ -662,6 +666,39 @@ function stampSession() {
    for a mouth. A page that fakes its own state gets nothing, because the mint
    refuses without the session (see eiLiveToken). */
 const FNBASE = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/';
+
+/* ---------- the log rail (7 Nov 2026) ----------
+   Edwin: "I want a separate external log file that could be set up like the logd daemon logger
+   as used to use... where I can capture realtime and filter."
+   One line per event, posted to eiTurnLog and fire-and-forget. Nothing waits on it and nothing
+   fails because of it: a log that can slow the door is worse than no log. The collector trims
+   the stream, logctl mirrors it into dated files, and the redaction of identifiers happens
+   server-side so a mistake here cannot leak one. */
+const LOGBASE = FNBASE + 'eiTurnLog';
+const LOG_SID = (() => {
+  try {
+    const k = 'ei.log.sid';
+    let v = sessionStorage.getItem(k);
+    if (!v) { v = Math.random().toString(16).slice(2, 8); sessionStorage.setItem(k, v); }
+    return v;
+  } catch (e) { return 'nosid'; }
+})();
+
+function logLine(facility, text, extra) {
+  try {
+    const body = Object.assign(
+      { facility: facility, level: 'info', session: LOG_SID, text: String(text || '').slice(0, 900), build: String(BUILD_NO) },
+      extra || {}
+    );
+    fetch(LOGBASE, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (e) { /* a log that can break the door is not a log */ }
+}
+
 const DOOR_KEY = 'ei-door-session';
 
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
@@ -1266,6 +1303,7 @@ function withTimeout(p, ms, why) {
 // a song" and "a song was asked for" can never be confused on screen.
 function railNote(text) {
   try {
+    logLine('shelf.note', text);
     // The same line twice in a row says nothing the first one did not. Seen 7 Nov: four
     // "paid · EI-RC-T0006" lines for one payment, because four watchers each reported the
     // same settlement. (Edwin: "check the multiple paid confirmation at the bottom.")
@@ -1320,6 +1358,7 @@ function houseIntent(args) {
 async function handleHouseCall(call) {
   const s = doorSession();
   let result = '';
+  const t0 = Date.now();
   try {
     if (!s) throw new Error('the door session has gone');
     const intent = houseIntent(call.args || {});
@@ -1337,6 +1376,7 @@ async function handleHouseCall(call) {
   } catch (e) {
     result = 'the house could not be read: ' + ((e && e.message) ? e.message : String(e));
   }
+  logLine('tool.house', result, { ms: Date.now() - t0, args: JSON.stringify(call.args || {}), level: result.indexOf('could not') === 0 ? 'warn' : 'info' });
   try {
     ws.send(JSON.stringify({
       toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
@@ -1350,6 +1390,7 @@ async function handleHouseCall(call) {
 async function handlePayCall(call) {
   const s = doorSession();
   let result = '';
+  const t0 = Date.now();
   try {
     if (!s) throw new Error('the door session has gone');
     const a = call.args || {};
@@ -1375,6 +1416,7 @@ async function handlePayCall(call) {
   } catch (e) {
     result = 'the payment request could not be made: ' + ((e && e.message) ? e.message : String(e));
   }
+  logLine('tool.pay', result, { ms: Date.now() - t0, args: JSON.stringify(call.args || {}), level: result.indexOf('could not') === 0 ? 'warn' : 'info' });
   try {
     ws.send(JSON.stringify({
       toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
@@ -1799,6 +1841,7 @@ function handleFrame(text) {
     // this instant is the "door opens but does not listen" failure exactly.
     if (micCtx && micCtx.state !== 'running') micCtx.resume().catch(() => {});
     stampSession();
+    logLine('door.open', 'door opened', { voice: sessionVoice, model: sessionModel, level: 'notice' });
     stopClock();
     foldForDoor(true);
     setState('one moment');
@@ -1839,7 +1882,11 @@ function handleFrame(text) {
     looked = src;
   }
 
-  if (sc.inputTranscription && sc.inputTranscription.text) { dbgHeard++; appendLive('you', sc.inputTranscription.text); }
+  if (sc.inputTranscription && sc.inputTranscription.text) {
+    dbgHeard++;
+    appendLive('you', sc.inputTranscription.text);
+    logLine('turn.you', sc.inputTranscription.text, { role: 'you' });
+  }
   if (sc.outputTranscription && sc.outputTranscription.text) appendLive('engine', sc.outputTranscription.text);
 
   const parts = (sc.modelTurn && sc.modelTurn.parts) || [];
@@ -1853,6 +1900,11 @@ function handleFrame(text) {
 
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    logLine('turn.engine', said.engine || '', {
+      role: 'engine',
+      ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
+      greeting: greeting ? '1' : '',
+    });
     if (!greeting) {
       dbgReplies++;   // one question, one reply; two means the server answered twice
       // A reply that follows no transcription at all is the engine answering itself or the
