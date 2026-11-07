@@ -221,8 +221,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T14:31';
-const BUILD_NO = 29;   // 7 Nov: a paid card opens its receipt over the door, so no address of someone else's is ever the last thing he sees.
+const BUILD = '2026-11-07T15:02';
+const BUILD_NO = 30;   // 7 Nov: a refused request closes on the shelf, and an open one is checked against the provider instead of waiting for a webhook that never comes.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1149,7 +1149,16 @@ function payCard(it) {
   if (String(it.status) === 'open') {
     return { kind: 'pay', code: it.code, title: 'Open and pay ' + amt + ' \u00b7 ' + it.code, url: it.checkout_url, note: it.item };
   }
-  return null;
+  // Anything else is a closed door: refused at the provider, expired, cancelled. It stays on
+  // the shelf so he can see what happened, but it must never offer the checkout again.
+  // (7 Nov 2026, after Paystack refused a charge and the card sat there payable.)
+  return {
+    kind: 'notpaid', code: it.code,
+    title: 'Not paid ' + amt + ' \u00b7 ' + it.code,
+    url: FNBASE + 'payRequestShelf?code=' + encodeURIComponent(it.code),
+    sub: String(it.status) + ' \u00b7 nothing was taken',
+    sheet: true, note: it.item,
+  };
 }
 
 function shelfReplace(code, next) {
@@ -1169,13 +1178,22 @@ function watchRequest(code, tries) {
   const left = typeof tries === 'number' ? tries : 45;   // 45 x 4s = three minutes
   if (left <= 0) return;
   setTimeout(() => {
-    fetch(FNBASE + 'payRequestShelf?json=1&code=' + encodeURIComponent(code))
+    // After a few seconds of nothing, ask the provider directly: a refused checkout sends no
+    // webhook at all, so waiting on one leaves a link that can never be paid.
+    const ask = (left % 3 === 0) ? '&verify=1' : '';
+    fetch(FNBASE + 'payRequestShelf?json=1&code=' + encodeURIComponent(code) + ask)
       .then(r => r.json())
       .then(d => {
         if (d && d.found && d.status === 'paid') {
           shelfReplace(code, { ...payCard(d), code });
           railNote('paid \u00b7 ' + (d.receipt_no || code));
           looked = 'the shelf \u00b7 paid';
+          return;
+        }
+        if (d && d.found && d.status !== 'open') {
+          shelfReplace(code, { ...payCard(d), code });
+          railNote(String(d.status) + ' \u00b7 ' + code + ' \u00b7 nothing was taken');
+          looked = 'the shelf \u00b7 ' + String(d.status);
           return;
         }
         watchRequest(code, left - 1);
