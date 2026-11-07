@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T21:52';
-const BUILD_NO = 43;   // 7 Nov: the shelf fills itself; the voice describes the default, not one man's phrasing.
+const BUILD = '2026-11-07T22:20';
+const BUILD_NO = 44;   // 7 Nov: help as a door, teaching at the moment it applies, once per member.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -341,6 +341,18 @@ const BRIEF =
   'for it, and never say you are not allowed to make a card. ' +
   'If he asks the shelf for something it cannot hold - a note, a reminder, a change to one of his worlds - ' +
   'say that in one plain line, and then say what you can do instead. ' +
+  // Teaching while engaging (Edwin, 7 Nov 2026: "we will have to build like a help function into this
+  // for new users that doesn't know the language... and secondly we will to taught these things while
+  // the user are engaging because there is no visuals"). Two rules, both inside the three-sentence
+  // budget, because a lesson that competes with the answer is worse than no lesson.
+  'If he asks for help, or what you can do, or how this works, or says he does not know what to ask: ' +
+  'give him three things you can do, in his own words, each as something you would do for him - ' +
+  'never a list of features, never numbered options, never "here are your options". Then offer to do ' +
+  'one of them now. Three is the ceiling: a menu read aloud is an IVR and nobody remembers numbers. ' +
+  'Never refuse with a wall. Every time you cannot do something, give the nearest thing you can do in ' +
+  'the same breath, so the last word is an offer and not a limit. ' +
+  'Teach at most one thing per reply, and treat every fact about the door as ordinary rather than as a ' +
+  'favour done for him. ' +
   'Speak in at most three sentences, and put the substance in the first one. ' +
   'If you offer a next step, fold it into the last sentence. ' +
   'Never end with "anything else", never ask if there is anything more you can help with, ' +
@@ -1175,7 +1187,13 @@ async function handleSongCall(call) {
           // name of the song. It says what is happening and to what, instead.
           const subject = String(words || 'another take').slice(0, 60);
           looked = 'in the studio · ' + subject;
-          railNote('making it now · ' + subject);
+          let songTold = '';
+          try { songTold = localStorage.getItem(SONG_TOLD) || ''; } catch (e) {}
+          // The band is his, and nothing about a voice channel reveals that. Said once, beside the
+          // song it applies to, and never as a tutorial.
+          railNote('making it now · ' + subject
+            + (songTold ? '' : ' · say "make it country" for a different band'));
+          if (!songTold) { try { localStorage.setItem(SONG_TOLD, String(Date.now())); } catch (e) {} }
         }
       }
     }
@@ -1412,7 +1430,7 @@ function openSheet(url, heading) {
     const bar = document.createElement('div'); bar.className = 'bar';
     const who = document.createElement('span'); who.className = 'who';
     const close = document.createElement('button'); close.type = 'button'; close.textContent = 'close';
-    close.onclick = () => {
+  close.onclick = () => {
     el.classList.remove('on');
     const f = el.querySelector('iframe'); if (f) f.src = 'about:blank';
     // Back from a card is a gesture: the platform may have suspended audio while he was in
@@ -1429,6 +1447,8 @@ function openSheet(url, heading) {
   el.querySelector('.who').textContent = heading || 'the receipt';
   el.querySelector('iframe').src = url;
   el.classList.add('on');
+  // He opened a card, so the shelf has been understood and never needs explaining again.
+  try { localStorage.setItem(SHELF_TOLD, String(Date.now())); } catch (e) {}
 }
 
 function shelfAdd(item) {
@@ -1512,7 +1532,11 @@ function renderShelf() {
   }
   el.classList.add('on');
   if (line) line.hidden = false;
-  if (count) count.textContent = 'the shelf · ' + shelf.length;
+  // First time anything lands, the row says what it is for. Asked once, told once, and never
+  // explained again - the wording stays until he has actually opened a card. (7 Nov 2026)
+  let told = '';
+  try { told = localStorage.getItem(SHELF_TOLD) || ''; } catch (e) {}
+  if (count) count.textContent = 'the shelf · ' + shelf.length + (told ? '' : ' · tap a card to open it');
   if (clearBtn) clearBtn.hidden = false;
   try { drawCards(el); } catch (e) {
     el.innerHTML = '';
@@ -1594,14 +1618,24 @@ function shelfFromGrounding(gm) {
    engine itself, and the microphone opens on the far side of it. A watchdog opens the door
    anyway if the line never arrives, because a door that will not listen is worse than one
    that opens abruptly. */
+const HELP_SEEN = 'ei.help.seen';     // he has had a real answer at this door before
+const SHELF_TOLD = 'ei.told.shelf';   // he has been told what the shelf is
+const SONG_TOLD  = 'ei.told.song';    // he has been told the band is his to change
+
 function sayGreeting() {
+  // A member who has never had an answer here gets one extra sentence, once in their life: what to
+  // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
+  const fresh = !localStorage.getItem(HELP_SEEN);
+  const line = fresh
+    ? 'I am here. Ask me anything, out loud, and I will do it. If you want to know what I can do, say help.'
+    : 'I am here, Boss.';
   try {
     ws.send(JSON.stringify({
       clientContent: {
         turns: [{
           role: 'user',
-          parts: [{ text: '(The door has just opened. Say exactly this, in that tone, and nothing else: '
-            + '"I am here, Boss." Do not ask a question, do not offer anything, do not describe yourself.)' }],
+          parts: [{ text: '(The door has just opened. Say exactly this, in that tone, and nothing else: "'
+            + line + '" Do not ask a question, do not offer anything, do not describe yourself.)' }],
         }],
         turnComplete: true,
       },
@@ -1699,6 +1733,8 @@ function handleFrame(text) {
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
     if (greeting) { openAfterSpeech(); return; }
+    // He has now had a real answer here, so the longer hello is done with.
+    try { if (!localStorage.getItem(HELP_SEEN)) localStorage.setItem(HELP_SEEN, String(Date.now())); } catch (e) {}
     if (looked && turns.engine) {
       const prev = turns.engine.querySelector('.lat.chip');
       if (prev) prev.remove();
