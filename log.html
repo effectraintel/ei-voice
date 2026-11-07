@@ -166,7 +166,7 @@ get(BASE + '?since=-&limit=500', function (d) {
   if (!d || !d.ok) { mark('no answer', true); empty.textContent = 'the log did not answer just now'; return; }
   merge(d.entries || []);
   facs(); paint();
-  mark('following', false);
+  mark('reading', false);
 });
 
 function tick() {
@@ -179,7 +179,45 @@ function tick() {
   });
 }
 
-setInterval(tick, 2000);
+/* Following, not polling. A background tab clamps a timer to about once a minute, so a console
+   left open while he talks in the other tab would sit still and look broken (Edwin, 7 Nov: "It
+   doesn't do a live tail though"). An event stream is a connection rather than a timer, so it
+   keeps arriving whether the tab is in front or not. The timer stays as a fallback for anything
+   without EventSource, and as a nudge when the tab comes back into view. */
+var es = null;
+
+function cursor() { return rows.length ? rows[rows.length - 1].id : '-'; }
+
+function startStream() {
+  if (!window.EventSource) { setInterval(tick, 2000); return; }
+  try {
+    if (es) { es.close(); es = null; }
+    es = new EventSource(BASE + '?stream=1&since=' + encodeURIComponent(cursor()));
+    es.onopen = function () { mark('live', false); };
+    es.onmessage = function (m) {
+      var e;
+      try { e = JSON.parse(m.data); } catch (x) { return; }
+      if (!e || !e.id) return;
+      if (merge([e])) { facs(); paint(); }
+      mark('live', false);
+    };
+    es.onerror = function () {
+      mark('reconnecting', true);
+      try { es.close(); } catch (x) {}
+      es = null;
+      setTimeout(startStream, 1500);
+    };
+  } catch (e) {
+    setInterval(tick, 2000);
+  }
+}
+
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) tick();     // coming back to the tab should never show a stale log
+});
+
+setInterval(tick, 5000);            // a low-rate safety net under the stream
+startStream();
 fac.onchange = paint; lvl.onchange = paint; q.oninput = paint; ses.oninput = paint;
 /* A number on a screen is only useful if it can be said out loud. Clicking one copies
    "line 214" so it can be pasted into a message and looked up exactly. */
