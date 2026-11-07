@@ -229,8 +229,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T15:19';
-const BUILD_NO = 31;   // 7 Nov: the shelf can be cleared. The view empties, the record does not.
+const BUILD = '2026-11-07T15:41';
+const BUILD_NO = 32;   // 7 Nov: the clear link is actually drawn - the count goes in its own span instead of being written over the row.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1307,7 +1307,15 @@ function renderShelf() {
     return;
   }
   el.classList.add('on');
-  if (line) { line.hidden = false; line.textContent = 'on the shelf · ' + shelf.length; }
+  if (line) {
+    line.hidden = false;
+    // Write the number into its own span: the row also holds the clear link, and setting
+    // the whole line's text would delete it on the first draw. (This is what ate it in
+    // build 31 - the build number was right, the link was never drawn.)
+    const count = document.getElementById('shelfcount');
+    if (count) count.textContent = 'on the shelf · ' + shelf.length;
+    else line.textContent = 'on the shelf · ' + shelf.length;
+  }
   try { drawCards(el); } catch (e) {
     el.innerHTML = '';
     const card = document.createElement('div');
