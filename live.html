@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T20:52';
-const BUILD_NO = 50;   // 7 Nov: the footer says which voice and model this door asked for.
+const BUILD = '2026-11-07T20:44';
+const BUILD_NO = 51;   // 7 Nov: a paid card is settled, whatever a tool thinks.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -339,6 +339,11 @@ const BRIEF =
   'it in passing when it helps - "it is on the shelf" - never as a permission, a limitation or a favour. ' +
   'Never say you cannot put something on the shelf, never call the shelf read only, never ask permission ' +
   'for it, and never say you are not allowed to make a card. ' +
+  // Edwin, 7 Nov 2026: "The shelf says paid, but the voice will not accept that is paid." Money is
+  // the one subject where being wrong is worse than being silent, so the card on his screen is the
+  // record and a tool that disagrees with it is the thing that is out of date.
+  'A card on his shelf that reads Paid is settled. Say so once, plainly, and never tell him a paid ' +
+  'card is still waiting on him; if a tool result and the card disagree, the card wins. ' +
   'If he asks the shelf for something it cannot hold - a note, a reminder, a change to one of his worlds - ' +
   'say that in one plain line, and then say what you can do instead. ' +
   // Teaching while engaging (Edwin, 7 Nov 2026: "we will have to build like a help function into this
@@ -1275,6 +1280,30 @@ function railNote(text) {
   } catch (e) {}
 }
 
+/* The shelf on the screen is the record of money at this door, and the voice was contradicting
+   it: two cards reading Paid, and the engine insisting they were still waiting. (Edwin, 7 Nov
+   2026: "The shelf says paid, but the voice will not accept that is paid.") The house read has
+   its own idea of what is outstanding; the page has the cards. So every tool answer now carries
+   the page's own reading, and a settled card can never be called unpaid again. */
+function shelfTruth() {
+  try {
+    const cards = (shelf || []).filter((c) => c && c.kind);
+    if (!cards.length) return 'The shelf in front of him is empty.';
+    const paid = cards.filter((c) => c.kind === 'paid');
+    const open = cards.filter((c) => c.kind === 'pay');
+    const other = cards.filter((c) => c.kind === 'notpaid');
+    const said = (list) => list.map((c) => String(c.title || '').replace(/\s*\u00b7\s*/g, ' ').trim()).join('; ');
+    let line = 'The shelf in front of him holds ' + cards.length + ' card' + (cards.length === 1 ? '' : 's') + '.';
+    if (paid.length) line += ' Settled, and nothing is owed on them: ' + said(paid) + '.';
+    if (open.length) line += ' Still open and unpaid: ' + said(open) + '.';
+    if (other.length) line += ' Closed without payment: ' + said(other) + '.';
+    line += paid.length && !open.length
+      ? ' Do not tell him a paid card still needs paying.'
+      : (open.length ? ' Only the open ones are waiting on him.' : '');
+    return line;
+  } catch (e) { return ''; }
+}
+
 function houseIntent(args) {
   const a = String((args && args.action) || '').toLowerCase().trim();
   const words = String(
@@ -1300,6 +1329,8 @@ async function handleHouseCall(call) {
     result = (r.text || 'the house returned nothing.').slice(0, 300);
     for (const it of (r.show || [])) shelfAdd(it);
     if (r.hint) result += ' (note to yourself, do not read aloud: ' + String(r.hint).slice(0, 100) + ')';
+    const truth = shelfTruth();
+    if (truth) result += ' (the page can see the shelf: ' + truth + ')';
     // Say what the house actually returned, so "it cannot find it" can never hide a wrong call.
     looked = 'his house · ' + intent.action + (intent.ask ? ' ' + intent.ask : '')
       + (r.show && r.show.length ? ' · ' + r.show.length + ' on the shelf' : '');
@@ -1338,7 +1369,8 @@ async function handlePayCall(call) {
     railNote('payment request ' + r.code + ' \u00b7 nothing paid yet');
     watchRequest(r.code);
     result = 'A payment request for R' + r.amount + ' is on his shelf as ' + r.code
-      + '. Nothing has been paid: he opens the card and pays himself. Do not read the code or the link aloud.';
+      + '. Nothing has been paid on it: he opens the card and pays himself. Do not read the code or the link aloud.'
+      + ' (the page can see the shelf: ' + shelfTruth() + ')';
     looked = 'the shelf \u00b7 request ' + r.code;
   } catch (e) {
     result = 'the payment request could not be made: ' + ((e && e.message) ? e.message : String(e));
