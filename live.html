@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T23:12';
-const BUILD_NO = 58;   // 7 Nov: 'I want to share a song' finds it in MTShare, then the shelf, then a store.
+const BUILD = '2026-11-07T23:58';
+const BUILD_NO = 59;   // 7 Nov: when more than one song answers, it asks which one before making anything.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -339,6 +339,7 @@ const DECLS = [{
                 type: 'OBJECT',
                 properties: {
                   query: { type: 'STRING', description: 'the song he named, in his words, plus the artist if he gave one' },
+                  choice: { type: 'STRING', description: 'after he has confirmed which one, what he confirmed: the title, the artist, or the number he picked' },
                 },
                 required: ['query'],
               },
@@ -1465,54 +1466,135 @@ async function handleHouseCall(call) {
 // The MTShare rail, spoken to. He gives a link from one store; the rail answers with one
 // universal link that opens wherever the listener is, and a card lands on his shelf.
 // Nothing here pays, posts or shares: it makes the link and puts it where he can see it.
-// "I want to share a song" (build 58, 7 Nov 2026). He names it; the rail finds it before anyone
-// asks for a link. Three places, in his order: MTShare's own links, then his own songs in the
-// vault, then a catalogue match that gets wrapped. Which one answered is said out loud, because a
-// reused universal link, a vault listening and a fresh wrap are three different promises.
+// "I want to share a song" (build 59, 7 Nov 2026). He names it; the rail looks in three places, and
+// when more than one song answers to that name it comes back here and the door asks which one. Edwin:
+// "we need to remember that you will get back more than one song in some instances. So you will have
+// to prompt me back so that i can confirm the right one." Nothing is wrapped or minted until he does.
+let shareChoices = [];          // what the rail offered, so his answer can be matched against it
+let shareQuery = '';
+
+function shareTokens(t) {
+  return String(t || '').toLowerCase().replace(/[^a-z0-9 ]/gi, ' ').split(/\s+/).filter(w => w.length > 1);
+}
+
+// Which of the offered songs did he mean? A number means exactly that one; words are matched against
+// the title and the artist, and a tie is settled by asking again rather than by guessing.
+function pickChoice(answer) {
+  const a = String(answer || '').trim();
+  if (!a || !shareChoices.length) return null;
+  const words = ['first', 'second', 'third', 'fourth'];
+  let n = parseInt(a.replace(/[^0-9]/g, ''), 10);
+  if (!n) { const wi = words.indexOf(a.toLowerCase().split(/\s+/)[0]); if (wi >= 0) n = wi + 1; }
+  if (n >= 1 && n <= shareChoices.length) return shareChoices[n - 1];
+  const q = shareTokens(a);
+  if (!q.length) return null;
+  let best = null, bestHit = 0, tie = false;
+  for (const c of shareChoices) {
+    const hay = shareTokens((c.title || '') + ' ' + (c.artist || ''));
+    let hit = 0;
+    for (const t of q) if (hay.includes(t)) hit++;
+    if (hit > bestHit) { bestHit = hit; best = c; tie = false; }
+    else if (hit === bestHit && hit > 0) tie = true;
+  }
+  if (!best || bestHit === 0 || tie) return null;
+  return best;
+}
+
+function shareResultLine(r) {
+  const where = r.found === 'mtshare' ? 'already in MTShare'
+    : r.found === 'shelf' ? 'one of yours, from the vault'
+    : 'found and wrapped just now';
+  return 'Ready, and it is on his shelf: "' + (r.title || 'the song') + '"'
+    + (r.artist && r.artist !== 'made here' ? ' by ' + r.artist : '')
+    + ', ' + where + '. The link is ' + r.url + '. '
+    + (r.found === 'shelf'
+      ? 'It plays from the vault, good for a day, and no file is handed over.'
+      : 'It opens on ' + (r.platform_text || 'whichever store the listener uses') + (r.found === 'wrapped' ? ', powered by MTShare' : '.'))
+    + ' Say the title once and that it is on the shelf. Do not read the url out loud.';
+}
+
 async function handleShareCall(call) {
   const s = doorSession();
   let result = '';
   try {
     if (!s || !s.token) throw new Error('the door session has gone');
-    const query = String((call.args || {}).query || '').trim();
+    const args = call.args || {};
+    const query = String(args.query || shareQuery || '').trim();
+
+    // ---- he has just told us which one ----
+    if (args.choice && shareChoices.length) {
+      const picked = pickChoice(args.choice);
+      if (!picked) {
+        result = 'That did not settle which song he meant, and nothing has been made. Read the '
+          + shareChoices.slice(0, 3).map((c, i) => (i + 1) + ') ' + c.title + (c.artist && c.artist !== 'made here' ? ' by ' + c.artist : '')).join('; ')
+          + ', then ask once which one, and stop.';
+        looked = 'sharing · still unclear';
+      } else {
+        const r = await withTimeout(gatePost('songShare', { action: 'choose', candidate: picked }), 60000,
+          'the sharing rail did not answer in time');
+        if (r && r.ok && r.url) {
+          mergeCard({
+            kind: r.found === 'shelf' ? 'song' : 'store',
+            title: r.title || picked.title || 'a song',
+            sub: r.found === 'shelf'
+              ? 'made here · a day of listening'
+              : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
+            url: r.url, code: r.code || '', song_id: r.song_id || '', sha: r.sha || '',
+          });
+          result = shareResultLine(r);
+          looked = 'sharing · ' + (r.title || 'a song');
+          shareChoices = [];
+          railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
+        } else {
+          result = 'The wrap did not go through: ' + ((r && (r.error || r.note)) || 'no answer')
+            + ' Nothing is on his shelf. Say that in one line.';
+          looked = 'sharing · wrap failed';
+        }
+      }
+      return;
+    }
+
     if (!query) {
       result = 'He has not named a song yet. Ask him which song, in one short question, and stop '
         + 'there: do not guess at a title and do not call this tool again until he answers.';
       looked = 'sharing · which song';
+      return;
+    }
+
+    // ---- the first look ----
+    const r = await withTimeout(gatePost('songShare', { action: 'find', query }), 45000,
+      'the sharing rail did not answer in time');
+    shareQuery = query;
+
+    if (r && r.ok && r.found === 'choice' && (r.candidates || []).length) {
+      shareChoices = r.candidates;
+      const few = shareChoices.slice(0, 3);
+      result = 'More than one song answers to that, so nothing has been made yet: '
+        + few.map((c, i) => (i + 1) + ') ' + (c.label || c.title)).join('; ')
+        + (shareChoices.length > 3 ? '; and ' + (shareChoices.length - 3) + ' more' : '')
+        + '. Read the first ' + (few.length === 1 ? 'one' : 'two or three of them') + ' as numbers, ask which one he means, '
+        + 'and stop. When he answers, call this tool again with the same query and his answer in choice.';
+      looked = 'sharing · ' + shareChoices.length + ' to choose from';
+      railNote('share · asked which · ' + shareChoices.length + ' matches');
+    } else if (r && r.ok && r.url) {
+      mergeCard({
+        kind: r.found === 'shelf' ? 'song' : 'store',
+        title: r.title || 'a song',
+        sub: r.found === 'shelf'
+          ? 'made here · a day of listening'
+          : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
+        url: r.url, code: r.code || '', song_id: r.song_id || '', sha: r.sha || '',
+      });
+      result = shareResultLine(r);
+      looked = 'sharing · ' + (r.title || 'a song');
+      shareChoices = [];
+      railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
     } else {
-      const r = await withTimeout(gatePost('songShare', { action: 'find', query }), 45000,
-        'the sharing rail did not answer in time');
-      if (r && r.ok && r.url) {
-        mergeCard({
-          kind: r.found === 'shelf' ? 'song' : 'store',
-          title: r.title || 'a song',
-          sub: r.found === 'shelf'
-            ? 'made here · a day of listening'
-            : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
-          url: r.url,
-          code: r.code || '',
-          song_id: r.song_id || '',
-          sha: r.sha || '',
-        });
-        const where = r.found === 'mtshare' ? 'already in MTShare'
-          : r.found === 'shelf' ? 'one of yours, from the vault'
-          : 'found and wrapped just now';
-        result = 'Ready, and it is on his shelf: "' + (r.title || 'the song') + '"'
-          + (r.artist && r.artist !== 'made here' ? ' by ' + r.artist : '')
-          + ', ' + where + '. The link is ' + r.url + '. '
-          + (r.found === 'shelf'
-            ? 'It plays from the vault, good for a day, and no file is handed over.'
-            : 'It opens on ' + (r.platform_text || 'whichever store the listener uses') + (r.found === 'wrapped' ? ', powered by MTShare' : ''))
-          + ' Say the title once and that it is on the shelf. Do not read the url out loud.';
-        looked = 'sharing · ' + (r.title || 'a song');
-        railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
-      } else {
-        const why = (r && (r.error || r.note)) || 'no answer';
-        result = 'Nothing was found for "' + query + '": ' + why + ' Nothing went on his shelf, and nothing '
-          + 'was wrapped. Ask him who sings it, or for the store link, in one short question.';
-        looked = 'sharing · not found';
-        railNote('share · nothing found · ' + String(query).slice(0, 40));
-      }
+      const why = (r && (r.error || r.note)) || 'no answer';
+      result = 'Nothing was found for "' + query + '": ' + why + ' Nothing went on his shelf and nothing '
+        + 'was wrapped. Ask him who sings it, or for the store link, in one short question.';
+      looked = 'sharing · not found';
+      railNote('share · nothing found · ' + String(query).slice(0, 40));
     }
   } catch (e) {
     result = 'The sharing rail did not answer: ' + String((e && e.message) || e) + '. Nothing was found and '
