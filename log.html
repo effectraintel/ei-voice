@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EI voice log</title>
+<!--
+  The viewer for the voice log (7 Nov 2026). A surface, not a capability: every line on it was
+  collected by eiTurnLog and mirrored to the dated files by logctl. Nothing is stored here.
+
+  Why this page exists in the repo rather than inside the collector: the first version rendered
+  the history server-side and then replaced it with only what arrived after the page opened, so a
+  console opened one minute late looked empty. (Edwin, 7 Nov: "there is nothing.") Here the page
+  seeds itself from the last 500 lines and then follows, so opening it late is not a smaller log.
+-->
+<style>
+  :root { --bg:#14141c; --ink:#c7cbd1; --dim:#6b6e7a; --line:#23232e; --gold:#7b6fe0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  header { position:sticky; top:0; z-index:2; background:var(--bg);
+           border-bottom:1px solid var(--line); padding:10px 14px; display:flex; gap:8px;
+           flex-wrap:wrap; align-items:center; }
+  h1 { font-size:10px; letter-spacing:.24em; text-transform:uppercase; color:#8d8f9a;
+       margin:0 6px 0 0; font-weight:600; }
+  input,select,button { background:#1b1b24; color:#e7e8ee; border:1px solid #2e2a35;
+       border-radius:6px; padding:6px 9px; font:inherit; }
+  input#q { flex:1 1 220px; min-width:140px; }
+  button { cursor:pointer; }
+  button.on { border-color:var(--gold); color:var(--gold); }
+  .meta { color:var(--dim); }
+  .live { color:#3fc9bd; }
+  .live.stale { color:#e0b45a; }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:3px 10px; vertical-align:top; border-bottom:1px solid #1b1b24; }
+  .t { color:var(--dim); white-space:nowrap; }
+  .f { color:var(--gold); white-space:nowrap; }
+  .s { color:var(--dim); white-space:nowrap; }
+  .l { white-space:nowrap; }
+  .l.info { color:#8d8f9a; } .l.notice { color:#3fc9bd; } .l.warn { color:#e0b45a; }
+  .l.error { color:#e07b6a; } .l.debug { color:var(--dim); }
+  .x { color:#d7dae1; word-break:break-word; }
+  .ms { color:var(--dim); }
+  .ms.slow { color:#e0b45a; }
+  .empty { color:var(--dim); padding:16px 14px; }
+  tr.new td { animation:fade .9s ease-out; }
+  @keyframes fade { from { background:#1f1e2c; } to { background:transparent; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>EI voice log</h1>
+  <select id="fac"><option value="">all facilities</option></select>
+  <select id="lvl"><option value="">all levels</option><option>info</option><option>notice</option><option>warn</option><option>error</option></select>
+  <input id="ses" placeholder="session" size="7">
+  <input id="q" placeholder="filter text">
+  <button id="pause" title="stop following">pause</button>
+  <span class="meta" id="hits"></span>
+  <span class="meta live" id="live">connecting</span>
+</header>
+<div class="empty" id="empty">reading the log…</div>
+<table id="t"><tbody></tbody></table>
+
+<script>
+/* The collector. One read endpoint, two shapes: ?since=<id> for what is new, ?since=- for the
+   beginning. Ask for too much and it caps at 1000, so nothing here can be swamped by a busy day. */
+var BASE = 'https://solene-7ba0f3a1.base44.app/functions/eiTurnLog';
+var rows = [];            // newest last
+var since = '-';
+var paused = false;
+var limitMemory = 4000;
+
+var fac = document.getElementById('fac'),
+    lvl = document.getElementById('lvl'),
+    ses = document.getElementById('ses'),
+    q = document.getElementById('q'),
+    tb = document.querySelector('#t tbody'),
+    hits = document.getElementById('hits'),
+    live = document.getElementById('live'),
+    empty = document.getElementById('empty'),
+    pauseBtn = document.getElementById('pause');
+
+function esc(c) { return c.replace(/[&<>]/g, function (m) { return ({ '&':'&amp;','<':'&lt;','>':'&gt;' })[m]; }); }
+
+function merge(list) {
+  var have = {};
+  for (var i = 0; i < rows.length; i++) have[rows[i].id] = 1;
+  var added = 0;
+  for (var j = 0; j < list.length; j++) {
+    var e = list[j];
+    if (have[e.id]) continue;
+    rows.push(e); have[e.id] = 1; added++;
+  }
+  rows.sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+  if (rows.length > limitMemory) rows = rows.slice(-limitMemory);
+  if (list.length) since = rows[rows.length - 1].id;
+  return added;
+}
+
+function matches(e) {
+  if (fac.value && e.facility !== fac.value) return false;
+  if (lvl.value && e.level !== lvl.value) return false;
+  var s = ses.value.trim().toLowerCase();
+  if (s && String(e.session || '').toLowerCase().indexOf(s) < 0) return false;
+  var t = q.value.trim().toLowerCase();
+  if (t) {
+    var hay = (e.text + ' ' + JSON.stringify(e.extra || {})).toLowerCase();
+    if (hay.indexOf(t) < 0) return false;
+  }
+  return true;
+}
+
+function paint() {
+  var out = [], i, e;
+  for (i = 0; i < rows.length; i++) { e = rows[i]; if (matches(e)) out.push(e); }
+  out = out.slice(-1200);
+  var html = '';
+  for (i = 0; i < out.length; i++) {
+    e = out[i];
+    var ms = e.extra && e.extra.ms ? Number(e.extra.ms) : 0;
+    var extra = e.extra && e.extra.args ? ' ' + String(e.extra.args).slice(0, 160) : '';
+    html += '<tr><td class="t">' + esc(String(e.ts).slice(11, 19)) + '</td>'
+          + '<td class="f">' + esc(e.facility) + '</td>'
+          + '<td class="l ' + esc(e.level) + '">' + esc(e.level) + '</td>'
+          + '<td class="s">' + esc(String(e.session || '-').slice(-6)) + '</td>'
+          + '<td class="x">' + esc(e.text || '') + esc(extra) + '</td>'
+          + '<td class="ms' + (ms > 4000 ? ' slow' : '') + '">' + (ms ? (ms / 1000).toFixed(1) + 's' : '') + '</td></tr>';
+  }
+  tb.innerHTML = html;
+  hits.textContent = out.length + ' of ' + rows.length + ' line' + (rows.length === 1 ? '' : 's');
+  empty.style.display = rows.length ? 'none' : 'block';
+  empty.textContent = rows.length ? '' : 'nothing logged yet';
+}
+
+function facs() {
+  var seen = {}, list = [], cur = fac.value, i;
+  for (i = 0; i < rows.length; i++) if (!seen[rows[i].facility]) { seen[rows[i].facility] = 1; list.push(rows[i].facility); }
+  list.sort();
+  var html = '<option value="">all facilities</option>';
+  for (i = 0; i < list.length; i++) html += '<option' + (list[i] === cur ? ' selected' : '') + '>' + esc(list[i]) + '</option>';
+  fac.innerHTML = html;
+}
+
+function mark(status, stale) {
+  live.textContent = status;
+  live.className = 'meta live' + (stale ? ' stale' : '');
+}
+
+function get(url, cb) {
+  var r = new XMLHttpRequest();
+  r.open('GET', url, true);
+  r.onreadystatechange = function () {
+    if (r.readyState !== 4) return;
+    if (r.status !== 200) { cb(null); return; }
+    try { cb(JSON.parse(r.responseText)); } catch (e) { cb(null); }
+  };
+  r.send();
+}
+
+/* Seed first, so a console opened an hour late shows the hour. */
+get(BASE + '?since=-&limit=500', function (d) {
+  if (!d || !d.ok) { mark('no answer', true); empty.textContent = 'the log did not answer just now'; return; }
+  merge(d.entries || []);
+  facs(); paint();
+  mark('following', false);
+});
+
+function tick() {
+  if (paused) return;
+  get(BASE + '?since=' + encodeURIComponent(since) + '&limit=400', function (d) {
+    if (!d || !d.ok) { mark('no answer', true); return; }
+    var n = merge(d.entries || []);
+    if (n) { facs(); paint(); }
+    mark(n ? n + ' new · following' : 'following', false);
+  });
+}
+
+setInterval(tick, 2000);
+fac.onchange = paint; lvl.onchange = paint; q.oninput = paint; ses.oninput = paint;
+pauseBtn.onclick = function () {
+  paused = !paused;
+  pauseBtn.textContent = paused ? 'resume' : 'pause';
+  pauseBtn.className = paused ? 'on' : '';
+  mark(paused ? 'paused' : 'following', paused);
+};
+</script>
+</body>
+</html>
