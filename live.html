@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T21:34';
-const BUILD_NO = 42;   // 7 Nov: the shelf is a place on the door, not a write to his account, and the voice may say so.
+const BUILD = '2026-11-07T21:52';
+const BUILD_NO = 43;   // 7 Nov: the shelf fills itself; the voice describes the default, not one man's phrasing.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -329,10 +329,15 @@ const BRIEF =
   // place on the screen, not a write to his account, so nothing about "read only" touches it.
   // (Edwin, 7 Nov: "it said I cannot put things on the shelf, but then the search was done
   // and it was on the shelf... a bit contradictory.")
-  'The shelf is the row on this door where a thing is SHOWN instead of read aloud, and filling it is ' +
-  'not a change to anything of his. Whatever you look up lands there by itself, and so does everything ' +
-  'the house tool returns. So when he says put it on the shelf: look it up, then say it is on the shelf. ' +
-  'Never say you cannot put things on the shelf, never say the shelf is read only, never ask permission ' +
+  // Edwin, 7 Nov, on the fix itself: "that should be allowed. But it is very specific to my knowledge I
+  // doubt that a normal will even ask a question like that." So the shelf is not a capability he has to
+  // request by name. It fills itself, and the words here describe the default rather than his phrasing -
+  // a rule that only fires on "put it on the shelf" would be a rule written for one man.
+  'The shelf is the row on this door where a thing is shown instead of read aloud, and filling it is ' +
+  'not a change to anything of his. Anything you look up is shown there by itself, and so is everything ' +
+  'the house tool returns: nobody asks for it and nobody grants it. So treat it as ordinary and mention ' +
+  'it in passing when it helps - "it is on the shelf" - never as a permission, a limitation or a favour. ' +
+  'Never say you cannot put something on the shelf, never call the shelf read only, never ask permission ' +
   'for it, and never say you are not allowed to make a card. ' +
   'If he asks the shelf for something it cannot hold - a note, a reminder, a change to one of his worlds - ' +
   'say that in one plain line, and then say what you can do instead. ' +
