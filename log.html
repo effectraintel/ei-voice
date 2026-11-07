@@ -33,6 +33,9 @@
   .live.stale { color:#e0b45a; }
   table { width:100%; border-collapse:collapse; }
   td { padding:3px 10px; vertical-align:top; border-bottom:1px solid #1b1b24; }
+  .n { color:#8d8f9a; white-space:nowrap; text-align:right; cursor:pointer; user-select:none; }
+  .n:hover { color:var(--gold); }
+  .n.copied { color:#3fc9bd; }
   .t { color:var(--dim); white-space:nowrap; }
   .f { color:var(--gold); white-space:nowrap; }
   .s { color:var(--dim); white-space:nowrap; }
@@ -119,7 +122,8 @@ function paint() {
     e = out[i];
     var ms = e.extra && e.extra.ms ? Number(e.extra.ms) : 0;
     var extra = e.extra && e.extra.args ? ' ' + String(e.extra.args).slice(0, 160) : '';
-    html += '<tr><td class="t">' + esc(String(e.ts).slice(11, 19)) + '</td>'
+    html += '<tr><td class="n" data-n="' + (e.n || '') + '" title="click to copy line ' + (e.n || '?') + '">' + (e.n || '·') + '</td>'
+          + '<td class="t">' + esc(String(e.ts).slice(11, 19)) + '</td>'
           + '<td class="f">' + esc(e.facility) + '</td>'
           + '<td class="l ' + esc(e.level) + '">' + esc(e.level) + '</td>'
           + '<td class="s">' + esc(String(e.session || '-').slice(-6)) + '</td>'
@@ -177,6 +181,22 @@ function tick() {
 
 setInterval(tick, 2000);
 fac.onchange = paint; lvl.onchange = paint; q.oninput = paint; ses.oninput = paint;
+/* A number on a screen is only useful if it can be said out loud. Clicking one copies
+   "line 214" so it can be pasted into a message and looked up exactly. */
+tb.addEventListener('click', function (ev) {
+  var td = ev.target;
+  if (!td || td.className !== 'n') return;
+  var n = td.getAttribute('data-n');
+  if (!n) return;
+  var text = 'line ' + n;
+  try { navigator.clipboard.writeText(text); } catch (e) {
+    var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t);
+    t.select(); try { document.execCommand('copy'); } catch (e2) {} document.body.removeChild(t);
+  }
+  td.classList.add('copied');
+  setTimeout(function () { td.classList.remove('copied'); }, 900);
+});
+
 pauseBtn.onclick = function () {
   paused = !paused;
   pauseBtn.textContent = paused ? 'resume' : 'pause';
