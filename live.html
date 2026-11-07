@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T22:47';
-const BUILD_NO = 45;   // 7 Nov: one bubble per turn, and no list of rooms read aloud.
+const BUILD = '2026-11-07T20:12';
+const BUILD_NO = 46;   // 7 Nov: replies and openings counted per door, so a duplicate is a reading not a guess.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -419,7 +419,7 @@ setInterval(() => {
   if (!(sessionUp || listening)) { b.textContent = base; return; }
   b.textContent = base + ' · mic ' + (micCtx ? micCtx.state : 'none') +
     ' · frames ' + dbgFrames + ' · peak ' + Math.round(dbgPeak * 1000) +
-    ' · sent ' + dbgSent + ' · opens ' + dbgOpens;
+    ' · sent ' + dbgSent + ' · opens ' + dbgOpens + ' · replies ' + dbgReplies;
 }, 500);
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -483,7 +483,7 @@ let playRunStart = 0, loudFrames = 0, looked = null;
 // says - the anomaly he reported. (Edwin, 7 Nov: "there is an anomaly that we need to cater
 // for... I think the best way is actually to say something before it goes open for inputs.")
 let greeting = false, greetWatch = null;
-let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0;
+let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0, dbgReplies = 0;
 const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
 const BARGE_FRAMES = 3;      // sustained, not a click
@@ -545,6 +545,22 @@ function addTurn(who, text) {
 
 /* Transcripts arrive as fragments, so assemble them into the current turn of the
    right speaker instead of printing a line per fragment. */
+/* Seen on his phone, 7 Nov: one reply drawn twice - "I can walk your rooms now... Which room
+   should I look inside?" then the same words again. Whichever layer did it (a model that
+   restarted, a transport that repeated the turn, a render that appended twice), the reader is
+   owed one copy of a sentence, not two. This only ever collapses an exact doubling and only
+   above a length where a real repeat is implausible. */
+function collapseRepeat(t) {
+  const s = String(t || '');
+  const n = s.length;
+  if (n < 40) return t;
+  const half = Math.floor(n / 2);
+  const a = s.slice(0, half).trim();
+  const b = s.slice(n - half).trim();
+  if (a.length > 20 && a === b) return s.slice(0, n - half).trimEnd();
+  return t;
+}
+
 function appendLive(who, text) {
   // A new engine bubble means his turn is over, so the next thing he says starts its own
   // block instead of extending the old one.
@@ -554,6 +570,7 @@ function appendLive(who, text) {
   // Two shapes arrive from the live API depending on the model and transport: deltas, and
   // the whole turn so far. Appending a cumulative repeat is what glued a reply to itself.
   said[who] = (said[who] && add.startsWith(said[who])) ? add : (said[who] + add);
+  if (who === 'engine') said[who] = collapseRepeat(said[who]);
   turns[who].querySelector('.said').textContent = said[who];
   logEl.scrollTop = logEl.scrollHeight;
   if (who === 'engine' && pendingLatency !== null) attachLatency(turns[who]);
@@ -856,6 +873,10 @@ async function openDoor() {
   // nothing back, because the replaced socket's handlers kept acting on the live one.
   if (ws || sessionUp) shutDoor();
   const gen = ++doorGen;
+  // These count the door that is open now. Cumulative counts across a day read as a fault
+  // (he saw "opens 2" and it meant nothing), and a detector that cannot be trusted is worse
+  // than none. Build 46.
+  dbgFrames = 0; dbgSent = 0; dbgPeak = 0; dbgOpens = 0; dbgReplies = 0;
   busy = true; connecting = true;
   micBtn.classList.add('arming');
   bars.forEach(b => b.classList.remove('hot'));
@@ -1688,6 +1709,9 @@ function handleFrame(text) {
 
   if (msg.setupComplete) {
     dbgOpens++;
+    // Two setups on one socket means the server is holding two sessions and would answer him
+    // twice. It should never happen; if it does, the number says so instead of the transcript.
+    if (dbgOpens > 1) warn('the door reported itself open twice on one socket · two sessions are running on it.');
     // The session is up, but the channel is NOT open yet. He hears one line first, and the
     // input opens when that line has finished, so nothing he had already started saying can
     // be caught in halves. (Build 39)
@@ -1747,6 +1771,7 @@ function handleFrame(text) {
 
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    if (!greeting) dbgReplies++;   // one question, one reply; two means the server answered twice
     // One bubble per turn. Seen on his phone 7 Nov: every reply after the first was appended
     // to the previous one - "...another name?Understood, Boss..." - because the bubble was
     // never closed. His own words piled into a single YOU block the same way.
