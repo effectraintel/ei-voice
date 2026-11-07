@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T20:26';
-const BUILD_NO = 48;   // 7 Nov: one watcher per request, so one payment reads as one payment.
+const BUILD = '2026-11-07T20:41';
+const BUILD_NO = 49;   // 7 Nov: the route settles in a quarter second of silence before the first word.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1673,6 +1673,28 @@ const HELP_SEEN = 'ei.help.seen';     // he has had a real answer at this door b
 const SHELF_TOLD = 'ei.told.shelf';   // he has been told what the shelf is
 const SONG_TOLD  = 'ei.told.song';    // he has been told the band is his to change
 
+/* On iOS the output route is not settled the instant the context exists: the session
+   activates, the phone decides between receiver, speaker and a headset, and for that
+   moment the same voice comes out thin and small. Edwin, 7 Nov: "The first voice is still
+   different from the one I choose. Then after a few words it is like the one I choose gets
+   instantiated..." Nothing about the model changed mid-sentence; the loudspeaker did.
+   So the door says nothing until the route has had a quarter second of silence to settle,
+   and the greeting is the first thing heard rather than the thing that reveals the change. */
+let primedAt = 0;
+function primeAudioSession(ms = 260) {
+  try {
+    const ctx = playCtxEnsure();
+    const len = Math.max(1, Math.round(ctx.sampleRate * (ms / 1000)));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start();
+    primedAt = Date.now();
+    return true;
+  } catch (e) { return false; }
+}
+
 function sayGreeting() {
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
@@ -1743,7 +1765,10 @@ function handleFrame(text) {
     foldForDoor(true);
     setState('one moment');
     hint('the door is open · wait for my voice');
-    sayGreeting();
+    // Silence first, then the first word: the route settles in the gap instead of halfway
+    // through the greeting. (Build 49)
+    primeAudioSession(260);
+    setTimeout(() => { if (sessionUp && greeting) sayGreeting(); }, 280);
     return;
   }
   if (msg.voiceActivity && msg.voiceActivity.type === 'ACTIVITY_END') {
@@ -2119,7 +2144,7 @@ async function startChannel(where) {
 // Coming back to the tab, or back from a card, is a chance to wake what the platform
 // suspended while it was away.
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) ensureAudio();
+  if (!document.hidden) { ensureAudio(); if (sessionUp) primeAudioSession(200); }
 });
 
 micBtn.addEventListener('click', async () => {
