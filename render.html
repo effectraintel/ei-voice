@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14110f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Effectra Intelligence — the older render door</title>
+<style>
+  :root { --gold:#b08d2f; --char:#14110f; --ink:#efe9df; --dim:#9a9184; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--char); color:var(--ink);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  body { display:flex; flex-direction:column; padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
+  header { padding:16px 0 6px; text-align:center; }
+  .wordmark { letter-spacing:.34em; font-size:11px; color:var(--gold); text-transform:uppercase; }
+  .state { margin-top:6px; font-size:13px; color:var(--ink); letter-spacing:.04em; min-height:18px; }
+  .warn { display:none; margin:8px 0 0; padding:10px 12px; border:1px solid #5a3a1c; background:#241a10;
+    color:#e8cfae; font-size:12.5px; line-height:1.5; border-radius:10px; text-align:left; }
+  .warn b { color:#f0dcbd; }
+  main { flex:1; overflow-y:auto; padding:10px 2px 4px; -webkit-overflow-scrolling:touch; }
+  .turn { margin:0 0 14px; max-width:92%; }
+  .turn.you { margin-left:auto; text-align:right; }
+  .who { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
+  .said { white-space:pre-wrap; }
+  .turn.you .said { color:#cfc6b6; }
+  .acts { margin-top:6px; font-size:12px; color:var(--gold); }
+  footer { text-align:center; padding-top:8px; }
+  .voicebar { display:flex; align-items:center; justify-content:center; gap:12px; margin:2px 0 10px; }
+  #voicechip { font:inherit; font-size:11.5px; letter-spacing:.08em; color:var(--dim);
+    background:transparent; border:1px solid #3a332a; border-radius:999px; padding:5px 12px; cursor:pointer; }
+  #voicechip span { color:var(--gold); }
+  #voiceall { font-size:11px; letter-spacing:.06em; color:#6f675b; text-decoration:none; border-bottom:1px dotted #4a4237; }
+  /* He went to the written channel and could not find his way back to the live
+     door, which is the only door he actually uses. The way home now sits above
+     the fold, in the same gold as the wordmark, and says what it leads to. */
+  #tolive { display:inline-block; margin-top:8px; font-size:11.5px; letter-spacing:.1em;
+    color:var(--gold); text-decoration:none; border:1px solid #3a332a; border-radius:999px;
+    padding:5px 12px; }
+  #voicesheet { display:none; position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 12px);
+    z-index:20; background:#1a1613; border:1px solid #3a332a; border-radius:14px; padding:14px 14px 10px;
+    box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #voicesheet.open { display:block; }
+  #voicesheet .shead { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+  #voicesheet .gname { font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:#6f675b; margin:12px 0 6px; }
+  #voicesheet .vgrid { display:flex; flex-wrap:wrap; gap:6px; }
+  #voicesheet .vbtn { font:inherit; font-size:12.5px; padding:7px 11px; border-radius:999px;
+    border:1px solid #3a332a; background:#221d18; color:#cfc6b6; cursor:pointer; }
+  #voicesheet .vbtn.on { border-color:var(--gold); color:var(--gold); background:#2a2016; }
+  #voicesheet .vnote { font-size:11.5px; color:var(--dim); margin-top:10px; line-height:1.5; }
+  #voicesheet .vclose { float:right; font:inherit; font-size:11px; color:#6f675b; background:transparent;
+    border:0; cursor:pointer; }
+  button#mic { width:92px; height:92px; border-radius:50%; border:1px solid #3a332a; background:#1d1916;
+    color:var(--ink); display:grid; place-items:center; margin:0 auto 8px; --lvl:0;
+    transition:transform .12s, background .2s, border-color .2s, box-shadow .08s linear; }
+
+  /* Liveness, in three acts, because he asked for it on 4 Nov 2026: the press has
+     to be acknowledged before anything slow happens, and the button has to show
+     it is hearing him while he talks. Act one is the arming ring - it spins the
+     moment he touches the mic, before the browser has even asked for permission.
+     Act two is the level: the halo grows and the button lifts on his actual voice
+     level, so a dead microphone looks dead. Act three is the clock, which already
+     existed for the engine but now starts where the wait now starts. */
+  button#mic.arming { border-color:var(--gold); animation:armpulse 1s ease-in-out infinite; }
+  @keyframes armpulse {
+    0%   { box-shadow:0 0 0 2px rgba(176,141,47,.10); }
+    50%  { box-shadow:0 0 0 12px rgba(176,141,47,.16); }
+    100% { box-shadow:0 0 0 2px rgba(176,141,47,.10); }
+  }
+
+  button#mic.live { background:#2a1614; border-color:var(--gold);
+    box-shadow:0 0 0 calc(6px + var(--lvl) * 20px) rgba(176,141,47,.16),
+               0 0 22px calc(var(--lvl) * 14px) rgba(214,176,86,.30);
+    transform:scale(calc(1 + var(--lvl) * .06)); }
+  button#mic:active { transform:scale(.96); }
+  button#mic.work { opacity:.5; }
+  button#mic.reject { animation:rejectshake .3s ease; }
+  @keyframes rejectshake {
+    0%,100% { transform:translateX(0); }
+    25% { transform:translateX(-4px); }
+    75% { transform:translateX(4px); }
+  }
+  button#mic.live.work { opacity:.75; }
+
+  .lvlbars { height:26px; display:flex; align-items:center; justify-content:center; gap:4px;
+    margin:-2px 0 6px; opacity:0; transition:opacity .2s; }
+  .lvlbars.on { opacity:1; }
+  .lvlbars span { width:3px; height:4px; border-radius:2px; background:var(--gold);
+    transition:height .07s linear, opacity .2s; opacity:.85; }
+  svg { width:36px; height:36px; }
+  .hint { font-size:11.5px; color:var(--dim); letter-spacing:.03em; min-height:15px; margin-bottom:8px; }
+  .typebar { display:flex; gap:8px; margin:0 0 6px; }
+  .typebar input { flex:1; min-width:0; background:#1d1916; border:1px solid #3a332a; color:var(--ink);
+    border-radius:10px; padding:10px 12px; font-size:15px; }
+  .typebar button { background:#2a2118; border:1px solid #4a3d24; color:var(--gold); border-radius:10px; padding:0 14px; font-size:14px; }
+  .brand { margin-top:6px; font-size:9px; letter-spacing:.22em; color:#5d564c; text-transform:uppercase; line-height:1.7; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">Effectra Intelligence</div>
+  <a id="tolive" href="live.html">&#8592; the live door &middot; speech straight through</a>
+  <div class="state" id="state">Voice and text — tap the mic, or use the line below</div>
+  <div style="margin:10px 0 0;padding:10px 12px;border:1px solid #4a4033;border-radius:10px;background:#1b1714;color:#9a9184;font-size:12.5px;line-height:1.5">
+  <b style="color:#b08d2f">The older render door.</b> This page writes an answer, renders it and plays it back with
+  the device voice, which is why it can sound like a different product. The door that speaks in Kore is
+  <a href="live.html" style="color:#efe9df">the live door</a>. Keep this one only for a browser that cannot hold a socket open.
+</div>
+<div class="warn" id="warn"></div>
+</header>
+<main id="log"></main>
+<div id="voicesheet" role="dialog" aria-label="Voice">
+  <button class="vclose" id="vclose" type="button">close</button>
+  <div class="shead">Which mouth speaks</div>
+  <div id="vbody"></div>
+  <div class="vnote">A tap changes this device only, on the next answer. The Effectra voice is the locked one, marked EI, and every door speaks in it. Every voice gets a proper listen on the audition page, both languages.</div>
+</div>
+<footer>
+  <button id="mic" aria-label="Record">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+      <path d="M12 3.5a3 3 0 0 1 3 3v5.5a3 3 0 0 1-6 0V6.5a3 3 0 0 1 3-3z"/>
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/>
+      <path d="M12 18v3"/>
+    </svg>
+  </button>
+  <div class="lvlbars" id="lvlbars"><span></span><span></span><span></span><span></span><span></span></div>
+  <div class="hint" id="hint">tap once to start, tap again to send</div>
+  <form class="typebar" id="textform" method="POST" action="https://solene-7ba0f3a1.base44.app/functions/eiVoiceText">
+    <input id="typed" name="text" placeholder="or type a turn" autocomplete="off">
+    <button id="sendTyped" type="submit">send</button>
+  </form>
+  <div class="voicebar" id="voicebar">
+    <button id="voicechip" type="button">voice · <span id="voicename">sage</span></button>
+    <a id="voiceall" href="audition.html">audition all voices</a>
+    <a id="voicelive" href="live.html" title="speech straight through, no render step">the live door</a>
+  </div>
+  <div class="brand">Powered by Effectra Intelligence<br>Proof on chain. Payload in the vault.<br>&copy; 2026 Effectra Intelligence</div>
+</footer>
+<script>
+var ENDPOINT = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceTurn';
+var stateEl = document.getElementById('state');
+var hintEl = document.getElementById('hint');
+var warnEl = document.getElementById('warn');
+var logEl = document.getElementById('log');
+var mic = document.getElementById('mic');
+var typed = document.getElementById('typed');
+var sendTyped = document.getElementById('sendTyped');
+
+var recorder = null, chunks = [], live = false, busy = false;
+var turns = [];
+var sessionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+
+function warn(msg) { warnEl.style.display = 'block'; warnEl.innerHTML = msg; }
+
+// A preview frame cannot open the microphone at all, so say it plainly up front.
+try {
+  if (window.self !== window.top) {
+    warn('<b>This is showing inside a preview frame.</b> Open the link directly in Safari or Chrome on your phone, otherwise the browser will refuse the microphone without asking.');
+  }
+} catch (e) { /* cross-origin parent: same conclusion */ 
+  warn('<b>This is showing inside a frame.</b> Open the link directly in your browser, otherwise the microphone is refused.');
+}
+
+if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+  warn('<b>This browser has no microphone access.</b> ' + (location.protocol === 'https:' ? 'Try Safari or Chrome directly.' : 'The page must be served over HTTPS.'));
+}
+if (typeof window.MediaRecorder === 'undefined') {
+  warn('<b>This browser cannot record audio.</b> Use the typed line below, or open in Safari on iOS 14.3 or newer.');
+}
+
+function esc(t) { return String(t == null ? '' : t); }
+
+function say(role, text, acts) {
+  var wrap = document.createElement('div');
+  wrap.className = 'turn ' + (role === 'engine' ? 'engine' : 'you');
+  var who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = role === 'engine' ? 'Effectra' : 'You';
+  var said = document.createElement('div');
+  said.className = 'said';
+  said.textContent = esc(text);
+  wrap.appendChild(who); wrap.appendChild(said);
+  if (acts && acts.length) {
+    var a = document.createElement('div');
+    a.className = 'acts';
+    a.textContent = acts.map(function (x) {
+      return x.tool === 'create_reminder' ? 'reminder set' : x.tool === 'capture' ? 'captured' : x.tool;
+    }).join(' · ');
+    wrap.appendChild(a);
+  }
+  logEl.appendChild(wrap);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// The voice picker matters more than it looks. On 4 Nov the page answered in
+// Finnish on Edwin's laptop: with no English voice chosen, the browser falls
+// back to the SYSTEM voice, whatever the machine's language is. So the language
+// is now explicit, and it follows HIM: the turn returns the language he spoke,
+// and the page picks a voice in that language.
+function voiceFor(lang) {
+  var voices = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  var want = /^af/i.test(lang || '') ? 'af' : 'en';
+  var pool = voices.filter(function (v) { return new RegExp('^' + want, 'i').test(v.lang || ''); });
+  var saved = '';
+  try { saved = localStorage.getItem('ei_voice_name_' + want) || ''; } catch (e) {}
+  if (saved) {
+    var hit = pool.filter(function (v) { return v.name === saved; })[0];
+    if (hit) return hit;
+  }
+  if (want === 'af') {
+    return pool.filter(function (v) { return /af-ZA/i.test(v.lang); })[0] || pool[0] || null;
+  }
+  return pool.filter(function (v) { return /en-ZA/i.test(v.lang); })[0]
+    || pool.filter(function (v) { return /en-GB/i.test(v.lang); })[0]
+    || pool.filter(function (v) { return /en-US/i.test(v.lang); })[0]
+    || pool[0] || null;
+}
+
+// ---- Speaking ------------------------------------------------------------
+// Until 4 Nov the page spoke with whatever voice the device happened to have,
+// which is why it sounded like a phone reading a menu. It now speaks in the
+// Effectra voice (the same one the audition page demonstrates) and starts on
+// the FIRST SENTENCE instead of waiting for the whole answer: each sentence is
+// rendered in parallel, then played in order. Measured 2.7 to 3.5 seconds per
+// sentence against roughly thirteen for a full answer that way.
+//
+// If the voice service is unreachable the device voice takes over, so the
+// channel never goes silent. The voice name is provisional until Edwin picks.
+var SPEAK_ENDPOINT = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceSpeak';
+var AUDITION_PAGE = 'https://effectraintel.github.io/ei-voice/audition.html';
+
+// Two speaking gates, both kept, and he switches between them. Edwin, 4 Nov
+// 2026: "We need to keep both speaking gates and let me switch between them.
+// Let us give OpenAI an audition then." Gemini renders Kore, the voice already
+// on trial; OpenAI renders its own set and takes the tone brief as instructions.
+// The choice lives on the device, and the audition page writes the same key, so
+// picking a voice there changes this page too. Defaults to the OpenAI gate for
+// now only because the Gemini free tier's daily renders are spent today; it is
+// a starting point, not a verdict.
+var SPEAK_GATES = {
+  gemini: ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'],
+  openai: ['sage', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'shimmer', 'alloy', 'verse']
+};
+// The locked voice lives in the VoiceCanon record, not here. Edwin, 4 Nov 2026:
+// "once I found the one I like most we can lock that into the DNA of EI rather
+// than you changing it and I test?" So this page keeps NO opinion of its own: if
+// he has not chosen on this device, it names nothing and the speaking function
+// answers in the canon. Lock the record once and every door, device and instance
+// follows, with no page edit and no engine opinion in the way. A choice made
+// here is local to this device and never written back to the canon.
+var VOICE = null;
+var CANON = null;
+try {
+  var savedVoice = JSON.parse(localStorage.getItem('ei_voice') || 'null');
+  if (savedVoice && SPEAK_GATES[savedVoice.gate] && SPEAK_GATES[savedVoice.gate].indexOf(savedVoice.voice) > -1) {
+    VOICE = { gate: savedVoice.gate, voice: savedVoice.voice };
+  }
+} catch (e) {}
+// Everything a turn starts - audio elements, clocks, watchdogs - registers a
+// stopper here. Two bugs on 4 November came from a clock with no owner: Edwin
+// reported "the timer on the top gets confused and then it just keeps on
+// running", because the first answer's clock survived into the next segment and
+// kept writing "still rendering the voice 12.4s" over whatever was really
+// happening. A clock now belongs to one segment and dies with it.
+var playback = { token: 0, audios: [], stoppers: [] };
+
+function stopPlayback() {
+  playback.token++;
+  playback.audios.forEach(function (a) { try { a.pause(); } catch (e) {} });
+  playback.audios = [];
+  playback.stoppers.forEach(function (f) { try { f(); } catch (e) {} });
+  playback.stoppers = [];
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+}
+
+// Splitting has to be conservative: a decimal point is not a full stop. The old
+// version cut "R1.29 million" into a sentence, which the tighten pass then
+// rejoined with a space, and it came out as "1. 29 million". A break now needs
+// punctuation followed by whitespace and something that looks like a new sentence.
+function splitSentences(text) {
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return [];
+  var out = [];
+  var buf = '';
+  var pieces = t.split(/(?<=[.!?\u2026])\s+/);
+  pieces.forEach(function (p) {
+    p = p.trim();
+    if (!p) return;
+    if (buf && !/^["'\u201c\u2018(\[]?[A-Z0-9]/.test(p)) {
+      // Not a new sentence after all (a lower-case continuation).
+      buf += ' ' + p;
+      return;
+    }
+    if (buf) out.push(buf);
+    buf = p;
+  });
+  if (buf) out.push(buf);
+  return out;
+}
+
+// No local choice, no names in the request: the function then speaks in the
+// canon. That is the whole mechanism behind "lock it into the DNA".
+function speechRequest(text, lang) {
+  var payload = { text: text, lang: lang };
+  if (VOICE) { payload.gate = VOICE.gate; payload.voice = VOICE.voice; }
+  return payload;
+}
+
+function renderSegment(text, lang) {
+  return fetch(SPEAK_ENDPOINT, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(speechRequest(text, lang))
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (d && d.canon) { CANON = { gate: d.canon.gate, voice: d.canon.voice, status: d.canon.status }; if (typeof labelVoice === 'function') labelVoice(); }
+    if (!d || !d.ok || !d.audio_base64) throw new Error((d && d.error) || 'no audio');
+    // Gemini answers in WAV, OpenAI in mp3; the type travels with the audio
+    // instead of being assumed, or Safari silently refuses to play one of them.
+    return 'data:' + (d.mime || 'audio/wav') + ';base64,' + d.audio_base64;
+  });
+}
+
+// The voice is one call, so it is one reading. Only an answer too long for the
+// speaking function is cut, and then only at a sentence boundary, into two parts
+// at most, so nothing is dropped and nothing shifts mood mid-answer.
+// Short answers, deliberately. Edwin's call, 4 Nov 2026: start short and tune
+// upwards. The mouth is told two sentences, but a model obeys probabilistically,
+// and one 389-character answer cost 13.9 seconds to render and 27 seconds to
+// speak - that is not a conversation, that is a podcast. So the page holds the
+// line: the first two sentences are the answer, and a trailing "if you want, I
+// can..." line is dropped outright rather than spoken as a third.
+function tighten(text) {
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return t;
+  var sents = splitSentences(t);
+  if (!sents.length) return t;
+  var keep = [];
+  for (var i = 0; i < sents.length; i++) {
+    var s = sents[i].trim();
+    if (!s) continue;
+    var isOffer = /^(if you (want|like|need|prefer)|say the word|i can (take|go)|let me know|i could)/i.test(s);
+    if (isOffer) break;
+    keep.push(s);
+    if (keep.length >= 3) break;
+  }
+  var out = keep.join(' ') || sents[0].trim();
+  // Lifted on 4 November, at his instruction, from two sentences and 220
+  // characters to three and 300. Measured at the current pace: 273 characters
+  // renders in about eleven seconds and plays in sixteen; 351 characters took
+  // seventeen and a half seconds to render, which is the practical wall given
+  // the speaking function's timeout. So 300 is the ceiling that still arrives.
+  if (out.length > 300) {
+    var cut = out.slice(0, 300);
+    var stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+    out = stop > 60 ? cut.slice(0, stop + 1) : cut.replace(/[ ,;:]+$/, '') + '.';
+  }
+  return out;
+}
+
+function chunkForSpeech(text) {
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return [];
+  var MAX = 850;
+  if (t.length <= MAX) return [t];
+  var parts = splitSentences(t);
+  var out = [];
+  var buf = '';
+  parts.forEach(function (p) {
+    if (buf && (buf + ' ' + p).length > MAX) { out.push(buf.trim()); buf = p; }
+    else buf = buf ? buf + ' ' + p : p;
+  });
+  if (buf) out.push(buf.trim());
+  if (out.length > 2) out = [out[0], out.slice(1).join(' ')];
+  return out;
+}
+
+function withTimeout(p, ms) {
+  return new Promise(function (res, rej) {
+    var done = false;
+    var t = setTimeout(function () {
+      if (done) return;
+      done = true;
+      rej(new Error('timeout'));
+    }, ms);
+    p.then(function (v) { if (done) return; done = true; clearTimeout(t); res(v); },
+           function (e) { if (done) return; done = true; clearTimeout(t); rej(e); });
+  });
+}
+
+// The device voice is the safety net, so it must always hand back control: an
+// utterance that ends, errors, or is never spoken still calls onDone.
+function deviceSpeak(text, lang, onDone) {
+  var finished = false;
+  function finish() {
+    if (finished) return;
+    finished = true;
+    stateEl.textContent = 'tap the mic';
+    if (onDone) onDone();
+  }
+  if (!('speechSynthesis' in window) || !text) { finish(); return; }
+  try {
+    var u = new SpeechSynthesisUtterance(text);
+    var v = voiceFor(lang);
+    u.lang = /^af/i.test(lang || '') ? 'af-ZA' : 'en-ZA';
+    if (v) { u.voice = v; u.lang = v.lang || u.lang; }
+    u.rate = 1.02;
+    u.onstart = function () { stateEl.textContent = 'speaking'; };
+    u.onend = finish;
+    u.onerror = finish;
+    speechSynthesis.speak(u);
+    // Some browsers never fire onend for a cancelled or silent utterance.
+    setTimeout(finish, Math.max(4000, String(text).length * 90));
+  } catch (e) { finish(); }
+}
+
+function speak(text, lang) {
+  if (!text) return;
+  stopPlayback();
+  var token = playback.token;
+  var langCode = /^af/i.test(lang || '') ? 'af' : 'en';
+  // One reply, one call, one reading. Splitting by sentence was the whole cause
+  // of the shifting tone: "the technical content is very formal, the things it
+  // can do about me is almost flirty." A long answer is cut only where the
+  // speaking function cannot take it whole, and each part is one continuous read.
+  var units = chunkForSpeech(text);
+  if (!units.length) return;
+
+  var ready = units.map(function (seg) {
+    return withTimeout(renderSegment(seg, langCode), 20000);
+  });
+
+  // One segment at a time. Each owns: its own render clock, its own watchdog,
+  // and its own single ending - audio ended, audio errored, autoplay refused,
+  // device voice finished, or nothing started in 3.5s. Whichever happens first
+  // stops this segment's clock and hands to the next; the rest are inert. No
+  // shared flag, because a shared flag is what let an old clock keep running.
+  function playSegment(idx) {
+    if (token !== playback.token) return;
+    if (idx >= ready.length) { stateEl.textContent = 'tap the mic'; return; }
+
+    var t0 = Date.now();
+    var clockDead = false;
+    var prepClock = setInterval(function () {
+      if (clockDead || token !== playback.token) { clearInterval(prepClock); return; }
+      var s2 = (Date.now() - t0) / 1000;
+      stateEl.textContent = (s2 > 6 ? 'still rendering the voice ' : 'preparing the voice ') + s2.toFixed(1) + 's';
+    }, 250);
+    function stopClock() {
+      if (clockDead) return;
+      clockDead = true;
+      clearInterval(prepClock);
+    }
+    playback.stoppers.push(stopClock);
+    // A clock may never outlive the turn that started it, whatever else fails.
+    var clockGuard = setTimeout(function () { stopClock(); }, 22000);
+    playback.stoppers.push(function () { clearTimeout(clockGuard); });
+
+    var ended = false;
+    function finishSegment() {
+      if (ended) return;
+      ended = true;
+      stopClock();
+      if (token !== playback.token) return;
+      stateEl.textContent = 'tap the mic';
+      playSegment(idx + 1);
+    }
+
+    ready[idx].then(function (src) {
+      if (token !== playback.token) { stopClock(); return; }
+      var audio = new Audio(src);
+      playback.audios.push(audio);
+      var started = false;
+      audio.onplaying = function () {
+        started = true;
+        stopClock();
+        if (token === playback.token) stateEl.textContent = 'speaking';
+      };
+      audio.onended = finishSegment;
+      audio.onerror = function () { stopClock(); deviceSpeak(units[idx], langCode, finishSegment); };
+      audio.play().catch(function () { stopClock(); deviceSpeak(units[idx], langCode, finishSegment); });
+      // If the audio does not actually start within 3.5 seconds, the network is
+      // holding a file that looked ready. Speak it instead of waiting.
+      var startWatch = setTimeout(function () {
+        if (token !== playback.token || started) return;
+        try { audio.pause(); } catch (e) {}
+        stopClock();
+        deviceSpeak(units[idx], langCode, finishSegment);
+      }, 3500);
+      playback.stoppers.push(function () { clearTimeout(startWatch); });
+    }).catch(function () {
+      stopClock();
+      deviceSpeak(units[idx], langCode, finishSegment);
+    });
+  }
+
+  playSegment(0);
+}
+
+// Voice lists load asynchronously in most browsers; touching them at boot and
+// again on the change event means the first answer is not spoken in the wrong
+// language while the list is still empty.
+if ('speechSynthesis' in window) {
+  try { speechSynthesis.getVoices(); } catch (e) {}
+  window.speechSynthesis.onvoiceschanged = function () { try { speechSynthesis.getVoices(); } catch (e) {} };
+}
+
+// ---- Waiting out loud ----------------------------------------------------
+// Edwin's rule, 4 Nov 2026: "Waiting for something a few seconds is not a
+// problem, waiting without feedback and eventually getting stuck is." So a turn
+// now carries three things it did not have: a tone the instant the mic closes
+// (you hear that it landed), a running clock whose stage changes as it waits,
+// and a hard stop at 25 seconds that speaks, instead of a spinner that never
+// returns.
+function tone(freq, ms, gain) {
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    window.__eiAC = window.__eiAC || new AC();
+    var ac = window.__eiAC;
+    if (ac.state === 'suspended') ac.resume();
+    var o = ac.createOscillator(), g = ac.createGain();
+    var peak = gain || 0.05;
+    o.type = 'sine';
+    o.frequency.value = freq;
+    o.connect(g); g.connect(ac.destination);
+    var now = ac.currentTime;
+    g.gain.setValueAtTime(peak, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + (ms || 120) / 1000);
+    o.start(now);
+    o.stop(now + (ms || 120) / 1000 + 0.02);
+  } catch (e) {}
+}
+
+function stageFor(ms) {
+  if (ms < 1200) return 'got it';
+  if (ms < 4000) return 'thinking';
+  if (ms < 9000) return 'looking that up';
+  if (ms < 16000) return 'still working, this one is slow';
+  return 'nearly out of time';
+}
+
+var waiting = null;
+
+// The clock belongs to one turn. Clearing "the current one" was the second
+// half of the timer bug: two turns in flight and the first one's ending would
+// clear the second one's clock, or worse, leave its own running.
+function endWaiting(w) {
+  var w2 = w || waiting;
+  if (!w2) return;
+  clearInterval(w2.clock);
+  clearInterval(w2.tick);
+  clearTimeout(w2.watch);
+  if (waiting === w2) waiting = null;
+}
+
+function setBusy(v) {
+  busy = v;
+  if (v) mic.classList.add('work');
+  else mic.classList.remove('work');
+}
+
+var HEAR = 'https://solene-7ba0f3a1.base44.app/functions/eiVoiceHear';
+
+// Hearing first, thinking second, and how it is said preserved. He named this
+// boundary himself on 4 November: English speech was coming back as Afrikaans
+// text in the view. The transcript now comes from its own function with a
+// verbatim, never-translate instruction, and the words are what get carried
+// into the turn. If hearing fails, the audio still goes to the turn endpoint,
+// which can transcribe it the old way, so a broken hop costs quality, not the
+// question.
+async function hear(b64, mime) {
+  try {
+    stateEl.textContent = 'hearing you…';
+    var r = await withTimeout(fetch(HEAR, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ audio_base64: b64, mime: mime || 'audio/webm' })
+    }), 14000);
+    var d = await r.json();
+    if (d && d.ok && d.text) return String(d.text).trim();
+  } catch (e) { /* fall through to the turn's own ears */ }
+  return '';
+}
+
+async function send(payload) {
+  setBusy(true);
+  hintEl.textContent = 'sent — hold on';
+
+  // Two quick notes: the first says "the mic closed", the second "I am on it".
+  tone(700, 90, 0.06);
+  setTimeout(function () { tone(980, 90, 0.05); }, 130);
+
+  var t0 = Date.now();
+  var ctl = new AbortController();
+  var timedOut = false;
+
+  stateEl.textContent = stageFor(0) + ' 0.0s';
+  var mine = waiting = {
+    clock: setInterval(function () {
+      var ms = Date.now() - t0;
+      stateEl.textContent = stageFor(ms) + ' ' + (ms / 1000).toFixed(1) + 's';
+    }, 200),
+    // A quiet tick every five seconds, so waiting is audible from across a room.
+    tick: setInterval(function () { tone(1250, 45, 0.02); }, 5000),
+    // Nothing may hang: at 25 seconds the turn is cut and the channel speaks.
+    watch: setTimeout(function () {
+      timedOut = true;
+      try { ctl.abort(); } catch (e) {}
+    }, 25000)
+  };
+
+  try {
+    var r = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(Object.assign({ session_id: sessionId, history: turns }, payload)),
+      signal: ctl.signal
+    });
+    var d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'turn failed');
+    endWaiting(mine);
+    tone(880, 70, 0.05);
+    if (d.you_said) { say('you', d.you_said); turns.push({ role: 'you', content: d.you_said }); }
+    var secs = ((Date.now() - t0) / 1000).toFixed(1);
+    hintEl.textContent = 'tap once to start, tap again to send · last turn ' + secs + 's';
+    // Set before the voice starts, so "ready" cannot land on top of "preparing
+    // the voice" and leave the line contradicting itself.
+    stateEl.textContent = 'ready';
+    if (d.reply) {
+      var spoken = tighten(d.reply);
+      say('engine', spoken, d.actions);
+      turns.push({ role: 'engine', content: spoken });
+      speak(spoken, d.reply_lang || 'en');
+    }
+  } catch (e) {
+    if (timedOut) {
+      var msg = 'That took too long, Boss. Ask me again.';
+      say('engine', msg);
+      turns.push({ role: 'engine', content: msg });
+      speak(msg, 'en');
+      hintEl.textContent = 'timed out at 25s — tap to ask again';
+      stateEl.textContent = 'timed out';
+    } else {
+      tone(260, 220, 0.06);
+      hintEl.textContent = 'that turn failed — tap to try again';
+      stateEl.textContent = 'error: ' + (e.message || 'unknown');
+    }
+  } finally {
+    endWaiting(mine);
+    setBusy(false);
+  }
+}
+
+function blobToB64(blob) {
+  return new Promise(function (res, rej) {
+    var fr = new FileReader();
+    fr.onload = function () { res(String(fr.result).split(',')[1] || ''); };
+    fr.onerror = rej;
+    fr.readAsDataURL(blob);
+  });
+}
+
+// Hearing him, and being seen to hear him. A microphone that shows nothing is
+// indistinguishable from a dead one, so the analyser drives the button rather
+// than a decorative loop: if it does not move, he is not being recorded.
+var audioCtx = null, analyser = null, meterRAF = 0, meterSrc = null, levelHist = [];
+var silentSince = 0, warnedSilent = false;
+
+// Auto-send, from his own voice note on 4 November: "every time I stop talking I
+// have to hit the microphone button to send it... when I pause for more than one
+// or two seconds, pick it up and drop it" - but also "I don't want to be
+// interrupted while I'm still thinking". Both are honoured by counting down in
+// public: the turn ends itself after a real pause, and any sound before the
+// countdown finishes cancels it, so thinking out loud keeps the floor.
+var AUTO = { enabled: true, quietMs: 1500, sendAtMs: 2600, minMs: 700, maxMs: 45000, started: 0, lastSound: 0, spoken: false };
+var bars = Array.prototype.slice.call(document.querySelectorAll('#lvlbars span'));
+var barsWrap = document.getElementById('lvlbars');
+
+function autoHintReset() {
+  if (hintEl.textContent.indexOf('sending in') === 0) hintEl.textContent = 'tap again to send';
+}
+
+function meterStart(stream) {
+  meterStop();
+  try {
+    var Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return;
+    audioCtx = new Ctor();
+    meterSrc = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.5;
+    meterSrc.connect(analyser);
+    var buf = new Uint8Array(analyser.fftSize);
+    var smooth = 0;
+    barsWrap.classList.add('on');
+    (function loop() {
+      analyser.getByteTimeDomainData(buf);
+      var sum = 0;
+      for (var i = 0; i < buf.length; i++) {
+        var v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      var rms = Math.sqrt(sum / buf.length);
+      // Linear RMS barely moves for a voice: typical speech lands around 0.05,
+      // which a straight multiplier turns into a permanently half-lit button.
+      // Decibels are how loudness is actually heard: -55 dB is the floor, -20 dB
+      // is a strong voice, and everything between gets the full range.
+      var db = 20 * Math.log(rms + 1e-6) / Math.LN10;
+      var lvl = Math.max(0, Math.min(1, (db + 62) / 52));
+      // A silent microphone has to say so. Two seconds of nothing while it is
+      // supposedly recording earns one plain line, said once, not a nag.
+      if (lvl < 0.12) {
+        if (!silentSince) silentSince = Date.now();
+        else if (!warnedSilent && Date.now() - silentSince > 2000) {
+          warnedSilent = true;
+          hintEl.textContent = 'I am getting no sound — check the mic is not muted';
+        }
+      } else {
+        silentSince = 0;
+      }
+
+      if (AUTO.enabled && live) {
+        var now = Date.now();
+        if (lvl > 0.2) { AUTO.lastSound = now; AUTO.spoken = true; autoHintReset(); }
+        if (AUTO.spoken) {
+          var quietFor = now - AUTO.lastSound;
+          if (quietFor > AUTO.quietMs && quietFor <= AUTO.sendAtMs) {
+            hintEl.textContent = 'sending in ' + Math.max(1, Math.ceil((AUTO.sendAtMs - quietFor) / 1000)) + '… talk to keep going';
+          }
+          if (quietFor > AUTO.sendAtMs || now - AUTO.started > AUTO.maxMs) {
+            var wasSilent = hintEl.textContent.indexOf('sending in') === 0;
+            AUTO.enabled = true; AUTO.spoken = false;
+            if (!wasSilent) hintEl.textContent = 'that was a long one — sending';
+            stop();
+          }
+        }
+      }
+      smooth = smooth * 0.7 + lvl * 0.3;
+      mic.style.setProperty('--lvl', smooth.toFixed(3));
+      levelHist.push(smooth);
+      if (levelHist.length > 6) levelHist.shift();
+      for (var b = 0; b < bars.length; b++) {
+        var v2 = levelHist[levelHist.length - 1 - b] || 0;
+        bars[b].style.height = (4 + Math.min(1, v2 * 1.15) * 19).toFixed(1) + 'px';
+        bars[b].style.opacity = (0.45 + Math.min(1, v2 * 1.15) * 0.55).toFixed(2);
+      }
+      meterRAF = requestAnimationFrame(loop);
+    })();
+  } catch (e) { /* no meter is not a reason to lose the recording */ }
+}
+
+function meterStop() {
+  if (meterRAF) { cancelAnimationFrame(meterRAF); meterRAF = 0; }
+  try { if (meterSrc) meterSrc.disconnect(); } catch (e) {}
+  try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch (e) {}
+  audioCtx = null; analyser = null; meterSrc = null;
+  levelHist = [];
+  silentSince = 0; warnedSilent = false;
+  mic.style.setProperty('--lvl', '0');
+  barsWrap.classList.remove('on');
+  for (var b = 0; b < bars.length; b++) bars[b].style.height = '4px';
+}
+
+async function start() {
+  if (busy) {
+    // Silence here read as a broken button, so say why it is not answering.
+    hintEl.textContent = 'one moment — still working on the last one';
+    mic.classList.remove('reject');
+    void mic.offsetWidth;
+    mic.classList.add('reject');
+    setTimeout(function () { mic.classList.remove('reject'); }, 320);
+    return;
+  }
+  // Act one: acknowledge the touch immediately. Asking the browser for the mic
+  // can take a second or produce a permission prompt, and in that gap the old
+  // page looked like it had not registered the press at all.
+  mic.classList.add('arming');
+  stateEl.textContent = 'opening the mic…';
+  hintEl.textContent = 'allow the microphone if the browser asks';
+  try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) {}
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mic.classList.remove('arming');
+    chunks = [];
+    var type = '';
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) type = 'audio/webm;codecs=opus';
+    else if (MediaRecorder.isTypeSupported('audio/mp4')) type = 'audio/mp4';
+    recorder = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
+    recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = function () {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      var blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      if (blob.size > 1200) {
+        blobToB64(blob).then(function (b64) {
+          return hear(b64, blob.type || 'audio/webm').then(function (text) {
+            if (text) send({ text: text });
+            else send({ audio_base64: b64, mime: blob.type || 'audio/webm' });
+          });
+        }).catch(function () { stateEl.textContent = 'could not read the recording'; });
+      } else {
+        hintEl.textContent = 'too short — hold on a moment longer';
+        stateEl.textContent = 'tap the mic';
+      }
+    };
+    recorder.start();
+    live = true;
+    mic.classList.add('live');
+    stateEl.textContent = 'listening';
+    hintEl.textContent = 'tap again to send';
+    AUTO.started = Date.now(); AUTO.lastSound = Date.now(); AUTO.spoken = false;
+    meterStart(stream);
+  } catch (e) {
+    var n = (e && e.name) || 'Error';
+    live = false;
+    mic.classList.remove('live');
+    mic.classList.remove('arming');
+    meterStop();
+    stateEl.textContent = 'mic unavailable';
+    var why = {
+      NotAllowedError: 'You (or the browser) said no to the microphone. In Safari: tap the aA icon, Website Settings, set Microphone to Allow, then reload.',
+      PermissionDeniedError: 'The microphone is blocked for this site. Allow it in the browser settings, then reload.',
+      NotFoundError: 'No microphone was found.',
+      NotReadableError: 'Another app is holding the microphone.',
+      SecurityError: 'The browser refused for security reasons — this usually means the page is inside a frame or not on HTTPS.'
+    }[n] || ('The browser said: ' + n + '.');
+    hintEl.textContent = why;
+  }
+}
+
+function stop() {
+  if (recorder && live) {
+    live = false;
+    mic.classList.remove('live');
+    meterStop();
+    try { recorder.stop(); } catch (e) {}
+  }
+}
+
+mic.addEventListener('click', function () {
+  stopPlayback();
+  if (live) stop(); else start();
+});
+
+var textform = document.getElementById('textform');
+textform.addEventListener('submit', function (e) {
+  e.preventDefault();
+  var t = typed.value.trim();
+  if (!t) return;
+  if (busy) {
+    // One turn at a time. Two overlapping turns is how the clock at the top
+    // ended up belonging to nobody. The words stay in the field, unsent.
+    hintEl.textContent = 'one moment — still working on the last one';
+    return;
+  }
+  typed.value = '';
+  send({ text: t });
+});
+
+window.addEventListener('beforeunload', stop);
+
+// ---- the voice switcher ----------------------------------------------------
+(function () {
+  var chip = document.getElementById('voicechip');
+  var nameEl = document.getElementById('voicename');
+  var sheet = document.getElementById('voicesheet');
+  var body = document.getElementById('vbody');
+  var all = document.getElementById('voiceall');
+  if (!chip || !sheet || !body) return;
+
+  window.labelVoice = function () {
+    nameEl.textContent = VOICE ? VOICE.voice : (CANON ? CANON.voice : 'EI voice');
+    chip.setAttribute('aria-label', VOICE
+      ? 'voice ' + VOICE.voice + ' on the ' + VOICE.gate + ' gate, chosen on this device'
+      : 'the locked Effectra voice' + (CANON ? ': ' + CANON.voice : ''));
+  };
+  window.labelVoice();
+
+  function draw() {
+    body.innerHTML = '';
+    var back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'vbtn' + (VOICE ? '' : ' on');
+    back.style.marginBottom = '4px';
+    back.textContent = 'the Effectra voice' + (CANON ? ' \u00b7 ' + CANON.voice : '');
+    back.addEventListener('click', function () {
+      VOICE = null;
+      try { localStorage.removeItem('ei_voice'); } catch (e) {}
+      labelVoice(); draw(); sheet.classList.remove('open');
+      stateEl.textContent = 'back on the Effectra voice' + (CANON ? ' \u00b7 ' + CANON.voice : '');
+    });
+    body.appendChild(back);
+
+    ['openai', 'gemini'].forEach(function (gate) {
+      var head = document.createElement('div');
+      head.className = 'gname';
+      head.textContent = gate === 'gemini' ? 'Gemini gate' : 'OpenAI gate';
+      body.appendChild(head);
+      var grid = document.createElement('div');
+      grid.className = 'vgrid';
+      SPEAK_GATES[gate].forEach(function (v) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'vbtn' + (VOICE && VOICE.gate === gate && VOICE.voice === v ? ' on' : '');
+        b.textContent = v + (CANON && CANON.gate === gate && CANON.voice === v ? ' \u00b7 EI' : '');
+        b.addEventListener('click', function () {
+          VOICE = { gate: gate, voice: v };
+          try { localStorage.setItem('ei_voice', JSON.stringify(VOICE)); } catch (e) {}
+          labelVoice(); draw(); sheet.classList.remove('open');
+          hintEl.textContent = 'this device now speaks in ' + v + ' \u00b7 tap the mic';
+        });
+        grid.appendChild(b);
+      });
+      body.appendChild(grid);
+    });
+  }
+
+  chip.addEventListener('click', function () {
+    var open = sheet.classList.toggle('open');
+    if (open) draw();
+  });
+  document.getElementById('vclose').addEventListener('click', function () { sheet.classList.remove('open'); });
+  if (all) all.setAttribute('href', AUDITION_PAGE);
+})();
+</script>
+</body>
+</html>
