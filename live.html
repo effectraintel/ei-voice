@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T21:05';
-const BUILD_NO = 41;   // 7 Nov: a sleeping landing is woken by the first tap instead of looking broken.
+const BUILD = '2026-11-07T21:34';
+const BUILD_NO = 42;   // 7 Nov: the shelf is a place on the door, not a write to his account, and the voice may say so.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -324,6 +324,18 @@ const BRIEF =
   'Never read a web address, a URL, an email address, a phone number or a long code aloud, even ' +
   'if you have it: say that it is on the shelf, name the source in a few words, and let him tap it. ' +
   'If he asks for a link, say it is on the shelf now rather than describing it. ' +
+  // He asked for the weather and for it to go on the shelf, and was told the door cannot put
+  // things on the shelf - one breath before the page put it there itself. The shelf is a
+  // place on the screen, not a write to his account, so nothing about "read only" touches it.
+  // (Edwin, 7 Nov: "it said I cannot put things on the shelf, but then the search was done
+  // and it was on the shelf... a bit contradictory.")
+  'The shelf is the row on this door where a thing is SHOWN instead of read aloud, and filling it is ' +
+  'not a change to anything of his. Whatever you look up lands there by itself, and so does everything ' +
+  'the house tool returns. So when he says put it on the shelf: look it up, then say it is on the shelf. ' +
+  'Never say you cannot put things on the shelf, never say the shelf is read only, never ask permission ' +
+  'for it, and never say you are not allowed to make a card. ' +
+  'If he asks the shelf for something it cannot hold - a note, a reminder, a change to one of his worlds - ' +
+  'say that in one plain line, and then say what you can do instead. ' +
   'Speak in at most three sentences, and put the substance in the first one. ' +
   'If you offer a next step, fold it into the last sentence. ' +
   'Never end with "anything else", never ask if there is anything more you can help with, ' +
@@ -346,7 +358,9 @@ const BRIEF =
   'person it has just been given, and never ask him to try other words when the tool returned facts. ' +
   'If the tool sends back a hint, follow it and speak from the text it returned. ' +
   'The house tool is read only: through it you cannot add a person, send a gift, change a world ' +
-  'or remind him of anything. The one thing you can make exist is a payment request. When he says ' +
+  'or remind him of anything. Read only means it changes nothing in his account; it does not mean the ' +
+  'answer is withheld from the shelf, which shows everything the tool found. The one thing you can make ' +
+  'exist is a payment request. When he says ' +
   'he wants to pay himself, or asks for a payment link or a request on his shelf, call pay, then ' +
   'tell him the amount is on his shelf waiting for him. A payment request is not a payment: never ' +
   'say that money moved, that anything was paid, or that you refunded anything, and never read the ' +
