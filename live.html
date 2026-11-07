@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 66;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 67;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1652,7 +1652,29 @@ async function handleShareCall(call) {
     shareQuery = query;
 
     if (r && r.ok && r.found === 'choice' && (r.candidates || []).length) {
+      // "It's just the one by Michael Bublé" was answered three times on 8 Nov while the door kept
+      // offering a Blake Shelton duet that merely features him. An artist he names is a constraint.
+      const hint = String(query).match(/\b(?:by|from)\s+(.+)$/i);
+      if (hint) {
+        const want = shareTokens(hint[1]);
+        const kept = r.candidates.filter((c) => {
+          const has = shareTokens(String(c.artist || '') + ' ' + String(c.title || ''));
+          return want.every((w) => has.includes(w));
+        });
+        if (kept.length) {
+          railNote('share · artist kept · ' + kept.length + ' of ' + r.candidates.length);
+          r.candidates = kept;
+        } else {
+          railNote('share · no recording by ' + hint[1] + ' · asking');
+        }
+      }
       shareChoices = r.candidates;
+      if (!shareChoices.length) {
+        result = 'Nothing answered to that name on that artist. Ask who sings it, or for a store link, one '
+          + 'short question. Nothing has been made.';
+        looked = 'sharing · no match for ' + String(query);
+        return;
+      }
       shareCoverAsked = false; shareAddrOk = false;
       const few = shareChoices.slice(0, 3);
       result = 'More than one song answers to that, so nothing has been made yet: '
@@ -1706,7 +1728,10 @@ async function handleShareCall(call) {
 // A missing address is a question, not a guess, and an absent message is only treated as "no message"
 // when he has actually said so (the model passes an empty string, not nothing).
 let shareCardTarget = null;
-let shareAddrTries = 0;      // how many times an address came in unusable before the sheet was opened      // the card he last got, or the one he named
+let shareAddrTries = 0;      // how many times an address came in unusable before the sheet was opened
+// What he has actually told this door about the share in progress. Kept here because the model has lost
+// the message, the card and the address on three separate runs (8 Nov 2026).
+let shareDraft = null;
 
 function shelfFind(words) {
   const q = shareTokens(words);
@@ -1764,7 +1789,6 @@ async function handleShareToCall(call) {
     if (!s || !s.token) throw new Error('the door session has gone');
     const a = call.args || {};
 
-    // which card
     let card = a.which ? shelfFind(a.which) : null;
     if (!card) card = shareCardTarget || shelf.find(c => c.url) || null;
     if (!card) {
@@ -1773,230 +1797,184 @@ async function handleShareToCall(call) {
       return;
     }
     shareCardTarget = card;
-    if (!a.to) shareAddrTries = 0;
 
-    const to = normaliseAddress(a.to);
-    let channel = String(a.channel || '').toLowerCase();
-    const hasMessage = typeof a.message === 'string';
+    // The door keeps the draft, not the model (8 Nov 2026). Twice now the model lost a message it had
+    // already been given and asked for it again, and once it lost the song it had just wrapped. So what
+    // he has said lives here, and a call that omits a field means "unchanged", not "empty".
+    if (!shareDraft || shareDraft.card !== card) {
+      shareDraft = { card, to: '', channel: '', to_name: '', message: '', cover: null, readBack: '' };
+    }
+    if (a.to) shareDraft.to = normaliseAddress(String(a.to));
+    if (a.channel) shareDraft.channel = String(a.channel).toLowerCase();
+    if (typeof a.to_name === 'string' && a.to_name.trim()) shareDraft.to_name = a.to_name.trim();
+    if (typeof a.message === 'string' && a.message.trim()) shareDraft.message = a.message.trim();
+    if (a.no_message === true) shareDraft.message = '';
+    if (typeof a.cover === 'boolean') shareDraft.cover = a.cover;
 
-    if (!to) {
-      result = 'Ask who it is for, in one short question, and say you will need their email address or '
-        + 'their WhatsApp number. Stop there. Nothing is sent until he answers.';
+    const to = shareDraft.to;
+    const hasAddress = !!to;
+    const looksEmailish = to.includes('@');
+
+    // 1. who, and how to reach them
+    if (!hasAddress) {
+      shareAddrTries++;
+      if (shareAddrTries >= 2) {
+        openShareSheet(card);
+        result = 'He has not been able to give a usable address by voice. The typing sheet is open now: '
+          + 'ask him to type or paste the address and the message there, and say that nothing has been sent.';
+        looked = 'sharing · typed instead';
+        return;
+      }
+      result = 'Ask who it is for, in one short question, and say you will need their email address or their '
+        + 'WhatsApp number. Stop there. Nothing is sent until he answers.';
       looked = 'sharing · who to';
       return;
     }
-    if (!channel) {
-      if (to.includes('@')) channel = 'email';
-      else if (to.replace(/[^0-9]/g, '').length >= 9) channel = 'whatsapp';
+    if (!shareDraft.channel) {
+      if (looksEmailish) shareDraft.channel = 'email';
+      else if (to.replace(/[^0-9]/g, '').length >= 9) shareDraft.channel = 'whatsapp';
     }
-    // An address has to be an address. "effectra.co.za" is a domain with no one before the @, and
-    // "etwin fun sale" is not an address at all: the door does not complete either of them by guessing.
-    if (channel === 'email' && !looksAddress(to)) {
-      shareAddrTries += 1;
-      const incomplete = /@/.test(to) || /\./.test(to);
-      if (shareAddrTries >= 2 || !spokeWholeAddress(a.to)) {
-        openShareSheet(card);
-        result = 'Do not guess the address. A typing sheet is open on the door: say that he can type or '
-          + 'paste the email address and the message there, and send it from the sheet. Nothing has been sent.';
-        looked = 'sharing · typing the address';
-        railNote('share · address not understood · sheet opened');
-        return;
-      }
-      result = 'That did not arrive as a whole address: you have "' + (to || 'nothing') + '". Read it back to '
-        + 'him and ask him to say it again in one go, or to type it in the sheet. Nothing is sent yet.';
-      looked = 'sharing · address unclear';
-      return;
-    }
-    if (!channel) {
-      result = 'He named a person but not how to reach them. Ask for their email address or their '
-        + 'WhatsApp number, one short question, and stop.';
+    if (!shareDraft.channel) {
+      result = 'He named a person but not how to reach them. Ask for their email address or their WhatsApp '
+        + 'number, one short question, and stop.';
       looked = 'sharing · which way';
       return;
     }
-    if (!hasMessage || (String(a.message || '').trim() === '' && a.no_message !== true)) {
-      shareNoMessageTurn = userTurns;
-      result = 'Ask what he wants it to say, one short question, and say he can also send it with no '
-        + 'message. Then call this again with what he says. Nothing is sent yet.';
-      looked = 'sharing · what to say';
-      return;
-    }
-    // Edwin, 8 Nov 00:05: after the words, the picture. "we ask do you want to include a cover image to
-    // accompany the song to Edwin? (or whoever it is sent to, and if we don't have a name please ask
-    // politely)". So the question names the person when we have a name, and asks for one when we do not.
-    //
-    // It is asked HERE, in the door's own state, because on 8 Nov 22:00 the model answered for him: it
-    // called send with cover already false, the guard saw a boolean and let it through, and he had to ask
-    // for the picture himself afterwards. The door now owns that turn. A cover value that arrives before
-    // the question was asked is discarded, whatever the model thought it knew.
-    if (!shareCoverAsked || userTurns <= shareCoverAskedTurn) {
-      shareCoverAsked = true;
-      shareCoverAskedTurn = userTurns;
-      const who = String(a.to_name || '').trim();
-      result = who
-        ? 'Ask if he wants a cover image drawn to accompany it to ' + who + ', in one short question. '
-          + 'Nothing is sent until he answers: if yes, call this again with cover true; if no, with cover false.'
-        : 'You do not have the name of the person it is going to. Ask politely, in one short question, '
-          + 'who it is for by name, so the picture and the greeting can carry it. Nothing is sent yet.';
-      looked = 'sharing · a cover?';
-      return;
-    }
-    if (typeof a.cover !== 'boolean' || userTurns <= shareCoverAskedTurn) {
-      const who = String(a.to_name || '').trim();
-      result = who
-        ? 'Ask if he wants a cover image drawn to accompany it to ' + who + ', in one short question. '
-          + 'Nothing is sent until he answers: if yes, call this again with cover true; if no, with cover false.'
-        : 'You do not have the name of the person it is going to. Ask politely, in one short question, '
-          + 'who it is for by name, so the picture and the greeting can carry it. Nothing is sent yet.';
-      looked = 'sharing · a cover?';
-      return;
-    }
-    if (a.cover === true && !String(a.to_name || '').trim()) {
-      result = 'Ask politely, in one short question, what the name of the person is, so the picture and the '
-        + 'greeting can carry it. Then call this again with that name. Nothing is sent yet.';
-      looked = 'sharing · who by name';
-      return;
-    }
-    // Edwin, 8 Nov 22:00: the door put a dot in his own address - edwin.vanzyl@ where the real one is
-    // edwinvanzyl@ - and the mail went out wrong. An address he has never used from here is read back in
-    // full, and nothing is sent until he has heard it and agreed. Once an address has carried a send, it
-    // is known and is not asked about again. (Edwin: "it has to prompt me to confirm the email is spelled
-    // correctly while we don't have that contact set up.")
-    if (channel === 'email' && !shareAddrOk && a.confirmed !== true) {
-      // He heard one address and gave another: that is a correction, and the wrong one stops counting as a
-      // known address so it can never be used silently again.
-      if (shareAddrReadBack && shareAddrReadBack !== to) {
-        try {
-          const w = await railPost('shelfShare', { action: 'wrong', to: shareAddrReadBack });
-          railNote('share · address corrected · ' + ((w && w.marked) || 0) + ' record(s) marked wrong-address');
-        } catch { /* the correction matters more than the bookkeeping */ }
-        shareAddrReadBack = '';
+
+    // 2. an address he has never sent to is read back before anything else happens, and a read-back in the
+    // same breath as the address is not an answer.
+    if (shareDraft.channel === 'email' && !looksAddress(to)) {
+      shareAddrTries++;
+      if (shareAddrTries >= 2) {
+        openShareSheet(card);
+        result = 'The address did not come through. The typing sheet is open: ask him to type or paste it there. '
+          + 'Nothing has been sent.';
+        looked = 'sharing · typed instead';
+        return;
       }
-      if (shareAddrReadBack === to && a.confirmed === true && userTurns > shareAddrAskedTurn) {
+      result = 'Read nothing back yet: what came through does not look like an address. Ask him to say it again '
+        + 'slowly, or to spell it, saying each letter. Nothing is sent.';
+      looked = 'sharing · address unclear';
+      return;
+    }
+    if (shareDraft.channel === 'email' && !shareAddrOk) {
+      if (a.confirmed === true && shareDraft.readBack && userTurns > shareAddrAskedTurn) {
         shareAddrOk = true;
+        railNote('share · address confirmed · ' + shareDraft.readBack.replace(/^(.{2})[^@]*(@.*)$/, '$1***$2'));
       } else {
-        let known = false;
-        try {
-          const k = await railPost('shelfShare', { action: 'known', to });
-          known = !!(k && k.known);
-          if (k && k.to_masked) railNote('share · address ' + (known ? 'known' : 'new') + ' · ' + k.to_masked);
-        } catch { /* if the rail cannot answer, asking is still the safe side */ }
-        result = 'Read the address back to him exactly as it is and ask if it is right, in one short question: '
-          + to + '. '
-          + (known ? 'This one has carried a send before, so you can tell him that - and still get a yes. ' : '')
-          + 'Nothing has been sent. Only when he says yes, call this again with confirmed true and the same address. '
-          + 'If he corrects it, take his correction exactly as he says it, and it will be read back once more.';
-        shareAddrReadBack = to;
+        if (shareDraft.readBack && shareDraft.readBack !== to) {
+          try { await railPost('shelfShare', { action: 'wrong', to: shareDraft.readBack }); } catch (e) {}
+          railNote('share · address corrected');
+        }
+        shareDraft.readBack = to;
         shareAddrAskedTurn = userTurns;
-        looked = 'sharing · is that address right?';
+        result = 'Read the address back to him in full, exactly as written here: ' + to
+          + ' . Then ask if that is right. Do not send anything yet: when he says yes, call this again with '
+          + 'confirmed true. If he corrects it, take the new address and call again with that instead.';
+        looked = 'sharing · reading the address back';
         return;
       }
     }
-    if (channel === 'email' && a.confirmed === true && userTurns > shareAddrAskedTurn) shareAddrOk = true;
 
-    const r = await withTimeout(railPost('shelfShare', {
-      action: 'send', card: cardPayload(card), to, channel, message: String(a.message || ''),
-      to_name: String(a.to_name || ''), cover: a.cover === true, confirmed: a.confirmed === true,
-    }), 120000, 'the sending rail did not answer in time');
-    shareCoverAsked = false;
-    shareAddrOk = false;
-    shareAddrReadBack = '';
+    // 3. the words
+    if (!shareDraft.message && a.no_message !== true) {
+      shareNoMessageTurn = userTurns;
+      result = 'Ask what he wants it to say, one short question, and say he can also send it with no message. '
+        + 'Then call this again with what he says, or with no_message true. Nothing is sent yet.';
+      looked = 'sharing · what to say';
+      return;
+    }
+
+    // 4. the cover, asked once per share, by the door
+    if (!shareCoverAsked) {
+      shareCoverAsked = true;
+      shareCoverAskedTurn = userTurns;
+      const who = shareDraft.to_name;
+      result = (who
+        ? 'Ask, as a straight yes or no: would he like a cover image drawn to go with this, to ' + who + '? '
+        : 'You still do not have a name for the person it is going to. Ask politely who it is for, by name, '
+          + 'and whether he would like a cover image drawn with it. ')
+        + 'Nothing is sent until he answers: yes means call this again with cover true, no with cover false.';
+      looked = 'sharing · a cover?';
+      return;
+    }
+    if (typeof a.cover === 'boolean' && userTurns <= shareCoverAskedTurn) {
+      shareDraft.cover = null;      // answered in the same breath as the question: not an answer
+    }
+    const cover = shareDraft.cover;
+    if (cover === null) {
+      result = 'The cover question is still unanswered. Ask it once, plainly: cover image, yes or no. '
+        + 'Nothing is sent until he answers.';
+      looked = 'sharing · a cover?';
+      return;
+    }
+    if (cover === true && !shareDraft.to_name) {
+      result = 'Ask politely who this is for, by name, so the picture and the greeting can carry it. '
+        + 'Nothing has been sent.';
+      looked = 'sharing · a name';
+      return;
+    }
+
+    // 5. send
+    const r = await railPost('shelfShare', {
+      action: 'send',
+      card: {
+        title: card.title || '', sub: card.sub || '', url: card.url || '',
+        code: card.code || '', song_id: card.song_id || '',
+      },
+      to: shareDraft.to,
+      channel: shareDraft.channel,
+      to_name: shareDraft.to_name || '',
+      message: shareDraft.message,
+      no_message: a.no_message === true,
+      cover: cover === true,
+    });
 
     if (r && r.ok && r.channel === 'email') {
-      if (r.cover_url) {
-        // The picture he paid a question for should be visible, not described.
-        mergeCard({ kind: 'cover', title: (card.title || 'the cover'), sub: 'the cover that went with it', url: r.link || card.url, img: r.cover_url });
-      }
-      result = 'It is on its way by email to ' + (r.to_masked || 'them') + (r.to_name ? ' (' + r.to_name + ')' : '')
-        + ', sent under his own name' + (r.cover_url ? ' with the cover drawn into it' : '')
-        + ', and the mail service gave it id ' + (r.message_id || 'unknown') + '. Say in one line that it has gone'
-        + (r.cover_url ? ', and that the picture is on the shelf to look at' : '') + '. Do not read the address aloud.';
-      looked = 'sharing · sent by email';
       shareSentThisTurn = true;
-      lastShare = { title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' };
+      lastShare = {
+        title: card.title || '', to_name: shareDraft.to_name || '', to_masked: r.to_masked || '',
+        channel: 'email', message_id: r.message_id || '', cover: !!r.cover_url, at: new Date().toISOString(),
+      };
+      if (r.cover_url) mergeCard({ kind: 'cover', title: 'The cover for ' + (card.title || 'the song'), sub: 'drawn from the song and your words', url: r.cover_url, code: 'cover-' + (r.message_id || Date.now()) });
       railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || '') + (r.cover_url ? ' · with a cover' : ''));
-    } else if (r && r.ok && r.need === 'tap' && r.wa_link) {
-      mergeCard({ kind: 'send', title: 'WhatsApp to ' + (r.to_masked || 'them'), sub: 'tap to send · nothing has left yet', url: r.wa_link });
-      result = 'Written and ready: it is on the shelf as a WhatsApp message, with the link and his words in it. '
-        + 'Say that it is ready and that he taps it to send, and that nothing has left yet. Do not read the link.';
-      looked = 'sharing · ready to tap';
-      railNote('shared · whatsapp prepared · ' + (card.title || ''));
-    } else if (r && r.need === 'cover') {
-      result = 'The picture did not come through. Ask him, in one short question, whether to send it without '
-        + 'one or to try the picture again. Nothing has been sent.';
-      looked = 'sharing · cover failed';
-    } else if (r && r.need === 'address') {
-      result = 'That was not a usable email address. Ask for their email address again, one short question, and stop.';
-      looked = 'sharing · address needed';
-    } else if (r && r.need === 'number') {
-      result = 'That was not a usable number. Ask for their WhatsApp number again, one short question, and stop.';
-      looked = 'sharing · number needed';
-    } else {
-      result = 'It did not send: ' + ((r && (r.error || r.ask)) || 'no answer') + '. Nothing has left. Say that in one line.';
-      looked = 'sharing · did not send';
+      result = 'Sent by email to ' + (shareDraft.to_name ? shareDraft.to_name : 'them') + ' (' + (r.to_masked || 'the address')
+        + '), message id ' + (r.message_id || '') + (r.cover_url ? ', with the cover drawn into it' : ', no cover')
+        + '. Say it in one line: it has gone, and the cover is on the shelf if he wants to look. Do not read the address out.';
+      looked = 'sharing · sent';
+      shareDraft = null; shareCoverAsked = false; shareAddrOk = false; shareAddrTries = 0;
+      return;
     }
+    if (r && r.ok && r.need === 'tap' && r.wa_link) {
+      shareSentThisTurn = false;
+      lastShare = { title: card.title || '', to_name: shareDraft.to_name || '', to_masked: r.to_masked || '', channel: 'whatsapp', message_id: '', cover: false, at: new Date().toISOString() };
+      mergeCard({ kind: 'send', title: 'WhatsApp to ' + (shareDraft.to_name || r.to_masked || 'them'), sub: 'tap to send · written and ready', url: r.wa_link, code: 'wa-' + Date.now() });
+      railNote('shared · whatsapp prepared · ' + (card.title || ''));
+      result = 'The WhatsApp message is written and on the shelf as a link he taps to send; nothing has left yet. '
+        + (r.cover_note ? 'Say that the cover cannot ride on WhatsApp and goes with the email instead. ' : '')
+        + 'Say it plainly and do not claim it was delivered.';
+      looked = 'sharing · whatsapp ready';
+      shareDraft = null; shareCoverAsked = false; shareAddrOk = false; shareAddrTries = 0;
+      return;
+    }
+    if (r && r.need === 'cover') {
+      result = 'The cover did not come through. Ask whether to send it without one, or try the picture again. '
+        + 'Nothing has been sent.';
+      looked = 'sharing · cover failed';
+      return;
+    }
+    if (r && r.need) {
+      result = String(r.ask || 'Something is still missing. Ask him for it, one short question.') + ' Nothing has been sent.';
+      looked = 'sharing · still needs ' + String(r.need);
+      return;
+    }
+    result = 'The send did not go through: ' + String((r && r.error) || 'no answer') + '. Say plainly that '
+      + 'nothing has left, in one line.';
+    looked = 'sharing · not sent';
   } catch (e) {
-    result = 'The sending rail did not answer: ' + String((e && e.message) || e) + '. Nothing has left. Say that in one line.';
+    result = 'The sharing rail did not answer: ' + String((e && e.message) || e) + '. Nothing was sent. Say that in one line.';
     looked = 'sharing · no answer';
   } finally {
-    try {
-      ws.send(JSON.stringify({
-        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
-      }));
-    } catch (e) { /* the socket is already gone */ }
-  }
-}
-
-async function handleWrapCall(call) {
-  const s = doorSession();
-  let result = '';
-  try {
-    if (!s || !s.token) throw new Error('the door session has gone');
-    const url = String((call.args || {}).url || '').trim();
-    if (!/^https?:\/\//i.test(url)) {
-      result = 'No link reached me. Ask him to paste the store link, or to read it out whole, '
-        + 'and say plainly that nothing has been wrapped yet.';
-      looked = 'store · no link heard';
-      railNote('link rail · nothing wrapped · no url');
-    } else {
-      const r = await withTimeout(gatePost('mtShareWrap', { url }), 30000,
-        'the link rail did not answer in time');
-      if (r && r.ok && r.universal_url) {
-        mergeCard({
-          kind: 'store',
-          title: r.title || 'a song',
-          sub: [r.artist, r.platforms && r.platforms.length ? r.platforms.map(p => String(p.platform).replace(/_/g, ' ')).join(', ') : ''].filter(Boolean).join(' · '),
-          url: r.universal_url,
-          code: r.code,
-          platforms: (r.platforms || []).map(p => p.platform).join(', '),
-        });
-        const plats = (r.platforms || []).map(p => String(p.platform).replace(/_/g, ' '));
-        result = 'Wrapped, and it is on his shelf now: "' + (r.title || 'the song') + '"'
-          + (r.artist ? ' by ' + r.artist : '')
-          + ' as one link, ' + r.universal_url + '. It opens on '
-          + (plats.length ? plats.join(', ') : 'the stores MTShare matched')
-          + (r.withheld_as_search && r.withheld_as_search.length ? '; ' + r.withheld_as_search.join(', ') + ' came back only as a search, so do not count it' : '')
-          + '. Say the title once and that it is on the shelf. Do not read the url out loud.';
-        looked = 'store · ' + (r.title || 'a link');
-        railNote('link rail · wrapped · ' + (r.code || '') + ' · ' + plats.length + ' platform' + (plats.length === 1 ? '' : 's'));
-      } else {
-        const why = (r && (r.error || r.note)) || 'no answer';
-        result = 'The link rail would not wrap that: ' + why + '. Nothing was put on his shelf. '
-          + 'Tell him plainly, in one line, and ask for the store link again rather than guessing at it.';
-        looked = 'store · refused';
-        railNote('link rail · refused · ' + String(why).slice(0, 60));
-      }
-    }
-  } catch (e) {
-    result = 'The link rail did not answer: ' + String((e && e.message) || e) + '. Nothing was wrapped and '
-      + 'nothing is on his shelf. Say that in one line.';
-    looked = 'store · no answer';
-  } finally {
-    if (result && lastShare) {
-      result += ' (What this session has already delivered: "' + lastShare.title + '" to ' + lastShare.to_masked
-        + (lastShare.cover ? ' with a cover' : ' without one') + ', at '
-        + new Date(lastShare.at).toTimeString().slice(0, 5) + '. If he wants something added or changed, that is '
-        + 'the message being amended, not a new mystery.)';
-    }
     try {
       ws.send(JSON.stringify({
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
