@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T22:36';
-const BUILD_NO = 57;   // 7 Nov: clearing moves things to the garage, where he can ask for them or bin them.
+const BUILD = '2026-11-07T23:12';
+const BUILD_NO = 58;   // 7 Nov: 'I want to share a song' finds it in MTShare, then the shelf, then a store.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -327,6 +327,20 @@ const DECLS = [{
                   url: { type: 'STRING', description: 'the store link he gave, exactly as he gave it' },
                 },
                 required: ['url'],
+              },
+            },
+            {
+              // Edwin, 7 Nov 2026: "all that I want to say is: I want to share a song. You can then
+              // prompt me. For the song name." He names it, and the rail looks in three places in his
+              // order before answering: MTShare's own links, then his own songs, then a store.
+              name: 'share',
+              description: 'Find a song by name and get the right link for sharing it, then put it on his shelf. Use when he says he wants to share a song, or asks for a link to a song. Call it with whatever he said as the query. If he has not named a song yet, do NOT call it: ask him which song, one short question, and stop.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  query: { type: 'STRING', description: 'the song he named, in his words, plus the artist if he gave one' },
+                },
+                required: ['query'],
               },
             },
             ];
@@ -1451,6 +1465,68 @@ async function handleHouseCall(call) {
 // The MTShare rail, spoken to. He gives a link from one store; the rail answers with one
 // universal link that opens wherever the listener is, and a card lands on his shelf.
 // Nothing here pays, posts or shares: it makes the link and puts it where he can see it.
+// "I want to share a song" (build 58, 7 Nov 2026). He names it; the rail finds it before anyone
+// asks for a link. Three places, in his order: MTShare's own links, then his own songs in the
+// vault, then a catalogue match that gets wrapped. Which one answered is said out loud, because a
+// reused universal link, a vault listening and a fresh wrap are three different promises.
+async function handleShareCall(call) {
+  const s = doorSession();
+  let result = '';
+  try {
+    if (!s || !s.token) throw new Error('the door session has gone');
+    const query = String((call.args || {}).query || '').trim();
+    if (!query) {
+      result = 'He has not named a song yet. Ask him which song, in one short question, and stop '
+        + 'there: do not guess at a title and do not call this tool again until he answers.';
+      looked = 'sharing · which song';
+    } else {
+      const r = await withTimeout(gatePost('songShare', { action: 'find', query }), 45000,
+        'the sharing rail did not answer in time');
+      if (r && r.ok && r.url) {
+        mergeCard({
+          kind: r.found === 'shelf' ? 'song' : 'store',
+          title: r.title || 'a song',
+          sub: r.found === 'shelf'
+            ? 'made here · a day of listening'
+            : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
+          url: r.url,
+          code: r.code || '',
+          song_id: r.song_id || '',
+          sha: r.sha || '',
+        });
+        const where = r.found === 'mtshare' ? 'already in MTShare'
+          : r.found === 'shelf' ? 'one of yours, from the vault'
+          : 'found and wrapped just now';
+        result = 'Ready, and it is on his shelf: "' + (r.title || 'the song') + '"'
+          + (r.artist && r.artist !== 'made here' ? ' by ' + r.artist : '')
+          + ', ' + where + '. The link is ' + r.url + '. '
+          + (r.found === 'shelf'
+            ? 'It plays from the vault, good for a day, and no file is handed over.'
+            : 'It opens on ' + (r.platform_text || 'whichever store the listener uses') + (r.found === 'wrapped' ? ', powered by MTShare' : ''))
+          + ' Say the title once and that it is on the shelf. Do not read the url out loud.';
+        looked = 'sharing · ' + (r.title || 'a song');
+        railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
+      } else {
+        const why = (r && (r.error || r.note)) || 'no answer';
+        result = 'Nothing was found for "' + query + '": ' + why + ' Nothing went on his shelf, and nothing '
+          + 'was wrapped. Ask him who sings it, or for the store link, in one short question.';
+        looked = 'sharing · not found';
+        railNote('share · nothing found · ' + String(query).slice(0, 40));
+      }
+    }
+  } catch (e) {
+    result = 'The sharing rail did not answer: ' + String((e && e.message) || e) + '. Nothing was found and '
+      + 'nothing is on his shelf. Say that in one line.';
+    looked = 'sharing · no answer';
+  } finally {
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch (e) { /* the socket is already gone */ }
+  }
+}
+
 async function handleWrapCall(call) {
   const s = doorSession();
   let result = '';
@@ -2174,6 +2250,7 @@ function handleFrame(text) {
       if (call.name === 'song') handleSongCall(call);
       else if (call.name === 'pay') handlePayCall(call);
       else if (call.name === 'wrap') handleWrapCall(call);
+      else if (call.name === 'share') handleShareCall(call);
       else handleHouseCall(call);
     }
     return;
