@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T13:58';
-const BUILD_NO = 27;   // 7 Nov: a paid card stops being a checkout, and the shelf survives the door closing.
+const BUILD = '2026-11-07T14:12';
+const BUILD_NO = 28;   // 7 Nov: the shelf reads its own cards back from the record, so a paid card can never sit there saying open.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1124,13 +1124,15 @@ function payCard(it) {
   if (String(it.status) === 'paid') {
     return {
       kind: 'paid',
+      code: it.code,
       title: 'Paid ' + amt + ' \u00b7 ' + (it.receipt_no || it.code),
       url: FNBASE + 'payRequestShelf?code=' + encodeURIComponent(it.code),
+      sub: 'tap for the receipt',
       note: it.item,
     };
   }
   if (String(it.status) === 'open') {
-    return { kind: 'pay', title: 'Open and pay ' + amt + ' \u00b7 ' + it.code, url: it.checkout_url, note: it.item };
+    return { kind: 'pay', code: it.code, title: 'Open and pay ' + amt + ' \u00b7 ' + it.code, url: it.checkout_url, note: it.item };
   }
   return null;
 }
@@ -1168,8 +1170,10 @@ function watchRequest(code, tries) {
 }
 
 // The shelf is not a session artefact: what he asked for is a record, so the door
-// brings back what is still his when it opens again.
-async function seedShelf() {
+// brings back what is still his when it opens again - and corrects any card it is
+// already showing. A card that remembers "open" after the money landed is the card
+// lying, not the record, so the record wins every time this runs.
+async function shelfSync() {
   try {
     const r = await fetch(FNBASE + 'payRequestShelf?json=1&hours=6');
     const d = await r.json();
@@ -1177,11 +1181,15 @@ async function seedShelf() {
     for (const it of d.requests.slice().reverse()) {
       const card = payCard(it);
       if (!card) continue;
-      shelfAdd({ ...card, code: it.code });
-      if (it.status === 'open') watchRequest(it.code);
+      if (!shelfReplace(it.code, card)) shelfAdd(card);
+      if (it.status === 'open') watchRequest(it.code, 6);
     }
   } catch (e) { /* a quiet shelf is not an error */ }
 }
+const seedShelf = shelfSync;
+
+// While anything on the shelf is still open, keep it honest without being asked.
+setInterval(() => { if (shelf.length) shelfSync(); }, 15000);
 
 /* ---------- the shelf: what the door hands over ---------- */
 
@@ -1192,6 +1200,9 @@ const shelf = [];
 function shelfAdd(item) {
   if (!item || !item.title) return;
   const key = (item.url || item.title).slice(0, 300);
+  // A request is one card, whatever its state: the same code must never sit on the
+  // shelf twice as an old open card beside its receipt. (7 Nov, seen on a phone.)
+  if (item.code && shelf.some(x => String(x.code || '') === String(item.code))) { renderShelf(); return; }
   if (shelf.some(x => (x.url || x.title) === key)) { renderShelf(); return; }
   shelf.unshift({ ...item, at: Date.now() });
   while (shelf.length > 8) shelf.pop();
@@ -1232,7 +1243,7 @@ function drawCards(el) {
     const d = document.createElement('span'); d.className = 'd';
     if (it.url) {
       let host = ''; try { host = new URL(it.url).hostname.replace(/^www\./, ''); } catch { host = 'link'; }
-      d.textContent = host;
+      d.textContent = it.sub || host;
       const a = document.createElement('a');
       a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.appendChild(t); a.appendChild(d);
