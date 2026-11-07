@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T20:31';
-const BUILD_NO = 47;   // 7 Nov: the door stops answering its own voice and a quiet room.
+const BUILD = '2026-11-07T20:26';
+const BUILD_NO = 48;   // 7 Nov: one watcher per request, so one payment reads as one payment.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1255,6 +1255,12 @@ function withTimeout(p, ms, why) {
 // a song" and "a song was asked for" can never be confused on screen.
 function railNote(text) {
   try {
+    // The same line twice in a row says nothing the first one did not. Seen 7 Nov: four
+    // "paid · EI-RC-T0006" lines for one payment, because four watchers each reported the
+    // same settlement. (Edwin: "check the multiple paid confirmation at the bottom.")
+    const chips = logEl.querySelectorAll('.lat.chip');
+    const last = chips[chips.length - 1];
+    if (last && last.textContent === text) return;
     const d = document.createElement('div');
     d.className = 'lat chip';
     d.textContent = text;
@@ -1391,9 +1397,16 @@ function shelfReplace(code, next) {
 
 // One watcher per request. It stops the moment the record says paid, and it never
 // says paid on its own authority: the shelf function reads the record the witness wrote.
+// ONE, not one per mention: every tool call for the same code used to start another poller,
+// so a single settlement arrived as several identical notes and read like several payments.
+const watchers = new Map();
+
 function watchRequest(code, tries) {
-  const left = typeof tries === 'number' ? tries : 45;   // 45 x 4s = three minutes
-  if (left <= 0) return;
+  const key = String(code || '');
+  if (!key || watchers.has(key)) return;
+  watchers.set(key, true);
+  const tick = (left) => {
+  if (left <= 0) { watchers.delete(key); return; }
   setTimeout(() => {
     // After a few seconds of nothing, ask the provider directly: a refused checkout sends no
     // webhook at all, so waiting on one leaves a link that can never be paid.
@@ -1402,21 +1415,25 @@ function watchRequest(code, tries) {
       .then(r => r.json())
       .then(d => {
         if (d && d.found && d.status === 'paid') {
-          shelfReplace(code, { ...payCard(d), code });
-          railNote('paid \u00b7 ' + (d.receipt_no || code));
+          shelfReplace(key, { ...payCard(d), code: key });
+          railNote('paid \u00b7 ' + (d.receipt_no || key));
           looked = 'the shelf \u00b7 paid';
+          watchers.delete(key);
           return;
         }
         if (d && d.found && d.status !== 'open') {
-          shelfReplace(code, { ...payCard(d), code });
-          railNote(String(d.status) + ' \u00b7 ' + code + ' \u00b7 nothing was taken');
+          shelfReplace(key, { ...payCard(d), code: key });
+          railNote(String(d.status) + ' \u00b7 ' + key + ' \u00b7 nothing was taken');
           looked = 'the shelf \u00b7 ' + String(d.status);
+          watchers.delete(key);
           return;
         }
-        watchRequest(code, left - 1);
+        tick(left - 1);
       })
-      .catch(() => watchRequest(code, left - 1));
+      .catch(() => tick(left - 1));
   }, 4000);
+  };
+  tick(typeof tries === 'number' ? tries : 45);   // 45 x 4s = three minutes
 }
 
 // The shelf is not a session artefact: what he asked for is a record, so the door
