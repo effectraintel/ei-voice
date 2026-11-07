@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T08:10';
-const BUILD_NO = 24;   // 6 Nov: a wish for music is not a subject. "I want to make a song" now gets a question, not a generation
+const BUILD = '2026-11-07T08:35';
+const BUILD_NO = 25;   // 6 Nov: a wish for music is not a subject. "I want to make a song" now gets a question, not a generation
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -317,6 +317,21 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+
+/* Build 25: the page says what its own microphone is doing, so a silent door is a
+   reading and not an argument. ctx = audio context state, frames = chunks the mic
+   produced, peak = loudest it heard (x1000), sent = chunks that left for the server,
+   opens = how many times the server said "ready" (it should be 1). */
+setInterval(() => {
+  const b = document.getElementById('build');
+  if (!b) return;
+  const base = b.textContent.split(' · mic ')[0];
+  if (!(sessionUp || listening)) { b.textContent = base; return; }
+  b.textContent = base + ' · mic ' + (micCtx ? micCtx.state : 'none') +
+    ' · frames ' + dbgFrames + ' · peak ' + Math.round(dbgPeak * 1000) +
+    ' · sent ' + dbgSent + ' · opens ' + dbgOpens;
+}, 500);
+
 window.addEventListener('DOMContentLoaded', () => {
   fitHeight();
   foldForDoor(false);
@@ -372,6 +387,7 @@ let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
 // owner interrupting, so the page used to cut its own sentence off mid-word.
 let playRunStart = 0, loudFrames = 0, looked = null;
+let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0;
 const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
 const BARGE_FRAMES = 3;      // sustained, not a click
@@ -1122,6 +1138,7 @@ function handleFrame(text) {
   let msg; try { msg = JSON.parse(text); } catch { return; }
 
   if (msg.setupComplete) {
+    dbgOpens++;
     sessionUp = true; busy = false; listening = true;
     // The session and the microphone must be awake together. A suspended context at
     // this instant is the "door opens but does not listen" failure exactly.
@@ -1212,6 +1229,7 @@ async function openMic() {
     let sum = 0;
     for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
     const rms = Math.sqrt(sum / data.length);
+    dbgFrames++; if (rms > dbgPeak) dbgPeak = rms;
     const norm = Math.min(1, Math.max(0, (20 * Math.log10(rms + 1e-8) + 62) / 52));
     paintLevel(norm);
 
@@ -1297,6 +1315,7 @@ function sendPcm(float32) {
   for (let i = 0; i < bytes.length; i += 0x8000) {
     bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   }
+  dbgSent++;
   ws.send(JSON.stringify({
     realtimeInput: { audio: { data: btoa(bin), mimeType: 'audio/pcm;rate=16000' } },
   }));
