@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T22:19';
-const BUILD_NO = 56;   // 7 Nov: clear means clear, and the shelf offers them back when he wants them.
+const BUILD = '2026-11-07T22:36';
+const BUILD_NO = 57;   // 7 Nov: clearing moves things to the garage, where he can ask for them or bin them.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1684,6 +1684,103 @@ function mergeCard(c) {
   if (i >= 0) { shelf[i] = { ...shelf[i], ...c, at: shelf[i].at }; renderShelf(); return; }
   shelfAdd(c);
 }
+// ---- the garage: where cleared things sit until he asks for them (build 57) ----
+// Edwin, 7 Nov 2026: "when I clear it, it should not be on the shelve any more. We can have like
+// an archive space where it sits and I can ask for it. We can call it the Garage Storage - This
+// is like the Trash. And then from there we can permanently remove it."
+// The garage is a record on the server, not a memory in this browser, so it is the same garage
+// on his phone and on this tab, and the shelf reader already keeps its contents off the shelf.
+let garage = [];          // what he put away, as last read
+let garageMode = false;   // is the row showing the garage instead of the shelf
+let garageAt = 0;
+
+async function loadGarage(force) {
+  if (!force && Date.now() - garageAt < 4000) return garage;
+  garageAt = Date.now();
+  try {
+    const r = await fetch(FNBASE + 'shelfGarage', { cache: 'no-store' });
+    const d = await r.json();
+    if (d && d.ok && Array.isArray(d.items)) garage = d.items;
+  } catch (e) { /* a garage that cannot be read says nothing rather than lying */ }
+  renderShelf();
+  return garage;
+}
+
+async function putInGarage(cards) {
+  const items = (cards || [])
+    .filter(c => c && (c.kind === 'song' || c.kind === 'store'))
+    .map(c => ({ kind: c.kind, ref: c.song_id || c.code || c.url || c.title,
+                 title: c.title || 'a thing', subtitle: c.sub || '', url: c.url || '', sha: c.sha || '' }));
+  if (!items.length) return 0;
+  try {
+    const r = await fetch(FNBASE + 'shelfGarage', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'store', items }),
+    });
+    const d = await r.json();
+    return (d && d.moved) || 0;
+  } catch (e) { return 0; }
+}
+
+async function garageAct(action, ref) {
+  try {
+    const r = await fetch(FNBASE + 'shelfGarage', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action, ref }),
+    });
+    const d = await r.json();
+    await loadGarage(true);
+    if (action === 'restore') { railNote('garage · put back · ' + ((d && d.title) || 'one thing')); refreshCards(true); }
+    if (action === 'remove') railNote('garage · removed · ' + ((d && d.title) || 'one thing'));
+    return d;
+  } catch (e) { return { ok: false }; }
+}
+
+// The garage draws in the same row, so asking for something back is one tap and no new screen.
+function renderGarage(el) {
+  const count = document.getElementById('shelfcount');
+  const clearBtn = document.getElementById('shelfclear');
+  if (clearBtn) clearBtn.hidden = true;
+  if (!garage.length) {
+    garageMode = false;
+    if (count) { count.textContent = 'the shelf · empty'; count.style.cursor = ''; count.title = ''; }
+    return renderShelf();
+  }
+  el.classList.add('on');
+  el.innerHTML = '';
+  if (count) {
+    count.textContent = 'the garage \u00b7 ' + garage.length + (garage.length === 1 ? ' thing' : ' things') + ' \u00b7 tap the line to close';
+    count.style.cursor = 'pointer';
+    count.title = 'back to the shelf';
+  }
+  for (const it of garage) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = 'garage';
+    const t = document.createElement('span'); t.className = 't'; t.textContent = it.title || 'a thing';
+    const d = document.createElement('span'); d.className = 'd';
+    d.textContent = (it.kind === 'song' ? 'a song you made' : 'a wrapped link') + (it.subtitle ? ' \u00b7 ' + it.subtitle : '');
+    card.appendChild(k); card.appendChild(t); card.appendChild(d);
+    const row = document.createElement('span'); row.className = 'd';
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.style.cssText = 'all:unset;cursor:pointer;color:var(--gold);padding-right:14px';
+    back.textContent = 'put back';
+    back.onclick = () => garageAct('restore', it.ref);
+    const gone = document.createElement('button');
+    gone.type = 'button';
+    gone.style.cssText = 'all:unset;cursor:pointer;color:#8a7f76';
+    gone.textContent = 'remove for good';
+    gone.onclick = () => {
+      if (!confirm('Remove "' + (it.title || 'this') + '" for good?\n\nThe card goes for good. A song\'s recording stays in the vault, because its proof lives there.')) return;
+      garageAct('remove', it.ref);
+    };
+    row.appendChild(back); row.appendChild(gone);
+    card.appendChild(row);
+    el.appendChild(card);
+  }
+}
+
 async function refreshCards(force) {
   if (!force && Date.now() - cardsAt < 8000) return;
   cardsAt = Date.now();
@@ -1721,7 +1818,7 @@ async function shelfSync() {
   } catch (e) { /* a quiet shelf is not an error */ }
 }
 // The door hands over all three rails when it opens, not just the money one.
-const seedShelf = () => { shelfSync(); refreshCards(true); };
+const seedShelf = () => { shelfSync(); refreshCards(true); loadGarage(true); };
 
 // While anything on the shelf is still open, keep it honest without being asked.
 setInterval(() => { if (shelf.length) shelfSync(); }, 15000);
@@ -1741,9 +1838,14 @@ document.getElementById('shelfclear').addEventListener('click', (e) => {
 
 // The counter is where the way back lives, so a clear never feels like a deletion.
 document.getElementById('shelfcount').addEventListener('click', (e) => {
-  if (!putAwayCount()) return;
   e.preventDefault(); e.stopPropagation();
-  bringBack();
+  if (garageMode) { garageMode = false; renderShelf(); return; }
+  loadGarage(true).then(() => {
+    if (!garage.length) return;
+    garageMode = true;
+    renderShelf();
+    railNote('garage · ' + garage.length + (garage.length === 1 ? ' thing' : ' things') + ' kept');
+  });
 });
 
 function openSheet(url, heading) {
@@ -1835,8 +1937,10 @@ function clearShelf() {
   // nag. A song or a wrapped link is a RECORD, so it is only put away for this tab and returns
   // when the door is opened again. (Edwin, 7 Nov: "I cleared the shelf now to test fresh.")
   rememberCleared(shelf.filter(x => x.kind !== 'song' && x.kind !== 'store').map(x => x.code).filter(Boolean));
-  putAwayAdd(shelf.map(cardKey));          // every card: songs, links and requests
-  shelfHidden.clear();                      // the map above is the memory now
+  // Songs and wrapped links are MOVED, not hidden: they go to the garage, on the server, where he
+  // can ask for them back or remove them for good. Nothing is left behind in browser storage
+  // pretending to be the record. (Edwin, 7 Nov 2026)
+  putInGarage(shelf).then(() => loadGarage(true));
   shelf.length = 0;
   try { localStorage.setItem(CLEARED_KEY, String(Date.now())); } catch (e) { /* private mode */ }
   renderShelf();
@@ -1847,6 +1951,7 @@ function clearShelf() {
 function renderShelf() {
   const el = document.getElementById('shelf');
   if (!el) return;
+  if (garageMode) return renderGarage(el);
   const line = document.getElementById('shelfline');
   const count = document.getElementById('shelfcount');
   const clearBtn = document.getElementById('shelfclear');
@@ -1857,11 +1962,12 @@ function renderShelf() {
     if (line) { line.hidden = false; line.style.color = ''; }
     // An empty shelf that still holds his things says so, and hands them back on a tap.
     // Nothing is deleted by a clear; it is only put away.
-    const away = putAwayCount();
+    // An empty shelf that still holds things says where they are, and opens the garage on a tap.
+    const away = garage.length;
     if (count) {
-      count.textContent = away ? 'the shelf · empty · ' + away + ' put away · tap to bring back' : 'the shelf · empty';
+      count.textContent = away ? 'the shelf · empty · ' + away + ' in the garage · tap to open' : 'the shelf · empty';
       count.style.cursor = away ? 'pointer' : '';
-      count.title = away ? 'tap to put them back on the shelf' : '';
+      count.title = away ? 'open the garage' : '';
     }
     if (clearBtn) clearBtn.hidden = true;
     return;
