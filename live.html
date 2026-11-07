@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T22:20';
-const BUILD_NO = 44;   // 7 Nov: help as a door, teaching at the moment it applies, once per member.
+const BUILD = '2026-11-07T22:47';
+const BUILD_NO = 45;   // 7 Nov: one bubble per turn, and no list of rooms read aloud.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -370,6 +370,11 @@ const BRIEF =
   'When the house tool answers, that answer IS the answer: speak its facts, never add rooms or ' +
   'people it did not name, and never say you cannot read the corridor while you are holding its ' +
   'reply. If it names nine rooms, all nine exist. ' +
+  // He asked to look in his rooms and got all nine read out, twice, before being asked which
+  // one. A list spoken aloud is a menu, and a menu is the thing this door is not.
+  'Never read a list of his rooms, his people or his cards aloud. If you need to know which one, ' +
+  'name at most two and ask. The names are on the screen where he can read them faster than you ' +
+  'can say them. ' +
   'A person\'s name is not a room. Max and Wasi and anyone else he has made something for are names ' +
   'on keepsakes, not worlds, and the tool finds them by name - never answer that it cannot find a ' +
   'person it has just been given, and never ask him to try other words when the tool returned facts. ' +
@@ -541,8 +546,14 @@ function addTurn(who, text) {
 /* Transcripts arrive as fragments, so assemble them into the current turn of the
    right speaker instead of printing a line per fragment. */
 function appendLive(who, text) {
+  // A new engine bubble means his turn is over, so the next thing he says starts its own
+  // block instead of extending the old one.
+  if (who === 'engine' && !turns.engine) { turns.you = null; said.you = ''; }
   if (!turns[who]) { turns[who] = addTurn(who, ''); said[who] = ''; }
-  said[who] += text;
+  const add = String(text || '');
+  // Two shapes arrive from the live API depending on the model and transport: deltas, and
+  // the whole turn so far. Appending a cumulative repeat is what glued a reply to itself.
+  said[who] = (said[who] && add.startsWith(said[who])) ? add : (said[who] + add);
   turns[who].querySelector('.said').textContent = said[who];
   logEl.scrollTop = logEl.scrollHeight;
   if (who === 'engine' && pendingLatency !== null) attachLatency(turns[who]);
@@ -1730,18 +1741,28 @@ function handleFrame(text) {
     const data = p.inlineData && p.inlineData.data;
     if (data) playPcm(data);
   }
+  // Barge-in: the model stopped mid-reply, so its remaining words are a new bubble rather
+  // than a continuation of the one he cut off.
+  if (sc.interrupted) { turns.engine = null; said.engine = ''; }
+
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    // One bubble per turn. Seen on his phone 7 Nov: every reply after the first was appended
+    // to the previous one - "...another name?Understood, Boss..." - because the bubble was
+    // never closed. His own words piled into a single YOU block the same way.
+    const closing = turns.engine;
+    turns.engine = null; said.engine = '';
+    turns.you = null; said.you = '';
     if (greeting) { openAfterSpeech(); return; }
     // He has now had a real answer here, so the longer hello is done with.
     try { if (!localStorage.getItem(HELP_SEEN)) localStorage.setItem(HELP_SEEN, String(Date.now())); } catch (e) {}
-    if (looked && turns.engine) {
-      const prev = turns.engine.querySelector('.lat.chip');
+    if (looked && closing) {
+      const prev = closing.querySelector('.lat.chip');
       if (prev) prev.remove();
       const l = document.createElement('div');
       l.className = 'lat chip';
       l.textContent = 'looked up: ' + looked;
-      turns.engine.appendChild(l);
+      closing.appendChild(l);
     }
     looked = null;
     setState(listening ? 'listening' : 'the door is shut');
