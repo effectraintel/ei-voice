@@ -245,8 +245,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T00:12';
-const BUILD_NO = 60;   // 8 Nov: anything on the shelf can be sent to a person, by email or WhatsApp.
+const BUILD = '2026-11-08T00:44';
+const BUILD_NO = 61;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -336,7 +336,7 @@ const DECLS = [{
               // prompt me. For the song name." He names it, and the rail looks in three places in his
               // order before answering: MTShare's own links, then his own songs, then a store.
               name: 'share',
-              description: 'Find a song by name and get the right link for sharing it, then put it on his shelf. Use when he says he wants to share a song, or asks for a link to a song. Call it with whatever he said as the query. If he has not named a song yet, do NOT call it: ask him which song, one short question, and stop.',
+              description: 'Find a song by name and get the right link for sharing it, then put it on his shelf. Use when he says he wants to share a song, or asks for a link to a song. Call it with the song title he said as the query. If he has not named a song yet, do NOT call it at all: ask him which song, one short question, and stop. Never pass a question of your own as the query.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
@@ -1552,6 +1552,21 @@ function shareResultLine(r) {
     + ' Say the title once and that it is on the shelf, then ask if he wants it sent to someone. Do not read the url out loud.';
 }
 
+
+// Edwin's log, 7 Nov 21:32, line 1212: the model called the sharing rail with its own question as the
+// search words - {"action":"find","query":"Which song would you like to share?"} - and the rail dutifully
+// found two songs actually titled "Which" (Govzx, Kaesarian), which the door then read back to him as
+// candidates. The search was honest; the question should never have reached it. So the door refuses a
+// question here in code, the same way the song rail refuses a rights claim it cannot back.
+function looksLikeQuestion(q) {
+  const t = String(q || '').trim();
+  if (!t) return true;
+  if (t.endsWith('?')) return true;
+  if (/\b(would you like|do you want|shall i|should i|can you tell|tell me which|which one)\b/i.test(t)) return true;
+  if (/^(which|what|who|whose|name a|pick a)\b/i.test(t) && /\b(song|track|tune|one)\b/i.test(t)) return true;
+  return /^(a |the |my |some )?(song|track|tune|music)$/i.test(t);
+}
+
 async function handleShareCall(call) {
   const s = doorSession();
   let result = '';
@@ -1597,6 +1612,15 @@ async function handleShareCall(call) {
       result = 'He has not named a song yet. Ask him which song, in one short question, and stop '
         + 'there: do not guess at a title and do not call this tool again until he answers.';
       looked = 'sharing · which song';
+      return;
+    }
+
+    // A question is not a query. Refuse it here rather than searching the catalogue for the words.
+    if (looksLikeQuestion(query)) {
+      result = 'He has not named a song yet. Ask him which song it is, in one short question, and stop. '
+        + 'Never put your own question in as the search.';
+      looked = 'sharing · which song';
+      railNote('share · held · that was a question, not a song');
       return;
     }
 
@@ -2088,15 +2112,23 @@ function renderGarage(el) {
   }
 }
 
+let lastCardsSig = '';    // what the shelf looked like last time, so an unchanged poll stays quiet
+let lastPaySig = '';
 async function refreshCards(force) {
   if (!force && Date.now() - cardsAt < 8000) return;
   cardsAt = Date.now();
   try {
     const t0 = Date.now();
-    logLine('call.ask', 'shelfCards (his songs and wrapped links)', { target: 'shelfCards', query: 'limit=6', shelf: '1' });
     const r = await fetch(FNBASE + 'shelfCards?limit=6', { cache: 'no-store' });
     const d = await r.json();
-    logLine('call.back', 'shelfCards \u2192 ' + digest(d), { target: 'shelfCards', ms: Date.now() - t0, shelf: '1' });
+    // A poll that changes nothing is a heartbeat, not an event. Edwin reads this log to follow a
+    // conversation (7 Nov: "our logging is paying off"), and twenty identical shelf reads bury the
+    // eight lines that matter. So a quiet poll says nothing; a changed one says everything.
+    const sig = 'cards:' + JSON.stringify((d && d.cards ? d.cards : []).map(c => (c.title || '') + '|' + (c.url || '').slice(-24)));
+    if (sig !== lastCardsSig) {
+      lastCardsSig = sig;
+      logLine('call.back', 'shelfCards \u2192 ' + digest(d), { target: 'shelfCards', ms: Date.now() - t0, shelf: '1', changed: '1' });
+    }
     if (!d || !d.ok || !Array.isArray(d.cards)) return;
     // Oldest first, because shelfAdd puts each one at the front: the newest song ends up on top.
     for (const c of d.cards.slice().reverse()) mergeCard(c);
@@ -2107,10 +2139,14 @@ async function refreshCards(force) {
 async function shelfSync() {
   try {
     const st0 = Date.now();
-    logLine('call.ask', 'payRequestShelf ?hours=6 (what is still his)', { target: 'payRequestShelf', ask: 'hours=6', shelf: '1' });
     const r = await fetch(FNBASE + 'payRequestShelf?json=1&hours=6');
     const d = await r.json();
-    logLine('call.back', 'payRequestShelf \u2192 ' + digest(d), { target: 'payRequestShelf', ms: Date.now() - st0, shelf: '1' });
+    // Same rule as the card poll: only a shelf that actually moved is worth a line.
+    const sig = 'pay:' + JSON.stringify((d && d.requests ? d.requests : []).map(x => (x.code || '') + ':' + (x.status || '')));
+    if (sig !== lastPaySig) {
+      lastPaySig = sig;
+      logLine('call.back', 'payRequestShelf \u2192 ' + digest(d), { target: 'payRequestShelf', ms: Date.now() - st0, shelf: '1', changed: '1' });
+    }
     if (!d || !d.ok || !Array.isArray(d.requests)) return;
     for (const it of d.requests.slice().reverse()) {
       // Build 37: the card itself remembers being cleared, so a reload, a fresh door or a
