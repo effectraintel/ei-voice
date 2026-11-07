@@ -245,8 +245,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T01:05';
-const BUILD_NO = 62;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD = '2026-11-08T01:52';
+const BUILD_NO = 64;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -359,7 +359,8 @@ const DECLS = [{
                   channel: { type: 'STRING', description: 'email or whatsapp, only if he has said which' },
                   message: { type: 'STRING', description: 'the words he wants sent with it. An empty string means send it with no message' },
                   to_name: { type: 'STRING', description: 'the name of the person it is going to, as he said it. Needed for the greeting and the cover' },
-                  cover: { type: 'BOOLEAN', description: 'true if he wants a cover image drawn to go with it, false if he does not. Leave it out until you have asked him' },
+                  cover: { type: 'BOOLEAN', description: 'true if he wants a cover image drawn to go with it, false if he does not. Leave it out until you have asked him and he has answered' },
+                  confirmed: { type: 'BOOLEAN', description: 'true only once he has heard the email address read back and said it is right. Never set it to save a turn' },
                 },
                 required: [],
               },
@@ -1511,7 +1512,10 @@ async function handleHouseCall(call) {
 // when more than one song answers to that name it comes back here and the door asks which one. Edwin:
 // "we need to remember that you will get back more than one song in some instances. So you will have
 // to prompt me back so that i can confirm the right one." Nothing is wrapped or minted until he does.
-let shareChoices = [];          // what the rail offered, so his answer can be matched against it
+let shareChoices = [];
+let shareCoverAsked = false;   // the door asks for the picture once, and does not take the model's word for it
+let shareAddrOk = false;       // set only by a known address, or by him hearing it and saying yes
+let shareAddrReadBack = '';    // the address the door read out, so a correction can be recorded as one          // what the rail offered, so his answer can be matched against it
 let shareQuery = '';
 
 function shareTokens(t) {
@@ -1633,6 +1637,7 @@ async function handleShareCall(call) {
 
     if (r && r.ok && r.found === 'choice' && (r.candidates || []).length) {
       shareChoices = r.candidates;
+      shareCoverAsked = false; shareAddrOk = false;
       const few = shareChoices.slice(0, 3);
       result = 'More than one song answers to that, so nothing has been made yet: '
         + few.map((c, i) => (i + 1) + ') ' + (c.label || c.title)).join('; ')
@@ -1653,6 +1658,7 @@ async function handleShareCall(call) {
       result = shareResultLine(r);
       looked = 'sharing · ' + (r.title || 'a song');
       shareChoices = [];
+      shareCoverAsked = false; shareAddrOk = false;   // a new song is a new ask
       railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
     } else {
       const why = (r && (r.error || r.note)) || 'no answer';
@@ -1748,6 +1754,22 @@ async function handleShareToCall(call) {
     // Edwin, 8 Nov 00:05: after the words, the picture. "we ask do you want to include a cover image to
     // accompany the song to Edwin? (or whoever it is sent to, and if we don't have a name please ask
     // politely)". So the question names the person when we have a name, and asks for one when we do not.
+    //
+    // It is asked HERE, in the door's own state, because on 8 Nov 22:00 the model answered for him: it
+    // called send with cover already false, the guard saw a boolean and let it through, and he had to ask
+    // for the picture himself afterwards. The door now owns that turn. A cover value that arrives before
+    // the question was asked is discarded, whatever the model thought it knew.
+    if (!shareCoverAsked) {
+      shareCoverAsked = true;
+      const who = String(a.to_name || '').trim();
+      result = who
+        ? 'Ask if he wants a cover image drawn to accompany it to ' + who + ', in one short question. '
+          + 'Nothing is sent until he answers: if yes, call this again with cover true; if no, with cover false.'
+        : 'You do not have the name of the person it is going to. Ask politely, in one short question, '
+          + 'who it is for by name, so the picture and the greeting can carry it. Nothing is sent yet.';
+      looked = 'sharing · a cover?';
+      return;
+    }
     if (typeof a.cover !== 'boolean') {
       const who = String(a.to_name || '').trim();
       result = who
@@ -1764,11 +1786,49 @@ async function handleShareToCall(call) {
       looked = 'sharing · who by name';
       return;
     }
+    // Edwin, 8 Nov 22:00: the door put a dot in his own address - edwin.vanzyl@ where the real one is
+    // edwinvanzyl@ - and the mail went out wrong. An address he has never used from here is read back in
+    // full, and nothing is sent until he has heard it and agreed. Once an address has carried a send, it
+    // is known and is not asked about again. (Edwin: "it has to prompt me to confirm the email is spelled
+    // correctly while we don't have that contact set up.")
+    if (channel === 'email' && !shareAddrOk && a.confirmed !== true) {
+      // He heard one address and gave another: that is a correction, and the wrong one stops counting as a
+      // known address so it can never be used silently again.
+      if (shareAddrReadBack && shareAddrReadBack !== to) {
+        try {
+          const w = await railPost('shelfShare', { action: 'wrong', to: shareAddrReadBack });
+          railNote('share · address corrected · ' + ((w && w.marked) || 0) + ' record(s) marked wrong-address');
+        } catch { /* the correction matters more than the bookkeeping */ }
+        shareAddrReadBack = '';
+      }
+      let known = false;
+      try {
+        const k = await railPost('shelfShare', { action: 'known', to });
+        known = !!(k && k.known);
+        if (k && k.to_masked) railNote('share · address ' + (known ? 'known' : 'new') + ' · ' + k.to_masked);
+      } catch { /* if the rail cannot answer, asking is still the safe side */ }
+      if (known) {
+        shareAddrOk = true;
+        shareAddrReadBack = to;
+      } else {
+        result = 'Read the address back to him exactly as it is, spelled out: ' + to + ' - and ask if that is '
+          + 'right, in one short question. Nothing has been sent. Only when he says yes, call this again with '
+          + 'confirmed true. If he corrects it, take his correction exactly as he says it and call this again '
+          + 'with the corrected address, and it will be read back once more.';
+        shareAddrReadBack = to;
+        looked = 'sharing · is that address right?';
+        return;
+      }
+    }
+    if (channel === 'email' && a.confirmed === true) shareAddrOk = true;
 
     const r = await withTimeout(railPost('shelfShare', {
       action: 'send', card: cardPayload(card), to, channel, message: String(a.message || ''),
-      to_name: String(a.to_name || ''), cover: a.cover === true,
+      to_name: String(a.to_name || ''), cover: a.cover === true, confirmed: a.confirmed === true,
     }), 120000, 'the sending rail did not answer in time');
+    shareCoverAsked = false;
+    shareAddrOk = false;
+    shareAddrReadBack = '';
 
     if (r && r.ok && r.channel === 'email') {
       if (r.cover_url) {
