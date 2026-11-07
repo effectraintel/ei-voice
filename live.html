@@ -245,8 +245,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T02:20';
-const BUILD_NO = 65;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD = '2026-11-08T02:55';
+const BUILD_NO = 66;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1705,7 +1705,8 @@ async function handleShareCall(call) {
 // So the door asks in that order and never fills a gap itself: who, then which way, then the words.
 // A missing address is a question, not a guess, and an absent message is only treated as "no message"
 // when he has actually said so (the model passes an empty string, not nothing).
-let shareCardTarget = null;      // the card he last got, or the one he named
+let shareCardTarget = null;
+let shareAddrTries = 0;      // how many times an address came in unusable before the sheet was opened      // the card he last got, or the one he named
 
 function shelfFind(words) {
   const q = shareTokens(words);
@@ -1724,6 +1725,38 @@ function cardPayload(c) {
   return { title: c.title || '', sub: c.sub || '', url: c.url || '', code: c.code || '', song_id: c.song_id || '' };
 }
 
+// Spoken addresses do not arrive as addresses. On 8 Nov a run produced "etwin fun sale", "A2 and fans
+// sale", "Etwinn Fund sale" and "Edwin van Zijl at effectra.co.za" - four attempts, no mail, and a
+// frustrated owner who offered to spell it. So the door reads the common spoken shapes into an address,
+// and where it cannot, it stops guessing and asks him to type it into the sheet instead.
+function normaliseAddress(raw) {
+  let t = String(raw || '').trim().toLowerCase();
+  t = t.replace(/\s+at\s+/g, '@').replace(/\s*\(at\)\s*/g, '@');
+  t = t.replace(/\s+dot\s+/g, '.').replace(/\s*\(dot\)\s*/g, '.');
+  t = t.replace(/\s+underscore\s+/g, '_').replace(/\s+(dash|hyphen)\s+/g, '-');
+  t = t.replace(/\s+/g, '');
+  t = t.replace(/\.+@/g, '@').replace(/@\.+/g, '@');
+  t = t.replace(/[.,;:]+$/, '');
+  return t;
+}
+function looksAddress(t) {
+  const v = String(t || '');
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v)) return false;
+  const [local, domain] = v.split('@');
+  if (!local || local.length > 30) return false;            // a sentence is not a name
+  if (local.startsWith('.') || local.endsWith('.')) return false;
+  if (/\.\./.test(v)) return false;
+  if (!/[a-z]/.test(local.replace(/\./g, ''))) return false;
+  if (!/\.[a-z]{2,}$/.test(domain)) return false;
+  return true;
+}
+function spokeWholeAddress(a) {
+  // He said something address-shaped rather than a name: at least one spoken "at" or a dot, so it is
+  // worth reading back instead of asking again.
+  const raw = String(a || '').toLowerCase();
+  return /\sat\s|@|\./.test(raw);
+}
+
 async function handleShareToCall(call) {
   const s = doorSession();
   let result = '';
@@ -1740,8 +1773,9 @@ async function handleShareToCall(call) {
       return;
     }
     shareCardTarget = card;
+    if (!a.to) shareAddrTries = 0;
 
-    const to = String(a.to || '').trim();
+    const to = normaliseAddress(a.to);
     let channel = String(a.channel || '').toLowerCase();
     const hasMessage = typeof a.message === 'string';
 
@@ -1754,6 +1788,24 @@ async function handleShareToCall(call) {
     if (!channel) {
       if (to.includes('@')) channel = 'email';
       else if (to.replace(/[^0-9]/g, '').length >= 9) channel = 'whatsapp';
+    }
+    // An address has to be an address. "effectra.co.za" is a domain with no one before the @, and
+    // "etwin fun sale" is not an address at all: the door does not complete either of them by guessing.
+    if (channel === 'email' && !looksAddress(to)) {
+      shareAddrTries += 1;
+      const incomplete = /@/.test(to) || /\./.test(to);
+      if (shareAddrTries >= 2 || !spokeWholeAddress(a.to)) {
+        openShareSheet(card);
+        result = 'Do not guess the address. A typing sheet is open on the door: say that he can type or '
+          + 'paste the email address and the message there, and send it from the sheet. Nothing has been sent.';
+        looked = 'sharing · typing the address';
+        railNote('share · address not understood · sheet opened');
+        return;
+      }
+      result = 'That did not arrive as a whole address: you have "' + (to || 'nothing') + '". Read it back to '
+        + 'him and ask him to say it again in one go, or to type it in the sheet. Nothing is sent yet.';
+      looked = 'sharing · address unclear';
+      return;
     }
     if (!channel) {
       result = 'He named a person but not how to reach them. Ask for their email address or their '
