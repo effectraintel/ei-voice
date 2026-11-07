@@ -209,7 +209,7 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T11:45';
+const BUILD = '2026-11-07T11:52';
 const BUILD_NO = 26;   // 7 Nov: the door can put a payment request on the shelf. A request is not a payment.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
@@ -1095,7 +1095,7 @@ async function handlePayCall(call) {
       'the shelf did not answer in time'
     );
     if (!r || !r.ok) throw new Error((r && r.error) ? r.error : 'the shelf would not make one');
-    shelfAdd({ title: 'Open and pay R' + r.amount + ' \u00b7 ' + r.code, url: r.checkout_url, note: r.item });
+    shelfAdd({ title: 'Open and pay R' + r.amount + ' \u00b7 ' + r.code, url: r.checkout_url, kind: 'pay', note: r.item });
     railNote('payment request ' + r.code + ' \u00b7 nothing paid yet');
     result = 'A payment request for R' + r.amount + ' is on his shelf as ' + r.code
       + '. Nothing has been paid: he opens the card and pays himself. Do not read the code or the link aloud.';
