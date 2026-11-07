@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-06T21:49';
-const BUILD_NO = 23;   // 6 Nov: a wish for music is not a subject. "I want to make a song" now gets a question, not a generation
+const BUILD = '2026-11-07T08:10';
+const BUILD_NO = 24;   // 6 Nov: a wish for music is not a subject. "I want to make a song" now gets a question, not a generation
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -310,6 +310,13 @@ const BRIEF =
   'say plainly that you hold only this session and ask him to repeat what matters.';
 
 // If the page cannot say which build it is, every missing change becomes an argument with a cache.
+document.addEventListener('visibilitychange', () => {
+  // Returning to a page whose context was suspended must not look like a dead mic.
+  if (!document.hidden && sessionUp && micCtx && micCtx.state !== 'running') {
+    micCtx.resume().catch(() => {});
+  }
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   fitHeight();
   foldForDoor(false);
@@ -1116,6 +1123,9 @@ function handleFrame(text) {
 
   if (msg.setupComplete) {
     sessionUp = true; busy = false; listening = true;
+    // The session and the microphone must be awake together. A suspended context at
+    // this instant is the "door opens but does not listen" failure exactly.
+    if (micCtx && micCtx.state !== 'running') micCtx.resume().catch(() => {});
     stampSession();
     stopClock();
     micBtn.classList.remove('arming'); micBtn.classList.add('live');
@@ -1179,7 +1189,16 @@ function handleFrame(text) {
 /* ---------- microphone ---------- */
 
 async function openMic() {
-  if (micCtx) return;
+  if (micCtx) {
+    // A context that already exists may have been suspended while the phone was
+    // locked or the tab was in the background. Resuming is the whole difference
+    // between a door that listens and a door that only looks open.
+    try { await micCtx.resume(); } catch (e) {}
+    const live = micStream && micStream.getAudioTracks().some((t) => t.readyState === 'live');
+    if (live && micCtx.state === 'running') return;
+    try { micCtx.close(); } catch (e) {}
+    micCtx = null; proc = null;
+  }
   micStream = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
