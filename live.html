@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T21:14';
-const BUILD_NO = 53;   // 7 Nov: every call through the door is written down, ask and answer.
+const BUILD = '2026-11-07T21:58';
+const BUILD_NO = 54;   // 7 Nov: the shelf draws his songs and wrapped store links, not only money.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -312,6 +312,21 @@ const DECLS = [{
                   item: { type: 'STRING', description: 'what the payment is for, in a few words, in his words' },
                 },
                 required: ['amount'],
+              },
+            },
+            {
+              // The second write the door may make, and it makes a link, not money: give it a
+              // store url and the MTShare rail turns it into one universal link. Added 7 Nov
+              // 2026 at his instruction: "I want to specify a song on the commercial music
+              // stores and then it needs to be wrapped in a MTShare line and also land on my shelf."
+              name: 'wrap',
+              description: 'Wrap a link to a song on a commercial music store (Spotify, Apple Music, Tidal, Deezer, YouTube, SoundCloud, Amazon, Qobuz, Bandcamp) into one universal MTShare link and put it on his shelf. Use whenever he gives a music link, pastes one, or asks for a song to be shared as one link that opens on whichever service the listener uses. It never pays, never posts anywhere and never shares anything by itself.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  url: { type: 'STRING', description: 'the store link he gave, exactly as he gave it' },
+                },
+                required: ['url'],
               },
             },
             ];
@@ -1225,6 +1240,8 @@ async function handleSongCall(call) {
         'the record did not answer in time');
       result = r.line + ' (status: ' + r.status + (r.title ? ', title: ' + r.title : '') + ')';
       railNote('music rail · checked · ' + r.status);
+      // The moment the rail says it is delivered, its card belongs on the shelf.
+      if (/deliver|sent|ready|complete/i.test(String(r.status || ''))) refreshCards(true);
     } else if (action === 'resend') {
       // Sending him something he already has makes nothing, so it needs no words: the
       // take is named by the last prompt-back, or by the record itself.
@@ -1431,6 +1448,62 @@ async function handleHouseCall(call) {
 // The one write the door may make. A request is minted, never paid: the money moves on the
 // provider's own page, and only the signed webhook may call it settled. The card on the shelf
 // is the tap-to-pay link, so his next move is one touch rather than a spoken address.
+// The MTShare rail, spoken to. He gives a link from one store; the rail answers with one
+// universal link that opens wherever the listener is, and a card lands on his shelf.
+// Nothing here pays, posts or shares: it makes the link and puts it where he can see it.
+async function handleWrapCall(call) {
+  const s = doorSession();
+  let result = '';
+  try {
+    if (!s || !s.token) throw new Error('the door session has gone');
+    const url = String((call.args || {}).url || '').trim();
+    if (!/^https?:\/\//i.test(url)) {
+      result = 'No link reached me. Ask him to paste the store link, or to read it out whole, '
+        + 'and say plainly that nothing has been wrapped yet.';
+      looked = 'store · no link heard';
+      railNote('link rail · nothing wrapped · no url');
+    } else {
+      const r = await withTimeout(gatePost('mtShareWrap', { url }), 30000,
+        'the link rail did not answer in time');
+      if (r && r.ok && r.universal_url) {
+        mergeCard({
+          kind: 'store',
+          title: r.title || 'a song',
+          sub: [r.artist, r.platforms && r.platforms.length ? r.platforms.map(p => String(p.platform).replace(/_/g, ' ')).join(', ') : ''].filter(Boolean).join(' · '),
+          url: r.universal_url,
+          code: r.code,
+          platforms: (r.platforms || []).map(p => p.platform).join(', '),
+        });
+        const plats = (r.platforms || []).map(p => String(p.platform).replace(/_/g, ' '));
+        result = 'Wrapped, and it is on his shelf now: "' + (r.title || 'the song') + '"'
+          + (r.artist ? ' by ' + r.artist : '')
+          + ' as one link, ' + r.universal_url + '. It opens on '
+          + (plats.length ? plats.join(', ') : 'the stores MTShare matched')
+          + (r.withheld_as_search && r.withheld_as_search.length ? '; ' + r.withheld_as_search.join(', ') + ' came back only as a search, so do not count it' : '')
+          + '. Say the title once and that it is on the shelf. Do not read the url out loud.';
+        looked = 'store · ' + (r.title || 'a link');
+        railNote('link rail · wrapped · ' + (r.code || '') + ' · ' + plats.length + ' platform' + (plats.length === 1 ? '' : 's'));
+      } else {
+        const why = (r && (r.error || r.note)) || 'no answer';
+        result = 'The link rail would not wrap that: ' + why + '. Nothing was put on his shelf. '
+          + 'Tell him plainly, in one line, and ask for the store link again rather than guessing at it.';
+        looked = 'store · refused';
+        railNote('link rail · refused · ' + String(why).slice(0, 60));
+      }
+    }
+  } catch (e) {
+    result = 'The link rail did not answer: ' + String((e && e.message) || e) + '. Nothing was wrapped and '
+      + 'nothing is on his shelf. Say that in one line.';
+    looked = 'store · no answer';
+  } finally {
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch (e) { /* the socket is already gone; nothing to answer on */ }
+  }
+}
+
 async function handlePayCall(call) {
   const s = doorSession();
   let result = '';
@@ -1567,6 +1640,39 @@ function watchRequest(code, tries) {
 // brings back what is still his when it opens again - and corrects any card it is
 // already showing. A card that remembers "open" after the money landed is the card
 // lying, not the record, so the record wins every time this runs.
+// ---- the two non-money rails, on the same shelf (build 54, 7 Nov 2026) ----
+// Edwin: "the actual songs I made ... should land on my shelf after it was created" and
+// "specify a song on the commercial music stores ... wrapped in a MTShare line and also land
+// on my shelf". Cards are DERIVED, never copied: a song card comes from its vault row, a store
+// card from the wrapped link. Nothing is invented, and a rail that cannot be read draws no
+// card rather than an empty one.
+let cardsAt = 0;
+function cardKey(c) { return String(c.song_id || c.code || c.url || c.title || ''); }
+function mergeCard(c) {
+  if (!c || !c.title) return;
+  const k = cardKey(c);
+  const i = shelf.findIndex(x => cardKey(x) === k);
+  // Same song, same link: the card is updated where it sits, never stacked. A fresh play
+  // token is minted on every read, so matching on the url would make a new card every minute.
+  if (i >= 0) { shelf[i] = { ...shelf[i], ...c, at: shelf[i].at }; renderShelf(); return; }
+  shelfAdd(c);
+}
+async function refreshCards(force) {
+  if (!force && Date.now() - cardsAt < 8000) return;
+  cardsAt = Date.now();
+  try {
+    const t0 = Date.now();
+    logLine('call.ask', 'shelfCards (his songs and wrapped links)', { target: 'shelfCards', query: 'limit=6', shelf: '1' });
+    const r = await fetch(FNBASE + 'shelfCards?limit=6', { cache: 'no-store' });
+    const d = await r.json();
+    logLine('call.back', 'shelfCards \u2192 ' + digest(d), { target: 'shelfCards', ms: Date.now() - t0, shelf: '1' });
+    if (!d || !d.ok || !Array.isArray(d.cards)) return;
+    // Oldest first, because shelfAdd puts each one at the front: the newest song ends up on top.
+    for (const c of d.cards.slice().reverse()) mergeCard(c);
+    return d;
+  } catch (e) { /* a shelf that cannot be read is quiet, not an error */ }
+}
+
 async function shelfSync() {
   try {
     const st0 = Date.now();
@@ -1587,10 +1693,13 @@ async function shelfSync() {
     }
   } catch (e) { /* a quiet shelf is not an error */ }
 }
-const seedShelf = shelfSync;
+// The door hands over all three rails when it opens, not just the money one.
+const seedShelf = () => { shelfSync(); refreshCards(true); };
 
 // While anything on the shelf is still open, keep it honest without being asked.
 setInterval(() => { if (shelf.length) shelfSync(); }, 15000);
+// A song made a minute ago should be on the shelf without him asking for it.
+setInterval(() => { refreshCards(true); }, 60000);
 
 /* ---------- the shelf: what the door hands over ---------- */
 
@@ -1640,7 +1749,7 @@ function shelfAdd(item) {
   if (item.code && shelf.some(x => String(x.code || '') === String(item.code))) { renderShelf(); return; }
   if (shelf.some(x => (x.url || x.title) === key)) { renderShelf(); return; }
   shelf.unshift({ ...item, at: Date.now() });
-  while (shelf.length > 8) shelf.pop();
+  while (shelf.length > 12) shelf.pop();   // songs and store links now share this row (build 54)
   renderShelf();
   shelfArrived();
 }
@@ -1912,6 +2021,7 @@ function handleFrame(text) {
     for (const call of msg.toolCall.functionCalls) {
       if (call.name === 'song') handleSongCall(call);
       else if (call.name === 'pay') handlePayCall(call);
+      else if (call.name === 'wrap') handleWrapCall(call);
       else handleHouseCall(call);
     }
     return;
