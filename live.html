@@ -209,8 +209,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T11:52';
-const BUILD_NO = 26;   // 7 Nov: the door can put a payment request on the shelf. A request is not a payment.
+const BUILD = '2026-11-07T13:58';
+const BUILD_NO = 27;   // 7 Nov: a paid card stops being a checkout, and the shelf survives the door closing.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -829,6 +829,7 @@ async function openDoor() {
     ws = sock;
     sock.onopen = () => {
       if (sock !== ws) { try { sock.close(); } catch (e) {} return; }
+      seedShelf();
       sock.send(JSON.stringify({
       setup: {
         model: 'models/' + d.model,
@@ -1095,8 +1096,9 @@ async function handlePayCall(call) {
       'the shelf did not answer in time'
     );
     if (!r || !r.ok) throw new Error((r && r.error) ? r.error : 'the shelf would not make one');
-    shelfAdd({ title: 'Open and pay R' + r.amount + ' \u00b7 ' + r.code, url: r.checkout_url, kind: 'pay', note: r.item });
+    shelfAdd({ title: 'Open and pay R' + r.amount + ' \u00b7 ' + r.code, url: r.checkout_url, kind: 'pay', note: r.item, code: r.code });
     railNote('payment request ' + r.code + ' \u00b7 nothing paid yet');
+    watchRequest(r.code);
     result = 'A payment request for R' + r.amount + ' is on his shelf as ' + r.code
       + '. Nothing has been paid: he opens the card and pays himself. Do not read the code or the link aloud.';
     looked = 'the shelf \u00b7 request ' + r.code;
@@ -1108,6 +1110,77 @@ async function handlePayCall(call) {
       toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
     }));
   } catch { /* the socket is gone; the turn will end on its own */ }
+}
+
+/* ---------- the pay card, and the shelf that outlives the door ---------- */
+
+// Two things Edwin found on a real phone on 7 Nov 2026: a card that stays tappable after it
+// is paid is a dead end (the provider's page is single use, so the second tap is refused), and
+// a shelf that empties when the door session ends looks like the request vanished. Neither is
+// a display nicety: one sends him to an error, the other makes him doubt the record.
+
+function payCard(it) {
+  const amt = 'R' + Number(it.amount || 0).toFixed(2);
+  if (String(it.status) === 'paid') {
+    return {
+      kind: 'paid',
+      title: 'Paid ' + amt + ' \u00b7 ' + (it.receipt_no || it.code),
+      url: FNBASE + 'payRequestShelf?code=' + encodeURIComponent(it.code),
+      note: it.item,
+    };
+  }
+  if (String(it.status) === 'open') {
+    return { kind: 'pay', title: 'Open and pay ' + amt + ' \u00b7 ' + it.code, url: it.checkout_url, note: it.item };
+  }
+  return null;
+}
+
+function shelfReplace(code, next) {
+  for (let i = 0; i < shelf.length; i++) {
+    if (String(shelf[i].code || '') === String(code) || String(shelf[i].title || '').indexOf(code) >= 0) {
+      shelf[i] = { ...shelf[i], ...next, at: shelf[i].at };
+      renderShelf();
+      return true;
+    }
+  }
+  return false;
+}
+
+// One watcher per request. It stops the moment the record says paid, and it never
+// says paid on its own authority: the shelf function reads the record the witness wrote.
+function watchRequest(code, tries) {
+  const left = typeof tries === 'number' ? tries : 45;   // 45 x 4s = three minutes
+  if (left <= 0) return;
+  setTimeout(() => {
+    fetch(FNBASE + 'payRequestShelf?json=1&code=' + encodeURIComponent(code))
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.found && d.status === 'paid') {
+          shelfReplace(code, { ...payCard(d), code });
+          railNote('paid \u00b7 ' + (d.receipt_no || code));
+          looked = 'the shelf \u00b7 paid';
+          return;
+        }
+        watchRequest(code, left - 1);
+      })
+      .catch(() => watchRequest(code, left - 1));
+  }, 4000);
+}
+
+// The shelf is not a session artefact: what he asked for is a record, so the door
+// brings back what is still his when it opens again.
+async function seedShelf() {
+  try {
+    const r = await fetch(FNBASE + 'payRequestShelf?json=1&hours=6');
+    const d = await r.json();
+    if (!d || !d.ok || !Array.isArray(d.requests)) return;
+    for (const it of d.requests.slice().reverse()) {
+      const card = payCard(it);
+      if (!card) continue;
+      shelfAdd({ ...card, code: it.code });
+      if (it.status === 'open') watchRequest(it.code);
+    }
+  } catch (e) { /* a quiet shelf is not an error */ }
 }
 
 /* ---------- the shelf: what the door hands over ---------- */
