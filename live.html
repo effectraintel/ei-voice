@@ -229,8 +229,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T18:05';
-const BUILD_NO = 35;   // 7 Nov: opening overlaps its costs and names its stages. The channel opens with the door; the circle silences.
+const BUILD = '2026-11-07T18:12';
+const BUILD_NO = 36;   // 7 Nov: a cleared shelf stays cleared. Paid cards no longer walk back on by themselves.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1240,10 +1240,18 @@ async function shelfSync() {
     for (const it of d.requests.slice().reverse()) {
       const card = payCard(it);
       if (!card) continue;
-      // He cleared the shelf: only what has happened since earns a card back. A payment
-      // that lands on an open request is the exception - money arriving is never noise.
-      const born = new Date(it.created_date || it.paid_at || 0).getTime() || 0;
-      const fresh = !cleared || born > cleared || String(it.status) === 'paid';
+      // Clear means clear. Build 36: a cleared shelf used to come back full on the next
+      // open because a paid card was always let through "since money is never noise" -
+      // true when a payment lands while he is standing there, wrong when it is a card he
+      // read and dismissed an hour ago. So the test is when the thing happened, not what
+      // state it is in: a request is measured from when it was made, a paid one from when
+      // the money landed. Both after the clear still arrive; anything before it stays gone.
+      // (Edwin, 7 Nov: "The shelf I can clear while I'm in the chat but it opens with all
+      // the items again.")
+      const when = String(it.status) === 'paid'
+        ? new Date(it.paid_at || it.created_date || 0).getTime() || 0
+        : new Date(it.created_date || 0).getTime() || 0;
+      const fresh = !cleared || when > cleared;
       if (!fresh) continue;
       if (!shelfReplace(it.code, card)) shelfAdd(card);
       if (it.status === 'open') watchRequest(it.code, 6);
