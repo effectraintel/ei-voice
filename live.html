@@ -243,8 +243,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T20:41';
-const BUILD_NO = 49;   // 7 Nov: the route settles in a quarter second of silence before the first word.
+const BUILD = '2026-11-07T20:52';
+const BUILD_NO = 50;   // 7 Nov: the footer says which voice and model this door asked for.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -420,7 +420,11 @@ setInterval(() => {
   b.textContent = base + ' · mic ' + (micCtx ? micCtx.state : 'none') +
     ' · frames ' + dbgFrames + ' · peak ' + Math.round(dbgPeak * 1000) +
     ' · sent ' + dbgSent + ' · opens ' + dbgOpens + ' · replies ' + dbgReplies +
-    ' · unsought ' + dbgUnsought;
+    ' · unsought ' + dbgUnsought +
+    // Edwin, 7 Nov 2026: "the first voice is still different... and the accent was also". A
+    // reading beats a theory - this says which voice and model this door actually asked for,
+    // so a different-sounding first line can be traced to the ask or to the answer.
+    ' · voice ' + (sessionVoice || '?') + ' · model ' + (sessionModel || '?');
 }, 500);
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -479,6 +483,7 @@ let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency
 // owner interrupting, so the page used to cut its own sentence off mid-word.
 let playRunStart = 0, loudFrames = 0, looked = null;
 let ourSoundEndsAt = 0, lastVoicedAt = 0;   // ms on the page clock (build 47)
+let sessionVoice = '', sessionModel = '';   // what this door asked for, shown in the footer (build 50)
 // Build 39. The engine says one line before the microphone opens, so the boundary between
 // "not listening" and "listening" is something he can HEAR. Without it, a sentence already
 // in his mouth arrives half-eaten and its tail gets stuck to the front of the next thing he
@@ -946,6 +951,7 @@ async function openDoor() {
     // that no control on the page owns any more.
     if (gen !== doorGen) { closeMic(); stopClock(); busy = false; connecting = false; return; }
 
+    sessionVoice = voice; sessionModel = String(d.model || '');
     const sock = new WebSocket(d.ws + '?access_token=' + encodeURIComponent(d.token));
     ws = sock;
     sock.onopen = () => {
