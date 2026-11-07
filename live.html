@@ -229,8 +229,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T19:48';
-const BUILD_NO = 38;   // 7 Nov: a song is made to a brief. The door asks what it should say, who for and what kind before it makes anything.
+const BUILD = '2026-11-07T20:22';
+const BUILD_NO = 39;   // 7 Nov: the engine speaks one line before the microphone opens, so a half-said sentence cannot be caught and prepended.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -427,6 +427,12 @@ let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
 // owner interrupting, so the page used to cut its own sentence off mid-word.
 let playRunStart = 0, loudFrames = 0, looked = null;
+// Build 39. The engine says one line before the microphone opens, so the boundary between
+// "not listening" and "listening" is something he can HEAR. Without it, a sentence already
+// in his mouth arrives half-eaten and its tail gets stuck to the front of the next thing he
+// says - the anomaly he reported. (Edwin, 7 Nov: "there is an anomaly that we need to cater
+// for... I think the best way is actually to say something before it goes open for inputs.")
+let greeting = false, greetWatch = null;
 let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0;
 const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
@@ -518,6 +524,8 @@ function resetTurns() { turns = { you: null, engine: null }; said = { you: '', e
 function shutDoor() {
   try { ws && ws.close(); } catch {}
   ws = null; sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
+  // A greeting still in flight must not open a door that has been shut.
+  greeting = false; if (greetWatch) { clearTimeout(greetWatch); greetWatch = null; }
   micBtn.classList.remove('live', 'arming');
   stopClock(); closeMic(); resetTurns();
   setState('the door is shut');
@@ -1528,21 +1536,69 @@ function shelfFromGrounding(gm) {
   }
 }
 
+/* The spoken boundary between "not open" and "open". It is one short line, spoken by the
+   engine itself, and the microphone opens on the far side of it. A watchdog opens the door
+   anyway if the line never arrives, because a door that will not listen is worse than one
+   that opens abruptly. */
+function sayGreeting() {
+  try {
+    ws.send(JSON.stringify({
+      clientContent: {
+        turns: [{
+          role: 'user',
+          parts: [{ text: '(The door has just opened. Say exactly this, in that tone, and nothing else: '
+            + '"I am here, Boss." Do not ask a question, do not offer anything, do not describe yourself.)' }],
+        }],
+        turnComplete: true,
+      },
+    }));
+  } catch (e) { /* the socket answers nothing; the watchdog will open the input */ }
+  if (greetWatch) clearTimeout(greetWatch);
+  greetWatch = setTimeout(() => openListening(), 7000);
+}
+
+// Open the input: the one place that decides the microphone is live.
+function openListening() {
+  if (greetWatch) { clearTimeout(greetWatch); greetWatch = null; }
+  greeting = false;
+  if (!sessionUp) return;
+  busy = false; listening = true;
+  micBtn.classList.remove('arming'); micBtn.classList.add('live');
+  setState('listening. speak whenever you like');
+  hint('live now · tap the circle to be quiet');
+}
+
+// turnComplete for a reply means its audio is queued, not finished. The input opens when the
+// last sample has actually left the speaker, plus a breath, so his first word is not clipped.
+function openAfterSpeech() {
+  const t0 = Date.now();
+  const check = () => {
+    if (!greeting) return;                       // already open
+    if (Date.now() - t0 > 6000) { openListening(); return; }
+    if (playing()) { setTimeout(check, 80); return; }
+    setTimeout(() => { if (greeting) openListening(); }, 260);
+  };
+  check();
+}
+
 function handleFrame(text) {
   let msg; try { msg = JSON.parse(text); } catch { return; }
 
   if (msg.setupComplete) {
     dbgOpens++;
-    sessionUp = true; busy = false; listening = true;
+    // The session is up, but the channel is NOT open yet. He hears one line first, and the
+    // input opens when that line has finished, so nothing he had already started saying can
+    // be caught in halves. (Build 39)
+    sessionUp = true; busy = true; listening = false; greeting = true;
     // The session and the microphone must be awake together. A suspended context at
     // this instant is the "door opens but does not listen" failure exactly.
     if (micCtx && micCtx.state !== 'running') micCtx.resume().catch(() => {});
     stampSession();
     stopClock();
-    micBtn.classList.remove('arming'); micBtn.classList.add('live');
     foldForDoor(true);
-    setState('listening. speak whenever you like');
-    hint('live now · tap the circle to be quiet');
+    setState('one moment');
+    hint('the door is open · wait for my voice');
+    sayGreeting();
     return;
   }
   if (msg.voiceActivity && msg.voiceActivity.type === 'ACTIVITY_END') {
@@ -1585,6 +1641,7 @@ function handleFrame(text) {
   }
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    if (greeting) { openAfterSpeech(); return; }
     if (looked && turns.engine) {
       const prev = turns.engine.querySelector('.lat.chip');
       if (prev) prev.remove();
