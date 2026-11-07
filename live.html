@@ -732,7 +732,7 @@ async function onUnlockTap() {
   try {
     const done = await unlockWithFingerprint('unlock', null);
     gateSay('fingerprint verified · open for thirty minutes · ' + (done.device_label || 'this phone'));
-    setTimeout(() => { gatePassed(); setState('tap the circle to open the door'); }, 420);
+    setTimeout(() => { gatePassed(); setState('opening the voice'); startChannel('unlock'); }, 420);
   } catch (e) {
     gateSay(String(e.message || e), 'bad');
     if (/not a key/.test(String(e.message))) gAlt.click();
@@ -746,16 +746,18 @@ async function onEnrolTap() {
   try {
     await unlockWithFingerprint('register', code);
     gateSay('this phone is a key to this door');
-    setTimeout(() => { gatePassed(); setState('tap the circle to open the door'); }, 420);
+    setTimeout(() => { gatePassed(); setState('opening the voice'); startChannel('unlock'); }, 420);
   } catch (e) {
     gateSay(String(e.message || e), 'bad');
   }
 }
 
 /* The door starts shut. A page load is not a credential. */
+armFirstGesture();
 if (doorSession()) {
   gatePassed();
   hint('open · this tab closes again in thirty minutes');
+  setTimeout(() => startChannel('load'), 260);
 } else {
   showGate('');
   setState('the door is locked');
@@ -1633,6 +1635,45 @@ function barge() {
   awaitingFirstAudio = false;
 }
 
+/* ---------- opening the channel on entry (Edwin, 7 Nov 2026) ----------
+   "open the voice channel upon entering and not when a user presses the speaker button."
+   The press was never the point; the door is. So the channel starts itself the moment the
+   door opens - on a fresh unlock, on an enrolment, or on a page load that still holds a
+   live session - and the circle becomes the silence control instead of the ignition.
+   Silence is remembered for the tab, so an auto-start can never reopen over him mid-thought.
+   Nothing here settles anything: the door still governs, and a refusal still shows. */
+
+let autoStarted = false;
+const SILENCED = 'ei.voice.silenced';
+
+function armFirstGesture() {
+  // A page load is not a gesture, and iOS/Android refuse to start audio without one.
+  // The first touch or key on the page unlocks playback, wherever it lands.
+  const once = async () => {
+    try { const c = playCtxEnsure(); await c.resume(); } catch {}
+    window.removeEventListener('pointerdown', once, true);
+    window.removeEventListener('keydown', once, true);
+  };
+  window.addEventListener('pointerdown', once, true);
+  window.addEventListener('keydown', once, true);
+}
+
+async function startChannel(where) {
+  if (autoStarted || busy || connecting || sessionUp || listening) return;
+  if (sessionStorage.getItem(SILENCED) === '1') return;
+  if (!doorSession()) return;
+  autoStarted = true;
+  resetTurns();
+  lastWordAt = 0; awaitingFirstAudio = false; pendingLatency = null; speaking = false;
+  try {
+    await openDoor();
+  } catch (e) {
+    // openDoor puts its own refusal on screen; say the plain next step, once.
+    setState('the door is open · the voice did not start');
+    hint('tap the circle to open the voice');
+  }
+}
+
 /* ---------- controls ---------- */
 
 micBtn.addEventListener('click', async () => {
@@ -1653,10 +1694,14 @@ micBtn.addEventListener('click', async () => {
     try { ws && ws.close(); } catch {}
     ws = null;
     closeMic(); stopClock();
-    setState('the door is shut');
-    hint('tap the circle to open it again');
+    // The door stays open; only the mouth stops. Remembered for this tab, so the
+    // auto-start can never talk over him after he has asked for quiet.
+    sessionStorage.setItem(SILENCED, '1');
+    setState('the door is open · the voice is silent');
+    hint('tap the circle to speak again');
     return;
   }
+  sessionStorage.removeItem(SILENCED);
   resetTurns();
   lastWordAt = 0; awaitingFirstAudio = false; pendingLatency = null; speaking = false;
   await openDoor();
