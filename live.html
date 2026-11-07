@@ -229,8 +229,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T18:12';
-const BUILD_NO = 36;   // 7 Nov: a cleared shelf stays cleared. Paid cards no longer walk back on by themselves.
+const BUILD = '2026-11-07T19:20';
+const BUILD_NO = 37;   // 7 Nov: the mic is silent until the door answers; a cleared card stays cleared by its own code; a song in the making is named.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1031,11 +1031,14 @@ async function handleSongCall(call) {
         if (r.request_id) lastSongRequest = r.request_id;
         result = r.line + (lastSongRequest ? ' (request ' + lastSongRequest + ')' : '');
         if (r.needs_word) {
-          looked = 'the music rail · asked him back';
-          railNote('music rail · already has ' + (r.prior_title || 'one like this'));
+          looked = 'the rail already has one like this';
+          railNote('nothing new made · he already has ' + (r.prior_title || 'one like this'));
         } else {
-          looked = 'the music rail · asked';
-          railNote('music rail · asked · ' + (words || 'again').slice(0, 40));
+          // Build 37: the screen used to say the rail had been "asked", which reads like the
+          // name of the song. It says what is happening and to what, instead.
+          const subject = String(words || 'another take').slice(0, 60);
+          looked = 'in the studio · ' + subject;
+          railNote('making it now · ' + subject);
         }
       }
     }
@@ -1236,23 +1239,13 @@ async function shelfSync() {
     const r = await fetch(FNBASE + 'payRequestShelf?json=1&hours=6');
     const d = await r.json();
     if (!d || !d.ok || !Array.isArray(d.requests)) return;
-    const cleared = shelfClearedAt();
     for (const it of d.requests.slice().reverse()) {
+      // Build 37: the card itself remembers being cleared, so a reload, a fresh door or a
+      // clock in a different timezone cannot bring back what he put away.
+      // (Edwin, 7 Nov: "when I clear the shelve, the shelve items just comes again when i enter.")
+      if (stillCleared(it)) continue;
       const card = payCard(it);
       if (!card) continue;
-      // Clear means clear. Build 36: a cleared shelf used to come back full on the next
-      // open because a paid card was always let through "since money is never noise" -
-      // true when a payment lands while he is standing there, wrong when it is a card he
-      // read and dismissed an hour ago. So the test is when the thing happened, not what
-      // state it is in: a request is measured from when it was made, a paid one from when
-      // the money landed. Both after the clear still arrive; anything before it stays gone.
-      // (Edwin, 7 Nov: "The shelf I can clear while I'm in the chat but it opens with all
-      // the items again.")
-      const when = String(it.status) === 'paid'
-        ? new Date(it.paid_at || it.created_date || 0).getTime() || 0
-        : new Date(it.created_date || 0).getTime() || 0;
-      const fresh = !cleared || when > cleared;
-      if (!fresh) continue;
       if (!shelfReplace(it.code, card)) shelfAdd(card);
       if (it.status === 'open') watchRequest(it.code, 6);
     }
@@ -1307,14 +1300,49 @@ function shelfAdd(item) {
 }
 
 // A crowded shelf is a shelf he stops reading, so he can clear it. What he clears is the
-// view, never the record: the requests stay, and anything new still arrives. The mark is
-// kept locally so a reload does not undo what he just did.
+// view, never the record: the requests stay, and anything new still arrives.
+//
+// Build 37. A single timestamp was the wrong memory: it had to be compared against times
+// that come from the server, and one comparison - "a paid card is never noise" - let every
+// paid card walk back on by itself. So each cleared card is remembered by its own code,
+// which cannot drift with a clock or a timezone, and it stays gone until something NEW
+// happens on that exact request. A payment landing later still earns its card back (at
+// least a minute after the clear, so a clock skew can never resurrect a card by accident).
 const CLEARED_KEY = 'ei.shelf.clearedAt';
-function shelfClearedAt() {
-  try { return Number(localStorage.getItem(CLEARED_KEY) || 0) || 0; } catch (e) { return 0; }
+const CLEARED_CODES = 'ei.shelf.clearedCodes';
+
+function clearedCards() {
+  try {
+    const m = JSON.parse(localStorage.getItem(CLEARED_CODES) || '{}');
+    return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {};
+  } catch (e) { return {}; }
 }
+
+function rememberCleared(codes) {
+  try {
+    const m = clearedCards();
+    const now = Date.now();
+    for (const c of codes) if (c) m[String(c)] = now;
+    // Keep the book small: the newest 200 codes are more than a shelf will ever hold.
+    const keys = Object.keys(m);
+    if (keys.length > 200) keys.sort((a, b) => m[a] - m[b]).slice(0, keys.length - 200).forEach(k => delete m[k]);
+    localStorage.setItem(CLEARED_CODES, JSON.stringify(m));
+  } catch (e) { /* private mode: the shelf simply forgets */ }
+}
+
+// Has this exact card been cleared, and has nothing happened on it since?
+function stillCleared(it) {
+  const m = clearedCards();
+  const at = Number(m[String(it.code || '')] || 0);
+  if (!at) return false;                             // never cleared: it belongs on the shelf
+  const paid = new Date(it.paid_at || 0).getTime() || 0;
+  if (String(it.status) === 'paid' && paid > at + 60000) return false;   // money landed after the clear
+  return true;
+}
+
 function clearShelf() {
   const n = shelf.length;
+  rememberCleared(shelf.map(x => x.code).filter(Boolean));
   shelf.length = 0;
   try { localStorage.setItem(CLEARED_KEY, String(Date.now())); } catch (e) { /* private mode */ }
   renderShelf();
@@ -1418,7 +1446,7 @@ function handleFrame(text) {
     micBtn.classList.remove('arming'); micBtn.classList.add('live');
     foldForDoor(true);
     setState('listening. speak whenever you like');
-    hint('tap the circle again to close the door');
+    hint('live now · tap the circle to be quiet');
     return;
   }
   if (msg.voiceActivity && msg.voiceActivity.type === 'ACTIVITY_END') {
@@ -1501,6 +1529,15 @@ async function openMic() {
     for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
     const rms = Math.sqrt(sum / data.length);
     dbgFrames++; if (rms > dbgPeak) dbgPeak = rms;
+
+    // Build 37. The microphone is warm while the door is still being checked - that is how
+    // the open stays quick - but a warm microphone is not a live one. Until the session
+    // answers, the page must not paint liveness and must not pretend to hear, because words
+    // spoken into it are not travelling anywhere and he would only get the tail of them.
+    // (Edwin, 7 Nov: "The mic should not come alive until it is open. I've talked to it when
+    // it started to come alive and then it just caught half of my words.")
+    if (!sessionUp || !listening) { quietLevel(); return; }
+
     const norm = Math.min(1, Math.max(0, (20 * Math.log10(rms + 1e-8) + 62) / 52));
     paintLevel(norm);
 
@@ -1539,6 +1576,13 @@ async function openMic() {
   };
   src.connect(proc);
   proc.connect(micCtx.destination);
+}
+
+// A warm but not-yet-live microphone looks like nothing: no halo, no bars, no talking class.
+function quietLevel() {
+  micBtn.style.setProperty('--lvl', '0');
+  micBtn.classList.remove('talking');
+  bars.forEach(b => { b.classList.remove('hot'); b.style.height = '4px'; });
 }
 
 function paintLevel(norm) {
