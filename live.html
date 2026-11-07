@@ -229,8 +229,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-07T17:38';
-const BUILD_NO = 34;   // 7 Nov: the channel opens with the door, not the circle. The circle silences; silence is remembered for the tab.
+const BUILD = '2026-11-07T18:05';
+const BUILD_NO = 35;   // 7 Nov: opening overlaps its costs and names its stages. The channel opens with the door; the circle silences.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -432,6 +432,10 @@ const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real spe
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
 const BARGE_FRAMES = 3;      // sustained, not a click
 let clockT = null, clockStart = 0;
+// Build 35: the wait says where it is, so "a while" is a stage and a number on screen
+// rather than a blank circle that might be stuck. (Edwin, 7 Nov: "it still took a while")
+let clockLabel = 'opening the door';
+function stage(label) { clockLabel = label; }
 
 el('voicename').textContent = voice;
 
@@ -454,10 +458,10 @@ function foldForDoor(open) {
   applyFold(c === null ? !!open : c === '1');
 }
 function startClock(label) {
-  stopClock(); clockStart = Date.now();
+  stopClock(); clockStart = Date.now(); clockLabel = label || clockLabel;
   const tick = () => {
     const sec = ((Date.now() - clockStart) / 1000).toFixed(1);
-    stateEl.textContent = label + ' ';
+    stateEl.textContent = clockLabel + ' ';
     const s = document.createElement('span');
     s.className = 'clock';
     s.textContent = sec + 's';
@@ -732,7 +736,7 @@ async function onUnlockTap() {
   try {
     const done = await unlockWithFingerprint('unlock', null);
     gateSay('fingerprint verified · open for thirty minutes · ' + (done.device_label || 'this phone'));
-    setTimeout(() => { gatePassed(); setState('opening the voice'); startChannel('unlock'); }, 420);
+    setTimeout(() => { gatePassed(); setState('opening the voice'); startChannel('unlock'); }, 120);
   } catch (e) {
     gateSay(String(e.message || e), 'bad');
     if (/not a key/.test(String(e.message))) gAlt.click();
@@ -746,7 +750,7 @@ async function onEnrolTap() {
   try {
     await unlockWithFingerprint('register', code);
     gateSay('this phone is a key to this door');
-    setTimeout(() => { gatePassed(); setState('opening the voice'); startChannel('unlock'); }, 420);
+    setTimeout(() => { gatePassed(); setState('opening the voice'); startChannel('unlock'); }, 120);
   } catch (e) {
     gateSay(String(e.message || e), 'bad');
   }
@@ -757,7 +761,7 @@ armFirstGesture();
 if (doorSession()) {
   gatePassed();
   hint('open · this tab closes again in thirty minutes');
-  setTimeout(() => startChannel('load'), 260);
+  setTimeout(() => startChannel('load'), 60);
 } else {
   showGate('');
   setState('the door is locked');
@@ -815,6 +819,15 @@ async function openDoor() {
       hint('open · this tab closes again in thirty minutes');
       startClock('opening the door');
     }
+    // Build 35: the microphone and the clock pack never needed the token, so they run
+    // beside the door's own round trip instead of after it. Opening the door was three
+    // costs in a queue; now it is one wait, and the longest of the three wins.
+    stage('warming the microphone');
+    let micWarmError = null;
+    const micWarm = openMic().catch((e) => { micWarmError = e; });
+    const nowPack = gatePost('doorNowPack', { session_token: session.token }).catch(() => null);
+
+    stage('checking the door');
     const r = await fetch(FN, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -833,14 +846,13 @@ async function openDoor() {
     // server-side, handed to the voice before the socket opens. If it cannot be had,
     // say so rather than letting the model guess at the clock.
     let brief = BRIEF + SONG_SCRIPT;
-    try {
-      const np = await gatePost('doorNowPack', { session_token: session.token });
-      if (np && np.text) brief = BRIEF + '\n\n' + np.text;
-    } catch (e) {
-      brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)';
-    }
+    const np = await nowPack;
+    if (np && np.text) brief = BRIEF + '\n\n' + np.text;
+    else brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)';
 
-    await openMic();
+    stage('opening the voice');
+    await micWarm;
+    if (micWarmError) throw micWarmError;
 
     // Between the tap and here there are two network round trips. If he tapped again in
     // that window, the door was cancelled, and opening it now would leave a socket running
