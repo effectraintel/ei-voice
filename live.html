@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 94;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 95;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2310,9 +2310,12 @@ function scheduleNoteFlush(delay) {
   noteTimer = setTimeout(() => {
     if (!noteQueue.length) return;
     const held = noteQueuedAt ? Date.now() - noteQueuedAt : 0;
-    if ((speaking || awaitingFirstAudio) && held < 3000) { scheduleNoteFlush(300); return; }
+    // busy means a turn is open, sound is in the air, or the reply has not started yet — all three cut a
+    // sentence if a note lands in them. Only silence counts as free.
+    const busy = turnInFlight || speaking || awaitingFirstAudio;
+    if (busy && held < 4000) { scheduleNoteFlush(300); return; }
     flushNotes();
-  }, delay || 350);
+  }, delay || 600);
 }
 
 function doorNote(text) {
@@ -2320,7 +2323,7 @@ function doorNote(text) {
   if (!t) return;
   // A turn in flight is not the same as a sound in the air: from the moment he stops talking until the model
   // finishes, a note would cut the reply. It waits.
-  if ((speaking || awaitingFirstAudio) && !hiddenHold) {
+  if ((turnInFlight || speaking || awaitingFirstAudio) && !hiddenHold) {
     noteQueue.push(t);
     noteQueuedAt = noteQueuedAt || Date.now();
     if (noteQueue.length > 6) noteQueue.shift();
@@ -3628,12 +3631,16 @@ function handleFrame(text) {
         if (turns.engine && !finished && partial.length < 70) { turns.engine.remove(); }
       } catch (e) {}
     }
+    turnInFlight = false;
+    lastTurnEndAt = Date.now();
     barge();                       // the sound stops where the interruption is, not at the end of the queue
     turns.engine = null; said.engine = '';
   }
 
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    turnInFlight = false;
+    lastTurnEndAt = Date.now();
     flushNotes();
     judgeClaim();
     if (sessionOpenedAt && Date.now() - sessionOpenedAt > 9 * 60 * 1000 && !renewing) {
@@ -3846,6 +3853,7 @@ function sendPcm(float32) {
     bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   }
   dbgSent++;
+  turnInFlight = true;
   ws.send(JSON.stringify({
     realtimeInput: { audio: { data: btoa(bin), mimeType: 'audio/pcm;rate=16000' } },
   }));
