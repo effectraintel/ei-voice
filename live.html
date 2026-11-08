@@ -246,8 +246,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T19:14';
-const BUILD_NO = 117;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD = '2026-11-08T20:20';
+const BUILD_NO = 118;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -3719,21 +3719,40 @@ function stillCleared(it) {
   return true;
 }
 
+// A clear is a CUT, not just a wipe of what happens to be on screen. The server parks everything
+// that exists at this moment and records when it happened, so nothing older can slide back into
+// view afterwards. (8 Nov 2026, 20:08: he cleared twelve, emptied the garage and found six more,
+// because the shelf was a window on the whole vault and clearing only scrolled it.)
+async function clearAllCards() {
+  try {
+    const r = await fetch(FNBASE + 'shelfGarage', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'clear' }),
+    });
+    return await r.json();
+  } catch (e) { return { ok: false }; }
+}
+
 function clearShelf() {
   const n = shelf.length;
   // What is remembered across doors is a REQUEST: an open payment that keeps coming back is a
-  // nag. A song or a wrapped link is a RECORD, so it is only put away for this tab and returns
-  // when the door is opened again. (Edwin, 7 Nov: "I cleared the shelf now to test fresh.")
+  // nag. A song or a wrapped link is a RECORD, so it is parked on the server, where he can ask
+  // for it back or remove it for good. Nothing is left in browser storage pretending to be the
+  // record. (Edwin, 7 Nov 2026)
   rememberCleared(shelf.filter(x => x.kind !== 'song' && x.kind !== 'store').map(x => x.code).filter(Boolean));
-  // Songs and wrapped links are MOVED, not hidden: they go to the garage, on the server, where he
-  // can ask for them back or remove them for good. Nothing is left behind in browser storage
-  // pretending to be the record. (Edwin, 7 Nov 2026)
-  putInGarage(shelf).then(() => loadGarage(true));
   shelf.length = 0;
   try { localStorage.setItem(CLEARED_KEY, String(Date.now())); } catch (e) { /* private mode */ }
   renderShelf();
-  railNote(n ? 'shelf cleared \u00b7 ' + n + ' card' + (n === 1 ? '' : 's') + ' \u00b7 records kept' : 'shelf already empty');
+  railNote(n ? 'shelf cleared \u00b7 ' + n + ' card' + (n === 1 ? '' : 's') + ' put away' : 'nothing on the shelf \u00b7 putting it all away');
   looked = 'the shelf \u00b7 cleared';
+  clearAllCards().then(d => {
+    loadGarage(true);
+    if (d && d.ok) {
+      railNote('shelf clear \u00b7 ' + (d.moved || 0) + ' in the garage' + (d.count ? ' \u00b7 ' + d.count + ' stored' : ''));
+    } else {
+      railNote('the shelf could not be put away just now \u00b7 try again');
+    }
+  });
 }
 
 function renderShelf() {
