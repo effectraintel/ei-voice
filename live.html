@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 77;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 78;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -554,9 +554,6 @@ let doorGen = 0;          // bumped by anything that cancels an opening in fligh
 if (stored !== voice) localStorage.setItem('ei-live-voice', voice);
 let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
 let listening = false, busy = false, sessionUp = false;
-try {
-  logLine('page.load', 'build ' + BUILD_NO + ' \u00b7 ' + String(navigator.userAgent || '').slice(0, 70));
-} catch (e) {}
 let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency = null;
 // Echo bookkeeping. A phone speaker feeds its own voice back into its own microphone.
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
@@ -814,6 +811,12 @@ const LOG_SID = (() => {
 
 // Every failure this morning that could not be reproduced left the same emptiness in the log, so the page
 // now reports its own birth and its own errors: a dead door becomes a line with a reason in it.
+// Born below LOG_SID on purpose. The first version sat above it and died in the temporal dead zone, inside
+// its own try/catch — an instrument that silently recorded nothing, which is the exact fault it existed to
+// catch. (8 Nov 13:52: the log could not tell me which build he was in.)
+try {
+  logLine('page.load', 'build ' + BUILD_NO + ' \u00b7 ' + String(navigator.userAgent || '').slice(0, 70));
+} catch (e) {}
 try {
   window.addEventListener('error', (e) => {
     logLine('page.error', (e && (e.message || e.type) || 'error') + ' @' + (e && e.lineno || '?'),
@@ -1222,6 +1225,10 @@ async function openDoor() {
     sock.onopen = () => {
       if (sock !== ws) { try { sock.close(); } catch (e) {} return; }
       seedShelf();
+      try {
+        logLine('session.mouth', LANG + ' \u00b7 ' + voice + ' \u00b7 pinned in the setup frame',
+          { level: 'info', target: 'session' });
+      } catch (e) {}
       sock.send(JSON.stringify({
       setup: {
         model: 'models/' + d.model,
@@ -3075,7 +3082,6 @@ function sayGreeting() {
   const speak = resumeSpeak; resumeSpeak = '';
   resumeLine = '';
   sessionOpenedAt = Date.now();
-  logLine('session.mouth', LANG + ' \u00b7 ' + voice + '\u00b7 pinned at setup', { level: 'info' });
   const line = speak || (fresh
     ? 'I am here. Ask me anything, out loud, and I will do it. If you want to know what I can do, say help.'
     : 'I am here, Boss.');
