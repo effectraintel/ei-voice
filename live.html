@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 101;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 102;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1806,6 +1806,15 @@ let shareAddrOk = false;       // set only by a known address, or by him hearing
 let shareAddrReadBack = '';    // the address the door read out, so a correction can be recorded as one          // what the rail offered, so his answer can be matched against it
 let shareQuery = '';
 
+// A tribute band's recording is a different song by a different artist that happens to share a title. Offered
+// next to the real one it is noise, and chosen by accident it is the wrong recording forever.
+function dropTributes(list) {
+  const tribute = (c) => /\b(?:tribute|karaoke|in the style of|cover band|made famous|originally performed)\b/i
+    .test((c.title || '') + ' ' + (c.artist || ''));
+  const clean = (list || []).filter((c) => !tribute(c));
+  return clean.length ? clean : (list || []);
+}
+
 function shareTokens(t) {
   return String(t || '').toLowerCase().replace(/[^a-z0-9 ]/gi, ' ').split(/\s+/).filter(w => w.length > 1);
 }
@@ -1817,19 +1826,31 @@ function pickChoice(answer) {
   if (!a || !shareChoices.length) return null;
   const words = ['first', 'second', 'third', 'fourth'];
   let n = parseInt(a.replace(/[^0-9]/g, ''), 10);
-  if (!n) { const wi = words.indexOf(a.toLowerCase().split(/\s+/)[0]); if (wi >= 0) n = wi + 1; }
+  // "the second one" is an ordinal anywhere in the sentence, not only as its first word
+  if (!n) {
+    const low = a.toLowerCase();
+    const wi = words.findIndex((w) => new RegExp('\\b' + w + '\\b').test(low));
+    if (wi >= 0) n = wi + 1;
+  }
   if (n >= 1 && n <= shareChoices.length) return shareChoices[n - 1];
   const q = shareTokens(a);
   if (!q.length) return null;
-  let best = null, bestHit = 0, tie = false;
+  let best = null, bestScore = 0, tie = false;
   for (const c of shareChoices) {
-    const hay = shareTokens((c.title || '') + ' ' + (c.artist || ''));
-    let hit = 0;
-    for (const t of q) if (hay.includes(t)) hit++;
-    if (hit > bestHit) { bestHit = hit; best = c; tie = false; }
-    else if (hit === bestHit && hit > 0) tie = true;
+    const title = shareTokens(c.title || '');
+    const artist = shareTokens(c.artist || '');
+    const said = (c.title || '') + ' ' + (c.artist || '');
+    let score = 0;
+    for (const t of q) {
+      if (title.includes(t)) score += 2;
+      if (artist.includes(t)) score += 3;      // "the one by Ed Sheeran" is an artist answer
+    }
+    if (/\b(?:tribute|karaoke|in the style of|cover band)\b/i.test(said)
+        && !/\b(?:tribute|karaoke)\b/i.test(a)) score -= 4;
+    if (score > bestScore) { bestScore = score; best = c; tie = false; }
+    else if (score === bestScore && score > 0) tie = true;
   }
-  if (!best || bestHit === 0 || tie) return null;
+  if (!best || bestScore <= 0 || tie) return null;
   return best;
 }
 
@@ -1927,6 +1948,19 @@ function judgeClaim() {
   try {
     const t = String(said.engine || '');
     if (!t) return;
+    // "You can type the address and message right here on the sheet" when no sheet exists is the same class of
+    // lie as a rail claim, and it strands him at a dead end with nothing to touch.
+    const sheetClaim = /\b(?:on|in) the sheet\b|right here on the sheet|type the address|sheet is (?:open|on)/i;
+    if (sheetClaim.test(t) && shareStage !== 'sheet') {
+      if (Date.now() - unbackedWarnedAt >= 15000) {
+        unbackedWarnedAt = Date.now();
+        logLine('claim.sheet', t.slice(0, 160), { level: 'warn', target: 'no-sheet' });
+        doorNote('There is no sheet on his screen: the door has not opened one, and nothing is waiting to be '
+          + 'typed. Do not mention a sheet, an address box or a message box. Ask him what he wants next.',
+          true);
+      }
+      return;
+    }
     const claims = /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|the rail (?:is )?(?:down|not answering)|couldn'?t reach (?:the )?(?:rail|sharing rail|sharing service)|there'?s nothing on your shelf/i;
     if (!claims.test(t)) return;
     const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000)
@@ -2261,6 +2295,10 @@ function noteSongAnswer(heard) {
         }
         let picks = collapseChoices(r.candidates);
         if (picks.length > 1) {
+          picks = dropTributes(picks);
+          shareChoices = picks;          // the door asked the question, so the door must remember the options
+          logLine('share.choice', picks.map((c) => (c.title || '') + ' · ' + (c.artist || '')).join(' | '),
+            { level: 'info', target: 'songShare' });
           // let him choose: the rail answered more than one song and the door does not guess between them
           doorNote('the rail answered with ' + picks.length + ' songs: '
             + picks.slice(0, 3).map((c, i) => (i + 1) + ') ' + c.title + (c.artist ? ' by ' + c.artist : '')).join('; ')
@@ -2416,6 +2454,7 @@ function shareSongLocked(card) {
   if (same && shareStage === 'art') return;
   shareCard = card;
   shareCardTarget = card;
+  shareChoices = [];
   shareStage = 'art';
   shareArt = { want: false, brief: '' };
   shareArtTries = 0;
@@ -2426,6 +2465,47 @@ function shareSongLocked(card) {
 }
 
 // Step 2 done: his own words, or a plain no. The words are the brief, not a starting point for one.
+function resolveChoice(heard) {
+  const choice = pickChoice(heard);
+  if (!choice) {
+    railNote('share · cannot tell which one · ' + String(heard).slice(0, 40));
+    doorNote('he answered about the songs but the door cannot tell which one he meant, and it has not locked '
+      + 'anything. Ask once, in one short question, listing them by name. Do not say anything is on his shelf.',
+      true);
+    return;
+  }
+  const picked = choice;
+  shareChoices = [];
+  hiddenHold = true; hiddenHoldUntil = Date.now() + 8000;
+  railNote('share · choosing · ' + (picked.title || ''));
+  gatePost('songShare', { action: 'choose', candidate: picked }).then((c) => {
+    if (!c || !c.url) {
+      hiddenHold = false;
+      doorNote('the rail could not wrap that song: ' + ((c && (c.error || c.note)) || 'no answer')
+        + '. Say that in one line and nothing else.', true);
+      return;
+    }
+    const card = {
+      kind: c.found === 'shelf' ? 'song' : 'store',
+      title: c.title || picked.title || 'a song',
+      sub: c.found === 'shelf' ? 'made here · a day of listening'
+        : [c.artist, c.album].filter(Boolean).join(' · ') + (c.platform_text ? ' · ' + c.platform_text : ''),
+      url: c.url, code: c.code || '', song_id: c.song_id || '', sha: c.sha || '',
+    };
+    mergeCard(card);
+    railAnsweredAt = Date.now();
+    shareSongLocked(card);
+    railNote('share · ' + (c.found || 'wrapped') + ' · ' + (card.title || ''));
+    doorNote('the door has put "' + (card.title || 'a song') + '"' + (c.artist ? ' by ' + c.artist : '')
+      + ' on his shelf with its listening link. Say the title once and that it is on the shelf, then ask once, '
+      + 'in your own words, whether a picture should go with it and what it should show.', true);
+  }).catch((e) => {
+    hiddenHold = false;
+    logLine('share.choose.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
+    doorNote('the rail did not answer. Say you could not reach it, in one line, and do not guess at the song.', true);
+  });
+}
+
 function shareArtAnswer(heard) {
   const words = String(heard || '').trim();
   const no = /^(no|nope|nothing|just the song|no cover|no picture|no drawing|don'?t|skip)/i.test(words);
@@ -3677,6 +3757,9 @@ function handleFrame(text) {
       // Step 2 of the share: this utterance IS the answer about the picture. The door takes it, locks it,
       // and opens the sheet. The model is not asked, because a model asked twice answers twice.
       if (shareStage === 'art') { shareArtAnswer(heard); }
+      // The door asked "which one?" — so the door takes the answer. It used to offer two songs, keep no
+      // record of them, and then have nothing to lock when he chose.
+      if (!shareCard && shareChoices.length && !doorSearching) resolveChoice(heard);
       // 8 Nov 11:59: "I want to share a song." → "Back in Black from ACDC" → "I couldn't find that song
       // on the sharing rail. Nothing was found." There is not one songShare call in the log: the model
       // never searched and reported the failure anyway. The rail answers those exact words with the song.
