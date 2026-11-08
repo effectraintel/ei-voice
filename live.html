@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 68;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 69;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -378,6 +378,9 @@ const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send e
 const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
+  'Every step of a share or a send is a tool call: the song, the person, the address, the message, ' +
+  'the cover, the send itself. Never ask or promise one of those steps in words alone, and never say ' +
+  'a send will happen: call it, and let its result be what you report. A promise to send is not a send. ' +
   // Edwin, 8 Nov, on the share runs: the same composite question came back three times, and both
   // openings recited his capabilities. "Notice all the repeating of concepts going on."
   'Ask ONE question at a time, and never ask again for anything you are told you already hold. ' +
@@ -613,7 +616,7 @@ function startClock(label) {
 function stopClock() { if (clockT) clearInterval(clockT); clockT = null; }
 // What is not conversation: a vocalisation, a dangling fragment, or a word too short to be an
 // answer. Yes, no and okay are answers and must never land here.
-const NOISE_WORDS = /^(eu|uh|uhm|um|er|eh|ah|oh|hmm|mm|mhm|hm|it|and it|and it is|and is|ka|ka\.|\u0915\u093e|na|the|a|is|so|ja|nee)$/i;
+const NOISE_WORDS = /^(eu|uh|uhm|um|er|eh|ah|oh|hmm|mm|mhm|hm|it|and it|and it is|and is|ka|ka\.|\u0915\u093e|na|the|a|is|so|ja|nee|good question|good one|no idea|i don't know|i dont know|let me think|thinking)$/i;
 function isNoise(text) {
   const t = String(text || '').trim().replace(/[.?!,\u00bf\u00a1]+$/g, '').trim();
   if (!t) return true;
@@ -2889,9 +2892,25 @@ function handleFrame(text) {
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
       greeting: greeting ? '1' : '',
     });
+    // A share that is ready and unsent. Edwin, 8 Nov 11:30: the whole family-life share was talked through
+    // and never called, so nothing left and he waited for a song that was never on its way. When the draft
+    // is complete and no send was recorded this turn, the door puts the send on the shelf and says so.
+    if (shareDraft && !shareSentThisTurn && shareDraft.message !== null
+        && shareDraft.cover !== null && shareDraft.to) {
+      const ready = (shareDraft.channel === 'whatsapp')
+        ? looksMobile(shareDraft.to)
+        : looksAddress(shareDraft.to);
+      if (ready) {
+        railNote('share · ready but unsent · ' + (shareDraft.card && shareDraft.card.title || ''));
+        logLine('share.unsent', 'a finished share ended the turn without a send', { level: 'warn' });
+        openShareSheet(shareDraft.card);
+        warn('Nothing has gone yet, Boss. The send is on the shelf.');
+      }
+    }
+
     // A claim of delivery with no delivery behind it. The log catches it, the door says it plainly once,
     // and nothing pretends afterwards.
-    const claimedSend = /\b(i have (just )?sent|i've (just )?sent|it's on its way|it is on its way|that's gone|has been sent|just sent it)\b/i
+    const claimedSend = /\b(i have (just )?sent|i've (just )?sent|it's on its way|it is on its way|that's gone|has been sent|just sent it|i'll (have that|get that|send|send it|get it)|sending (it|that) now|send (it|the whole thing) (on )?now|i am sending|i'm sending)\b/i
       .test(String(said.engine || ''));
     if (claimedSend && !shareSentThisTurn) {
       logLine('share.claim', 'claimed a send that never happened', { level: 'warn' });
