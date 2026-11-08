@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 97;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 98;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1901,14 +1901,15 @@ function stripRequestFrame(q) {
 
 // The record is the only thing allowed to report on the record. A sentence that claims a search, an error, or
 // an empty shelf with no rail call behind it is corrected at once — not just written down for later.
-let unbackedWarnedAt = 0;
+let unbackedWarnedAt = 0, railToldAt = 0;
 function judgeClaim() {
   try {
     const t = String(said.engine || '');
     if (!t) return;
     const claims = /couldn'?t find|could not find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|the rail (?:is )?(?:down|not answering)|couldn'?t reach (?:the )?(?:rail|sharing rail|sharing service)|there'?s nothing on your shelf/i;
     if (!claims.test(t)) return;
-    const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000);
+    const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000)
+      || (Date.now() - railToldAt < 20000);
     if (answered || doorSearching) return;
     if (Date.now() - unbackedWarnedAt < 15000) return;    // one correction, not a chorus
     unbackedWarnedAt = Date.now();
@@ -2172,7 +2173,7 @@ let shareStage = 'idle';                     // idle → art → sheet → sent.
 // door if the model has not done it, because a model that skips the tool will still answer as though it
 // called it.
 let awaitSong = 0, awaitSongNudge = null, doorSearching = false, railAnsweredAt = 0;
-let heldMouth = [], heldFrames = 0, hiddenHold = false;
+let heldMouth = [], heldFrames = 0, hiddenHold = false, hiddenHoldUntil = 0, heldEngineLogged = 0;
 const SHARE_INTENT = /\b(?:share|send|seal)\b[^.?!]{0,30}\b(?:song|track)\b|\bi (?:want|would like) to share\b/i;
 
 function noteSongAnswer(heard) {
@@ -2198,6 +2199,9 @@ function noteSongAnswer(heard) {
     logLine('share.door', 'searching the rail itself: ' + said, { level: 'info', target: 'songShare' });
     const t0 = Date.now();
     doorSearching = true;
+    hiddenHold = true;                       // no words and no voice until the rail's answer is in his hands
+    hiddenHoldUntil = Date.now() + 8000;
+    heldEngineLogged = 0;
     shareQuery = said;
     gatePost('songShare', { action: 'find', query: said })
       .then(async (r) => {
@@ -2298,8 +2302,11 @@ function sendNoteNow(text, speak) {
         turnComplete: !!speak,
       },
     }));
+    if (/rail|shelf|found|song/i.test(String(text)) && speak) railToldAt = Date.now();
     logLine('note.sent', (speak ? 'speak: ' : 'context: ') + String(text).slice(0, 80),
       { level: 'info', target: 'note' });
+    // The door's silence was waiting for exactly this: the answer is now the model's to give.
+    try { if (hiddenHold && !document.hidden) { hiddenHold = false; hiddenHoldUntil = 0; } } catch (e) {}
   } catch (e) {}
 }
 
@@ -3630,6 +3637,12 @@ function handleFrame(text) {
     if (doorSearching) {
       heldMouth.push(String(sc.outputTranscription.text).slice(0, 120));
       logLine('mouth.held', String(sc.outputTranscription.text).slice(0, 160), { level: 'warn', target: 'held' });
+    } else if (hiddenHold) {
+      if (!heldEngineLogged) {
+        heldEngineLogged = Date.now();
+        logLine('turn.engine.held', String(sc.outputTranscription.text || '').slice(0, 120),
+          { level: 'info', target: 'held' });
+      }
     } else appendLive('engine', sc.outputTranscription.text);
   }
 
@@ -3657,6 +3670,10 @@ function handleFrame(text) {
     turns.engine = null; said.engine = '';
   }
 
+  if (hiddenHold && hiddenHoldUntil && Date.now() > hiddenHoldUntil) {
+    hiddenHold = false; hiddenHoldUntil = 0;
+    logLine('mouth.released', 'the door was silent too long and let the mouth go', { level: 'warn' });
+  }
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
     turnInFlight = false;
