@@ -60,6 +60,9 @@
   <button id="pause" title="stop following">pause</button>
   <button id="clear" title="hide everything logged so far. Nothing is deleted: the dated files and
     the stream keep every line, and this button toggles back.">clear view</button>
+  <button id="purge" title="empty the log itself: every line in the stream is deleted, so the
+    console and any door reading it start from nothing. The dated files under logs/ei-voice are the
+    long history and are kept. Two taps, because this one cannot be undone.">purge</button>
   <span class="meta" id="hits"></span>
   <span class="meta" id="cleared"></span>
   <span class="meta live" id="live">connecting</span>
@@ -291,6 +294,58 @@ clearBtn.onclick = function () {
 };
 
 showCleared();
+
+/* Purging, as distinct from clearing the view (Edwin, 8 Nov 2026: "Add a purge option for me on the
+   log view"). Clear view hides what is there and gives it back on a second tap; PURGE empties the
+   stream itself, so the console, the watcher and any other door agree that there is nothing. Two
+   taps, four seconds, because an emptied stream does not come back. Line numbers keep climbing after
+   a purge, so a citation made before it still points at the same line for ever. */
+var purgeBtn = document.getElementById('purge');
+var purgeArmedAt = 0;
+
+function purgeLabel(text, on) {
+  purgeBtn.textContent = text;
+  purgeBtn.className = on ? 'on' : '';
+}
+
+purgeBtn.onclick = function () {
+  var now = Date.now();
+  if (!purgeArmedAt || now - purgeArmedAt > 4000) {
+    purgeArmedAt = now;
+    purgeLabel('purge all? tap again', true);
+    var mine = now;
+    setTimeout(function () {
+      if (purgeArmedAt === mine) { purgeArmedAt = 0; purgeLabel('purge', false); }
+    }, 4000);
+    return;
+  }
+  purgeArmedAt = 0;
+  purgeLabel('purging\u2026', true);
+  var r = new XMLHttpRequest();
+  r.open('POST', BASE, true);
+  r.setRequestHeader('content-type', 'application/json');
+  r.onreadystatechange = function () {
+    if (r.readyState !== 4) return;
+    var d = null;
+    try { d = JSON.parse(r.responseText); } catch (x) {}
+    if (!d || !d.ok) {
+      purgeLabel('purge', false);
+      mark('purge failed', true);
+      clearedNote.textContent = 'the log did not purge just now';
+      return;
+    }
+    rows = []; since = '-'; clearedAt = '';
+    try { localStorage.removeItem('eiLogClearedAt'); } catch (x) {}
+    showCleared(); facs(); paint();
+    purgeLabel('purge', false);
+    clearedNote.textContent = 'purged \u00b7 ' + (d.cleared || 0) + ' line' + ((d.cleared === 1) ? '' : 's')
+      + ' gone \u00b7 numbering continues at ' + ((Number(d.seq) || 0) + 1);
+    mark('empty \u00b7 following', false);
+    if (es) { try { es.close(); } catch (x) {} es = null; }
+    startStream();
+  };
+  r.send(JSON.stringify({ action: 'clear' }));
+};
 
 pauseBtn.onclick = function () {
   paused = !paused;
