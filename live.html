@@ -135,7 +135,8 @@
   .card .copy { margin-top:6px; background:none; border:1px solid #3a352d; color:#9b9182; font-size:10px;
                 letter-spacing:.08em; border-radius:6px; padding:2px 7px; }
   .card .copy:active { background:#2b271f; color:#e8dfcc; }
-  .card .copy.share { margin-left:6px; color:#c9a86a; border-color:#4a3f26; }
+  .card .copy.share { margin-left:auto; display:block; width:fit-content; color:#c9a86a; border-color:#4a3f26; }
+  .card .copy { display:block; width:fit-content; margin-left:auto; }
   .card.thought { border-color:#4a3f26; }
   /* The receipt opens over the door, not on someone else's address (7 Nov 2026:
      Edwin - "it does view the certificate or receipt on the base44 url so we have
@@ -188,7 +189,7 @@
     .card .k { display:none; }
     .card .t { margin-top:0; font-size:12px; }
     .card .copy { position:absolute; top:6px; right:6px; padding:2px 5px; font-size:9px; }
-    .card .copy.share { right:auto; left:9px; top:auto; bottom:6px; margin:0; }
+    .card .copy.share { left:auto; right:9px; top:auto; bottom:6px; margin:0; }
     .lat { margin-top:3px; font-size:10.5px; }
     .turn { margin-bottom:8px; }
   }
