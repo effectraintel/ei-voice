@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 99;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 100;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1751,7 +1751,7 @@ function recalledShare(maxAge) {
     return { ...d, at: at };
   } catch (e) { return null; }
 }
-let shareSentThisTurn = false;   // set only by a send the rail confirmed
+let shareSentThisTurn = false, shareSentAt = 0;   // set only by a send the rail confirmed
 let userTurns = 0;             // one per thing he says, so an answer can be told from a guess
 let shareCoverAskedTurn = -1;  // the turn the cover question was asked on
 let shareAddrAskedTurn = -1;   // the turn the address was read back on
@@ -1911,7 +1911,7 @@ function judgeClaim() {
   try {
     const t = String(said.engine || '');
     if (!t) return;
-    const claims = /couldn'?t find|could not find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|the rail (?:is )?(?:down|not answering)|couldn'?t reach (?:the )?(?:rail|sharing rail|sharing service)|there'?s nothing on your shelf/i;
+    const claims = /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|the rail (?:is )?(?:down|not answering)|couldn'?t reach (?:the )?(?:rail|sharing rail|sharing service)|there'?s nothing on your shelf/i;
     if (!claims.test(t)) return;
     const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000)
       || (Date.now() - railToldAt < 20000);
@@ -2330,6 +2330,12 @@ function flushNotes() {
   noteQueue = [];
   noteQueuedAt = 0;
   // A note that says "searching right now" is stale the moment the result is also in the queue.
+  // once the share is sent, every "the sheet is open, type here" note is stale
+  const sentNow = shareStage === 'sent' || shareSentThisTurn && Date.now() - (shareSentAt || 0) < 60000;
+  const liveKept = sentNow ? kept.filter((n) => !/sheet|address and your message|type in/i.test(n.text)) : kept;
+  if (liveKept.length !== kept.length) logLine('note.stale', 'the share has gone; the sheet notes were dropped',
+    { level: 'info', target: 'note' });
+  kept.length = 0; kept.push(...liveKept);
   const finalKept = kept.filter((n, i) => !(/searching the rail/i.test(n.text)
     && kept.some((m) => m !== n && /rail answered|has searched the rail|might be searching/i.test(m.text))));
   if (finalKept.length !== kept.length) logLine('note.stale', 'dropped the searching note, the answer was there',
@@ -3213,7 +3219,13 @@ function openShareSheet(card, art) {
             railNote('share · closed · ready for the next one');
           } catch (e) {}
         }, 5000);
-        shareSentThisTurn = true;
+        shareSentThisTurn = true; shareSentAt = Date.now();
+        // the mouth is told what just happened, because it cannot see the sheet and will otherwise keep
+        // asking him to fill in a form that has already gone.
+        doorNote('the share is done: "' + (card.title || 'the song') + '" went to ' + (r.to_masked || 'the person he named')
+          + ' by email' + (r.cover_url ? ', with the picture drawn in' : '')
+          + '. Say one short line that it has gone, and nothing about the sheet, the address or the message. '
+          + 'Do not ask what else he wants.', true);
         rememberShare({ title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' });
         railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
         setTimeout(() => el.remove(), 1400);
