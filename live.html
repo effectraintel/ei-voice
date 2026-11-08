@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 109;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 110;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2389,7 +2389,8 @@ function noteSongAnswer(heard) {
           if (again && again.toLowerCase() !== said.toLowerCase()) {
             logLine('share.door.retry', again, { level: 'info', target: 'songShare' });
             const t1 = Date.now();
-            songShareCall({ action: 'find', query: again }).then((r2) => {
+            withTimeout(gatePost('songShare', { action: 'find', query: again }), 45000,
+              'the sharing rail did not answer the second ask').then((r2) => {
               const d2 = !!(r2 && r2.url && r2.found && r2.found !== 'choice' && r2.found !== 'none');
               if (!d2) {
                 doorNote('the rail answered: nothing found for those exact words, twice. Say that plainly in '
@@ -2416,6 +2417,12 @@ function noteSongAnswer(heard) {
                 + (card2.artist ? ' by ' + card2.artist : '') + '. It is on his shelf now with its listening '
                 + 'link. Say the title once, say it is on the shelf, and ask once whether a picture should go '
                 + 'with it and what it should show.', true);
+            }).catch(() => {
+              hiddenHold = false;
+              doorNote('the rail did not answer the second ask. Say plainly, in one line, that the search did not '
+                + 'come back and ask for the title and artist as he would say them. Do not guess a song.', true);
+              railNote('share · the rail did not answer');
+              logLine('share.door.fail', 'second ask did not answer', { level: 'warn', target: 'songShare' });
             });
             return;
           }
