@@ -1993,7 +1993,10 @@ function judgeClaim() {
     // payRequestFromDoor call exists in the trace at all: he went to look at nothing. Same class as a rail
     // claim, same cure - hold the sentence and tell the mouth what is actually true.
     const shelfWriteClaim = /\b(?:is|are|it'?s|its) (?:now )?on (?:the|your|his) shelf\b|\b(?:has|have) been (?:put|added|placed) (?:on|to) (?:the|your|his) shelf\b|\b(?:put|added|placed) (?:it |that |your |his )?(?:on|to) (?:the|your|his) shelf\b|\bsitting (?:on|in) (?:the|your|his) shelf\b/i;
-    if (shelfWriteClaim.test(t) && !(shelfWriteAt && Date.now() - shelfWriteAt < 60000)) {
+    // "What amount would you like to put on your shelf?" is an offer, not a claim: the same words
+    // appear in both, so the asking shape is excluded rather than the whole rule weakened.
+    const shelfAsk = /\?|\b(?:would you like|do you want|shall (?:i|we)|want me to|let me know)\b/i;
+    if (shelfWriteClaim.test(t) && !shelfAsk.test(t) && !(shelfWriteAt && Date.now() - shelfWriteAt < 60000)) {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
         hiddenHold = true;                      // the false sentence is not spoken
