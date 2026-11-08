@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 95;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 96;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2181,9 +2181,6 @@ function noteSongAnswer(heard) {
   if (SHARE_INTENT.test(said)) {
     awaitSong = Date.now();
     railNote('share · song expected');
-    doorNote('He wants to share a song and has not named it. Ask one short question: which song? Nothing has '
-      + 'been searched yet, so nothing can have failed. Do not mention an error, the rail, or his shelf. '
-      + 'Never narrate the search either — no "trying to find", no "let me look", no running commentary.');
     return;
   }
   if (!awaitSong || Date.now() - awaitSong > 90000) return;
@@ -2290,8 +2287,9 @@ function sendNoteNow(text) {
     if (!ws) return;
     ws.send(JSON.stringify({
       clientContent: {
-        turns: [{ role: 'user', parts: [{ text: '(Door note, not from Edwin — never read it aloud: '
-          + String(text).replace(/\s+/g, ' ') + ')' }] }],
+        turns: [{ role: 'user', parts: [{ text: '(Door note, not from Edwin — never read it aloud, and never '
+          + 'reply to it: it is context for your next turn only. If you have already said what it says, say '
+          + 'nothing at all.) ' + String(text).replace(/\s+/g, ' ') }] }],
         turnComplete: true,
       },
     }));
@@ -2300,9 +2298,20 @@ function sendNoteNow(text) {
 
 function flushNotes() {
   if (!noteQueue.length) return;
-  const joined = noteQueue.splice(0).join(' ');
+  const kept = [];
+  for (const n of noteQueue) {
+    // An instruction to ask something he was already asked is not information, it is a duplicate answer.
+    if (/ask one short question|ask him which song|ask which song/i.test(n) && Date.now() - lastTurnEndAt < 12000
+        && /which song|what song|which one/i.test(String(said.engine || ''))) {
+      logLine('note.dropped', n.slice(0, 90), { level: 'info', target: 'note' });
+      continue;
+    }
+    kept.push(n);
+  }
+  noteQueue = [];
   noteQueuedAt = 0;
-  sendNoteNow(joined);
+  if (!kept.length) return;
+  sendNoteNow(kept.join(' '));
 }
 
 function scheduleNoteFlush(delay) {
