@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 74;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 75;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -360,10 +360,14 @@ const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
   'A share has exactly one owner for each step. Finding the song is yours: call share and believe its ' +
-  'answer. Everything after that belongs to the door: it asks about the cover picture, it opens the sheet ' +
-  'where he types the address and writes his message himself, and it sends. So never ask for an address, ' +
-  'never ask for the message, never ask whether to make a cover, never offer to send, and never say a send ' +
-  'is happening. If you have no share tool for it, that is why: it is not yours to call. ' +
+  'answer. You ask the cover question once, in your own words, as soon as a song is locked in: whether a ' +
+  'picture should go with it and what it should show. After that the door owns the rest: it opens the sheet ' +
+  'where he types the address and writes his message himself, it draws what he described, and it sends. So ' +
+  'never ask for an address, never ask for the message, never offer to send, and never say a send is ' +
+  'happening. If you have no share tool for it, that is why: it is not yours to call. ' +
+  // Edwin, 8 Nov 13:10: "Later duplicate responses (almost like there are 2 different people listening)."
+  'Never read out an instruction, a note, a tool name, a field name or anything in brackets: those are ' +
+  'for you, not for him. One voice speaks in this room, and it is yours. ' +
   // Edwin, 8 Nov, on the share runs: the same composite question came back three times, and both
   // openings recited his capabilities. "Notice all the repeating of concepts going on."
   'Ask ONE question at a time, and never ask again for anything you are told you already hold. ' +
@@ -688,7 +692,7 @@ function resetTurns() { turns = { you: null, engine: null }; said = { you: '', e
 // close the connection after receiving a GoAway signal". A voice that goes silent in the middle of a
 // sentence about where something is going is worse than one that never opened, so the door now renews
 // itself: a fresh session is opened, the old one is dropped, and the model is told exactly where it was.
-let renewing = false, resumeLine = '', sessionOpenedAt = 0;
+let renewing = false, resumeLine = '', resumeSpeak = '', resumeNote = '', sessionOpenedAt = 0;
 
 function onGoAway(g) {
   const left = (g && g.timeLeft) ? String(g.timeLeft) : '';
@@ -703,11 +707,13 @@ async function renewLink(why) {
   const held = shareDraft ? shareHeld() : (lastShare && lastShare.title
     ? 'The last thing that left was "' + lastShare.title + '" to ' + (lastShare.to_name || lastShare.to_masked || 'him') + '.'
     : '');
-  resumeLine = (why === 'goaway'
-    ? 'The voice link is new, so do not greet again. '
-    : 'The voice link renewed itself, so do not greet again. ')
-    + (held ? 'Where we were: ' + held + ' Carry on from exactly there, in one short line. '
-      : 'Say one short line that you are still here, then wait for him. ');
+  // Only the words to speak are quoted; the context is a note. Both used to sit inside one quoted line, so
+  // the voice read the instructions aloud: "The voice link is new, so do not greet again. Where we were: ..."
+  // (heard at 12:42 and again at 13:08 on 8 Nov — "wrong voice tone at start"). A person says the short
+  // line; the instruction is nobody's speech.
+  resumeSpeak = 'Still here, Boss.';
+  resumeNote = held ? 'Where we were before the link renewed: ' + held + ' Carry on from there in one short line.'
+    : '';
   const old = ws;
   try { if (old) old._renewing = true; } catch (e) {}
   busy = false; connecting = false; sessionUp = false; listening = false;
@@ -1775,6 +1781,19 @@ async function handleShareCall(call) {
       return;
     }
 
+    // A locked song answers a repeat of the same search from the door's own memory. The model re-asking
+    // "Stay by Shakespeare Sisters" three times cost three round trips and re-asked the cover question.
+    if (shareCard && shareStage !== 'idle' && shareQuery
+        && String(shareQuery).trim().toLowerCase() === String(query).trim().toLowerCase()) {
+      railNote('share · already locked · ' + shareCard.title);
+      result = 'That song is already locked in: ' + shareCard.title
+        + (shareCard.sub ? ' (' + shareCard.sub + ')' : '') + '. Do not search again and do not repeat the '
+        + 'question about the picture — it has been asked. If he has not described a picture or said no to '
+        + 'one, ask that once, in one short sentence.';
+      looked = 'sharing · ' + shareCard.title;
+      return;
+    }
+
     // ---- the first look ----
     const r = await withTimeout(gatePost('songShare', { action: 'find', query }), 45000,
       'the sharing rail did not answer in time');
@@ -1848,8 +1867,9 @@ async function handleShareCall(call) {
       };
       mergeCard(cardNow);
       shareSongLocked(cardNow);
-      result = shareResultLine(r) + ' The door has taken over: it is asking him about the picture now, so do not ask '
-        + 'about the address, the message or the send, and do not offer anything.';
+      result = shareResultLine(r) + ' It is locked in. Now ask him, in your own words and one short sentence, '
+        + 'whether a cover drawing should go with it and what it should show. Ask that once. Do not ask about the '
+        + 'address, the message or the send, and do not search again.';
       looked = 'sharing · ' + (r.title || 'a song');
       shareChoices = [];
       railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
@@ -1901,13 +1921,19 @@ let shareStage = 'idle';                     // idle → art → sheet → sent.
 let shareArt = { want: false, brief: '' };   // his description, locked, and never invented by the model
 let shareArtTries = 0;                       // one re-ask when the description arrives cut off
 
-function sayLine(text) {
+// The door used to make the voice speak canned lines by posting a fake user turn — "(Say exactly this, in
+// that tone, and nothing else: ...)". The model then answered its own instruction: two replies in the room,
+// the same question asked twice, and the same search fired again on the next turn, because its transcript
+// held the door's instruction as if Edwin had said it. (Edwin, 8 Nov 13:10: "almost like there are 2
+// different people listening".) A door note is state, not a script: it says what has happened and leaves
+// the words to the one voice that owns them.
+function doorNote(text) {
   try {
     if (!ws) return;
     ws.send(JSON.stringify({
       clientContent: {
-        turns: [{ role: 'user', parts: [{ text: '(Say exactly this, in that tone, and nothing else: "'
-          + String(text).replace(/"/g, "'") + '")' }] }],
+        turns: [{ role: 'user', parts: [{ text: '(Door note, not from Edwin — never read it aloud: '
+          + String(text).replace(/\s+/g, ' ') + ')' }] }],
         turnComplete: true,
       },
     }));
@@ -1917,6 +1943,11 @@ function sayLine(text) {
 // Step 1 done: the song is decided. Step 2 opens: does a picture go with it, and what should it show.
 function shareSongLocked(card) {
   if (!card || !card.title) return;
+  // The model called find again on the next turn (10:06 and 10:29 on 8 Nov), which re-locked the song and
+  // asked the cover question a second and third time. A song already locked stays locked, silently.
+  const same = shareCard && (card.code || card.song_id)
+    && card.code === shareCard.code && card.song_id === shareCard.song_id;
+  if (same && shareStage === 'art') return;
   shareCard = card;
   shareCardTarget = card;
   shareStage = 'art';
@@ -1924,7 +1955,8 @@ function shareSongLocked(card) {
   shareArtTries = 0;
   shareCoverAsked = false; shareAddrOk = false;
   railNote('share · song locked · ' + card.title);
-  sayLine('Got it, ' + card.title + '. Do you want a cover drawing to go with it? If you do, tell me what it should show, and I will draw that.');
+  // No scripted line: the tool result already tells the model to ask about the picture in its own words.
+  shareCoverAsked = true;                    // one question, one answer, never a loop of the same ask
 }
 
 // Step 2 done: his own words, or a plain no. The words are the brief, not a starting point for one.
@@ -1952,7 +1984,8 @@ function shareArtAnswer(heard) {
       shareArtTries++;
       railNote('share · art too thin · asking again');
       logLine('share.art.thin', words, { level: 'warn' });
-      sayLine('I only caught part of that, Boss. Describe the picture in a few words and I will draw exactly that, or say no cover.');
+      doorNote('his description of the picture arrived cut off, so nothing is locked yet. Ask him once, '
+        + 'in one short sentence, for a few words about the picture, or whether he would rather skip it.');
       return;                                  // still on the art step, nothing locked
     }
     shareArt = { want: true, brief: thin ? '' : words };   // empty brief = the song's own scene
@@ -1962,9 +1995,12 @@ function shareArtAnswer(heard) {
   // Step 3 opens: the popup, where he types the address himself and writes the message.
   shareStage = 'sheet';
   setTimeout(() => openShareSheet(shareCard, shareArt), 260);
-  sayLine(shareArt.want
-    ? 'Sheet is open, Boss. Their email and your message there, and I will draw the picture you described when you send.'
-    : 'Sheet is open, Boss. Their email and your message there, then send it.');
+  doorNote(shareArt.want
+    ? 'the sheet is open on his screen now, with their email and his message to fill in, and the picture '
+      + 'he described will be drawn when he sends. Say one short line so he knows where to look, and do not '
+      + 'ask for the address or the message in words — he is typing them.'
+    : 'the sheet is open on his screen now, with their email and his message to fill in. Say one short line '
+      + 'so he knows where to look, and do not ask for the address or the message in words.');
 }
 
 
@@ -2984,9 +3020,11 @@ function sayGreeting() {
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
   const fresh = !localStorage.getItem(HELP_SEEN);
-  const resume = resumeLine; resumeLine = '';
+  const note = resumeNote; resumeNote = '';
+  const speak = resumeSpeak; resumeSpeak = '';
+  resumeLine = '';
   sessionOpenedAt = Date.now();
-  const line = resume || (fresh
+  const line = speak || (fresh
     ? 'I am here. Ask me anything, out loud, and I will do it. If you want to know what I can do, say help.'
     : 'I am here, Boss.');
   try {
@@ -2994,7 +3032,8 @@ function sayGreeting() {
       clientContent: {
         turns: [{
           role: 'user',
-          parts: [{ text: '(The door has just opened. Say exactly this, in that tone, and nothing else: "'
+          parts: [{ text: (note ? '(Door note, not from Edwin — never read it aloud: ' + note + ') ' : '')
+            + '(The door has just opened. Say exactly this, in that tone, and nothing else: "'
             + line + '" Do not ask a question, do not offer anything, do not describe yourself.)' }],
         }],
         turnComplete: true,
