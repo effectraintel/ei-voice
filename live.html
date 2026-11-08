@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 90;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 92;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -669,6 +669,12 @@ function collapseRepeat(t) {
   if (a.length > 20 && a === b) return s.slice(0, n - half).trimEnd();
   return t;
 }
+
+const MANNERS = '\n\nTwo rules about the working, added 8 November after he heard them break:\n'
+  + '- Never narrate what you are doing. No "trying to find", no "let me look", no "one moment", no running '
+  + 'commentary. Either ask the one question you need, or say what is true.\n'
+  + '- A sentence about the record comes only from a record. If no search was made, nothing was found and '
+  + 'nothing failed. If a search answered, say what it answered and nothing more.';
 
 function appendLive(who, text) {
   // A new engine bubble means his turn is over, so the next thing he says starts its own
@@ -1276,10 +1282,10 @@ async function openDoor() {
     // The corridor's first slice (card #167): facts from the session record, built
     // server-side, handed to the voice before the socket opens. If it cannot be had,
     // say so rather than letting the model guess at the clock.
-    let brief = BRIEF + SONG_SCRIPT;
+    let brief = BRIEF + SONG_SCRIPT + MANNERS;
     const np = await nowPack;
-    if (np && np.text) brief = BRIEF + '\n\n' + np.text;
-    else brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)';
+    if (np && np.text) brief = BRIEF + '\n\n' + np.text + MANNERS;
+    else brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)' + MANNERS;
 
     stage('opening the voice');
     await micWarm;
@@ -2164,7 +2170,8 @@ function noteSongAnswer(heard) {
     awaitSong = Date.now();
     railNote('share · song expected');
     doorNote('He wants to share a song and has not named it. Ask one short question: which song? Nothing has '
-      + 'been searched yet, so nothing can have failed. Do not mention an error, the rail, or his shelf.');
+      + 'been searched yet, so nothing can have failed. Do not mention an error, the rail, or his shelf. '
+      + 'Never narrate the search either — no "trying to find", no "let me look", no running commentary.');
     return;
   }
   if (!awaitSong || Date.now() - awaitSong > 90000) return;
@@ -2264,7 +2271,9 @@ let shareArtTries = 0;                       // one re-ask when the description 
 // held the door's instruction as if Edwin had said it. (Edwin, 8 Nov 13:10: "almost like there are 2
 // different people listening".) A door note is state, not a script: it says what has happened and leaves
 // the words to the one voice that owns them.
-function doorNote(text) {
+let noteQueue = [], noteTimer = null, noteQueuedAt = 0;
+
+function sendNoteNow(text) {
   try {
     if (!ws) return;
     ws.send(JSON.stringify({
@@ -2275,6 +2284,38 @@ function doorNote(text) {
       },
     }));
   } catch (e) {}
+}
+
+function flushNotes() {
+  if (!noteQueue.length) return;
+  const joined = noteQueue.splice(0).join(' ');
+  noteQueuedAt = 0;
+  sendNoteNow(joined);
+}
+
+function scheduleNoteFlush(delay) {
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => {
+    if (!noteQueue.length) return;
+    const held = noteQueuedAt ? Date.now() - noteQueuedAt : 0;
+    if ((speaking || awaitingFirstAudio) && held < 3000) { scheduleNoteFlush(300); return; }
+    flushNotes();
+  }, delay || 350);
+}
+
+function doorNote(text) {
+  const t = String(text || '').trim();
+  if (!t) return;
+  // Speaking: the note waits for the sentence to finish rather than interrupting it into a fragment.
+  if (speaking && !hiddenHold) {
+    noteQueue.push(t);
+    noteQueuedAt = noteQueuedAt || Date.now();
+    if (noteQueue.length > 6) noteQueue.shift();
+    logLine('note.held', t.slice(0, 90), { level: 'info', target: 'note' });
+    scheduleNoteFlush(350);
+    return;
+  }
+  sendNoteNow(t);
 }
 
 // Step 1 done: the song is decided. Step 2 opens: does a picture go with it, and what should it show.
@@ -3565,10 +3606,21 @@ function handleFrame(text) {
   }
   // Barge-in: the model stopped mid-reply, so its remaining words are a new bubble rather
   // than a continuation of the one he cut off.
-  if (sc.interrupted) { turns.engine = null; said.engine = ''; }
+  if (sc.interrupted) {
+    const partial = String(said.engine || '').trim();
+    if (partial) {
+      logLine('turn.engine.partial', partial.slice(0, 160), { level: 'warn', target: 'cut' });
+      try {
+        if (turns.engine && partial.length < 70) { turns.engine.remove(); }
+      } catch (e) {}
+    }
+    barge();                       // the sound stops where the interruption is, not at the end of the queue
+    turns.engine = null; said.engine = '';
+  }
 
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    flushNotes();
     judgeClaim();
     if (sessionOpenedAt && Date.now() - sessionOpenedAt > 9 * 60 * 1000 && !renewing) {
       railNote('session · renewing at the pause, nine minutes in');
