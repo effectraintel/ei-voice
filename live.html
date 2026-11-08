@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 111;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 112;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1955,12 +1955,23 @@ function judgeClaim() {
   try {
     const t = String(said.engine || '');
     if (!t) return;
+    if (Date.now() - artLockedAt < 3000
+        && /\b(?:which|what) (?:picture|cover|image|drawing)\b|should a picture|what should it show|give me the details\b/i.test(t)) {
+      hiddenHold = true;
+      hiddenHoldUntil = Date.now() + 1200;
+      logLine('claim.stale.art', t.slice(0, 140), { level: 'warn', target: 'stale' });
+      doorNote('His picture brief is already locked and the sheet is open on his screen. Do not ask for it '
+        + 'again. Say one short line that the sheet is waiting for the address and his message.', true);
+      return;
+    }
     // "You can type the address and message right here on the sheet" when no sheet exists is the same class of
     // lie as a rail claim, and it strands him at a dead end with nothing to touch.
     const sheetClaim = /\b(?:on|in) the sheet\b|right here on the sheet|type the address|sheet is (?:open|on)|on (?:your|his|the|user) screen\b/i;
     if (sheetClaim.test(t) && shareStage !== 'sheet' && shareStage !== 'sent') {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
+        hiddenHold = true;                      // the claim is not spoken at all
+        hiddenHoldUntil = Date.now() + 1500;
         logLine('claim.sheet', t.slice(0, 160), { level: 'warn', target: 'no-sheet' });
         doorNote('There is no sheet on his screen: the door has not opened one, and nothing is waiting to be '
           + 'typed. Do not mention a sheet, an address box or a message box. Ask him what he wants next.',
@@ -2236,6 +2247,7 @@ let shareStage = 'idle';                     // idle → art → sheet → sent.
 // called it.
 let awaitSong = 0, awaitSongNudge = null, doorSearching = false, railAnsweredAt = 0;
 let heldMouth = [], heldFrames = 0, hiddenHold = false, hiddenHoldUntil = 0, heldEngineLogged = 0;
+let artLockedAt = 0;
 const SHARE_INTENT = /\b(?:share|send|seal)\b[^.?!]{0,30}\b(?:song|track)\b|\bi (?:want|would like) to share\b/i;
 
 // A word the ear got wrong is only dangerous if it is acted on. Before a card is locked the door checks
@@ -2739,6 +2751,7 @@ function shareArtAnswer(heard) {
     saveDraft();
     railNote('share · art locked · ' + (shareArt.brief || 'from the song').slice(0, 60));
     logLine('share.art', shareArt.brief || '(from the song)', { level: 'info' });
+    artLockedAt = Date.now();
   }
   // Step 3 opens: the popup, where he types the address himself and writes the message.
   shareStage = 'sheet';
