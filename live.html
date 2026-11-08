@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T21:02';
-const BUILD_NO = 120;   // 8 Nov: the mouth is drawn at a low temperature so a new door does not arrive as a different person.
+const BUILD = '2026-11-08T21:05';
+const BUILD_NO = 121;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -744,6 +744,10 @@ function resetTurns() { turns = { you: null, engine: null }; said = { you: '', e
 // sentence about where something is going is worse than one that never opened, so the door now renews
 // itself: a fresh session is opened, the old one is dropped, and the model is told exactly where it was.
 let renewing = false, resumeLine = '', resumeSpeak = '', resumeNote = '', sessionOpenedAt = 0;
+// The server's ticket for continuing THIS session. With it, a reopened door resumes the same session -
+// same voice draw, same thread - instead of opening a new one, which is a new person (Edwin, 8 Nov 2026
+// at 20:46: "it really only changed after I closed the door and opened it again while I was in session").
+let resumeHandle = '';
 
 function onGoAway(g) {
   const left = (g && g.timeLeft) ? String(g.timeLeft) : '';
@@ -1403,6 +1407,11 @@ async function openDoor() {
         },
         inputAudioTranscription: {},
         outputAudioTranscription: {},
+        // Continue the session we were in when we can. A new session draws a new voice, so every
+        // reopen (and every nine-minute renewal) used to hand him a different person mid-conversation.
+        ...(resumeHandle ? { sessionResumption: { handle: resumeHandle } } : { sessionResumption: {} }),
+        // A long conversation should not force a new session just because the window filled.
+        contextWindowCompression: { slidingWindow: {} },
       },
       }));
     };
@@ -1422,6 +1431,13 @@ async function openDoor() {
       closeMic();
       foldForDoor(false);
       const reason = (e && e.reason ? e.reason : '').trim();
+      // A ticket that has aged out is not a door that will not open: drop it and try once from fresh.
+      if (/resum|handle|not found|expired/i.test(reason) && resumeHandle && !sock._fallbackFresh) {
+        resumeHandle = '';
+        logLine('session.resume.lost', 'that session is gone; opening a fresh one', { level: 'warn' });
+        setTimeout(() => { try { openDoor(); } catch (err) {} }, 200);
+        return;
+      }
       if (reason) {
         setState('the door closed');
         warn(reason);
@@ -4051,6 +4067,13 @@ function handleFrame(text) {
   // the server's warning that the session is about to end. Caught before anything else so the
   // renewal starts while there is still time to finish the sentence.
   if (msg.goAway) onGoAway(msg.goAway);
+
+  // A resumable session hands back a new ticket as it goes; the newest one is the one that works.
+  if (msg.sessionResumptionUpdate) {
+    const u = msg.sessionResumptionUpdate;
+    if (u.resumable && u.newHandle) resumeHandle = String(u.newHandle);
+    else if (u.resumable === false) resumeHandle = '';
+  }
 
   if (msg.setupComplete) {
     dbgOpens++;
