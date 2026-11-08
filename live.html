@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 105;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 106;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2238,6 +2238,68 @@ let awaitSong = 0, awaitSongNudge = null, doorSearching = false, railAnsweredAt 
 let heldMouth = [], heldFrames = 0, hiddenHold = false, hiddenHoldUntil = 0, heldEngineLogged = 0;
 const SHARE_INTENT = /\b(?:share|send|seal)\b[^.?!]{0,30}\b(?:song|track)\b|\bi (?:want|would like) to share\b/i;
 
+// A word the ear got wrong is only dangerous if it is acted on. Before a card is locked the door checks
+// whether the name it found is actually in the words he said; if it is not, it reads the name back and waits.
+// Same principle as the address: a read-back costs one short line, a wrong song costs the whole share.
+let lastSongWords = '';
+let sharePending = null;   // { card, words, at } — found, read back, not yet locked
+
+function wordsCover(text, title) {
+  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const hay = norm(text), t = norm(title);
+  if (!t || !hay) return false;
+  if (hay.includes(t)) return true;
+  const words = t.split(' ').filter((w) => w.length > 2);
+  return words.length > 0 && words.every((w) => hay.includes(w));
+}
+
+function askAboutCard(card, words) {
+  sharePending = { card: card, words: String(words || ''), at: Date.now() };
+  railNote('share · reading the name back');
+  logLine('share.confirm', (card.title || '') + ' | heard: ' + String(words || '').slice(0, 60),
+    { level: 'info', target: 'songShare' });
+  doorNote('The door is not certain it heard the song correctly. What he said was: "' + String(words || '')
+    + '". What the rail found was "' + (card.title || '') + '"' + (card.sub ? ' (' + card.sub + ')' : '')
+    + '. Read that name back in one short line and ask if it is the right one. Put nothing on his shelf yet, '
+    + 'do not ask about a picture, and do not offer to send.', true);
+}
+
+function resolvePending(heard) {
+  const said = String(heard || '').trim();
+  if (!sharePending || !said) return false;
+  if (Date.now() - sharePending.at > 90000) { sharePending = null; return false; }
+  const yes = /\b(?:yes|yeah|yep|yup|correct|right|that'?s it|that is it|that'?s the one|exactly|spot on|affirmative|sure)\b/i;
+  const no = /\b(?:no|nope|nah|wrong|not that|not it|isn'?t|ain'?t|different)\b/i;
+  const card = sharePending.card;
+  if (yes.test(said) && !no.test(said)) {
+    sharePending = null;
+    mergeCard(card);
+    railAnsweredAt = Date.now();
+    shareSongLocked(card);
+    railNote('share · ' + (card.title || '') + ' confirmed');
+    logLine('share.confirm.yes', card.title || '', { level: 'info', target: 'songShare' });
+    doorNote('He confirmed it: "' + (card.title || 'a song') + '" is on his shelf now with its listening link. '
+      + 'Say the title once and that it is on the shelf, then ask once, in your own words, whether a picture '
+      + 'should go with it and what it should show.', true);
+    return true;
+  }
+  if (no.test(said)) {
+    sharePending = null;
+    railNote('share · not that one');
+    logLine('share.confirm.no', said, { level: 'info', target: 'songShare' });
+    awaitSong = Date.now();                  // armed again: he will say the right one now
+    doorNote('That was not the song he meant, and the door has put nothing on his shelf. Say one short line '
+      + 'asking for the song again, by title and artist if he has them. Do not search and do not guess.', true);
+    return true;
+  }
+  // Not a yes or a no: treat it as a fresh attempt at the title and search on his new words.
+  sharePending = null;
+  logLine('share.confirm.other', said, { level: 'info', target: 'songShare' });
+  awaitSong = Date.now();
+  noteSongAnswer(said);
+  return true;
+}
+
 function noteSongAnswer(heard) {
   const said = String(heard || '').trim();
   if (!said) return;
@@ -2248,6 +2310,21 @@ function noteSongAnswer(heard) {
   }
   if (!awaitSong || Date.now() - awaitSong > 90000) return;
   if (shareStage !== 'idle' || shareQuery) { awaitSong = 0; return; }
+  // Thinking aloud is not a song. "I'm still thinking about it" and "hold on" have no business reaching the
+  // rail, and a title that shares a word with them is exactly how a wrong search gets born. The door keeps the
+  // ear open and says one short line, once; it does not turn a pause into a query.
+  const noSong = /\b(?:by|called|named|titled)\b|\b(?:song|track|tune)\b|\bit'?s\b\s+\w+/i;
+  const thinking = /\b(?:thinking|th?inking|deciding|choosing|considering|not sure|unsure|let me (?:think|see)|hold on|hang on|one moment|give me a (?:second|moment|minute)|wait|one sec)\b/i;
+  if (thinking.test(said) && !noSong.test(said)) {
+    railNote('share · still thinking');
+    logLine('share.delay', said, { level: 'info', target: 'songShare' });
+    doorNote('He is thinking, not answering: "' + said + '". Nothing has been searched and nothing is on his '
+      + 'shelf. Say one short line that gives him the room, such as "Take your time, Boss." Do not name a '
+      + 'song, do not search, and do not ask again.', true);
+    awaitSong = Date.now();                  // still armed: the next thing he says is the song
+    return;
+  }
+  lastSongWords = said;
   awaitSong = 0;
   // The door searches at once and asks the mouth to hold. The 3.5-second courtesy to the model was the
   // window in which it said "I couldn't find that one" (12:15:38) a second before the rail answered with
@@ -2288,6 +2365,12 @@ function noteSongAnswer(heard) {
               : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
             url: r.url, code: r.code || '', song_id: r.song_id || '', sha: r.sha || '',
           };
+          if (!wordsCover(said, r.title || '')) {
+            // his words and the found name do not meet: the ear may have got a word wrong
+            hiddenHold = false;
+            askAboutCard(card, said);
+            return;
+          }
           mergeCard(card);
           railAnsweredAt = Date.now();
           railNote('share · ' + r.found + ' · ' + (r.title || ''));
@@ -2320,14 +2403,19 @@ function noteSongAnswer(heard) {
             + '. Say that in one line and nothing else.', true);
           return;
         }
-        mergeCard({
+        const planned = {
           kind: c.found === 'shelf' ? 'song' : 'store',
           title: c.title || only.title || 'a song',
           sub: c.found === 'shelf'
             ? 'made here · a day of listening'
             : [c.artist, c.album].filter(Boolean).join(' · ') + (c.platform_text ? ' · ' + c.platform_text : ''),
           url: c.url, code: c.code || '', song_id: c.song_id || '', sha: c.sha || '',
-        });
+        };
+        if (lastSongWords && !wordsCover(lastSongWords, planned.title)) {
+          askAboutCard(planned, lastSongWords);
+          return;
+        }
+        mergeCard(planned);
         railNote('share · ' + c.found + ' · ' + (c.title || '')); 
         logLine('share.door.done', (c.title || '') + ' · ' + (c.found || '') + ' · ' + (Date.now() - t0) + 'ms',
           { level: 'info', target: 'songShare' });
@@ -3799,7 +3887,8 @@ function handleFrame(text) {
       logLine('turn.you', heard, { role: 'you' });
       // Step 2 of the share: this utterance IS the answer about the picture. The door takes it, locks it,
       // and opens the sheet. The model is not asked, because a model asked twice answers twice.
-      if (shareStage === 'art') { shareArtAnswer(heard); }
+      if (sharePending && resolvePending(heard)) { /* the name was being checked: that was the answer */ }
+      else if (shareStage === 'art') { shareArtAnswer(heard); }
       // The door asked "which one?" — so the door takes the answer. It used to offer two songs, keep no
       // record of them, and then have nothing to lock when he chose.
       if (!shareCard && shareChoices.length && !doorSearching) resolveChoice(heard);
