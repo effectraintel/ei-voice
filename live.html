@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 84;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 85;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1915,9 +1915,9 @@ async function handleShareCall(call) {
     }
 
     // ---- the first look ----
+    shareQuery = query;   // claimed before the wait, so the door does not start a second search beside this one
     const r = await withTimeout(gatePost('songShare', { action: 'find', query }), 45000,
       'the sharing rail did not answer in time');
-    shareQuery = query;
 
     if (r && r.ok && r.found === 'choice' && (r.candidates || []).length) {
       // "It's just the one by Michael Bublé" was answered three times on 8 Nov while the door kept
@@ -2199,20 +2199,20 @@ function shareArtAnswer(heard) {
     // sentence that got cut off, not a description. Asked for again exactly once, then it takes the
     // song's own scene rather than drawing a fragment. (Edwin, 8 Nov 12:35: the art brief logged as
     // "draw a a drawing of a" and the picture still went out.)
-    const words = brief.replace(/\s+/g, ' ').trim();
+    const clean = brief.replace(/\s+/g, ' ').trim();
     // Two words can be a whole picture ("a car"), so the test is a fragment, not a length: one word, or
     // a sentence that stops on the article it was about to fill in.
-    const thin = words.split(' ').filter(Boolean).length < 2
-      || /(^|\s)(a|an|the|of|with|in|and|at|to)$/i.test(words);
+    const thin = clean.split(' ').filter(Boolean).length < 2
+      || /(^|\s)(a|an|the|of|with|in|and|at|to)$/i.test(clean);
     if (brief && thin && shareArtTries < 1) {
       shareArtTries++;
       railNote('share · art too thin · asking again');
-      logLine('share.art.thin', words, { level: 'warn' });
+      logLine('share.art.thin', clean, { level: 'warn' });
       doorNote('his description of the picture arrived cut off, so nothing is locked yet. Ask him once, '
         + 'in one short sentence, for a few words about the picture, or whether he would rather skip it.');
       return;                                  // still on the art step, nothing locked
     }
-    shareArt = { want: true, brief: thin ? '' : words };   // empty brief = the song's own scene
+    shareArt = { want: true, brief: thin ? '' : clean };   // empty brief = the song's own scene
     railNote('share · art locked · ' + (shareArt.brief || 'from the song').slice(0, 60));
     logLine('share.art', shareArt.brief || '(from the song)', { level: 'info' });
   }
