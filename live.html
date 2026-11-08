@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 103;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 104;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -4079,10 +4079,31 @@ function keepAlive(ctx) {
   return ctx;
 }
 
+let ctxLogged = 0;
 function playCtxEnsure() {
-  if (!playCtx) playCtx = keepAlive(new (window.AudioContext || window.webkitAudioContext)());
+  if (!playCtx) {
+    // ask for the rate the audio actually arrives at, so nothing has to be resampled by the platform
+    try { playCtx = keepAlive(new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 })); }
+    catch (e) { playCtx = keepAlive(new (window.AudioContext || window.webkitAudioContext)()); }
+  }
+  if (!ctxLogged) {
+    ctxLogged = 1;
+    logLine('voice.ctx', 'output context at ' + playCtx.sampleRate + ' Hz', { level: 'info', target: 'session' });
+  }
   if (playCtx.state === 'suspended') playCtx.resume();
   return playCtx;
+}
+
+// Linear resample, and only when the platform gave us a rate other than the one the audio arrives in.
+function toRate(samples, from, to) {
+  if (from === to) return samples;
+  const out = new Float32Array(Math.max(1, Math.round(samples.length * (to / from))));
+  const step = from / to;
+  for (let i = 0; i < out.length; i++) {
+    const pos = i * step, i0 = Math.floor(pos), i1 = Math.min(samples.length - 1, i0 + 1);
+    out[i] = samples[i0] + (samples[i1] - samples[i0]) * (pos - i0);
+  }
+  return out;
 }
 
 function playing() {
@@ -4107,9 +4128,11 @@ function playPcm(b64, mime) {
       { level: audioRateSeen && audioRateSeen !== rate ? 'warn' : 'info', target: 'session' });
     audioRateSeen = rate;
   }
-  const buf = ctx.createBuffer(1, i16.length, rate);
-  const ch = buf.getChannelData(0);
-  for (let i = 0; i < i16.length; i++) ch[i] = i16[i] / 0x8000;
+  let pcm = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) pcm[i] = i16[i] / 0x8000;
+  if (ctx.sampleRate !== rate) pcm = toRate(pcm, rate, ctx.sampleRate);
+  const buf = ctx.createBuffer(1, pcm.length, ctx.sampleRate);
+  buf.getChannelData(0).set(pcm);
 
   if (awaitingFirstAudio && lastWordAt) {
     const sec = (Date.now() - lastWordAt) / 1000;
