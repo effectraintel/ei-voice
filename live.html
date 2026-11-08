@@ -233,7 +233,7 @@
 <div id="voicesheet">
   <div class="shead">the mouth <button id="vclose" style="float:right;background:transparent;border:0;color:#6f675b;font:inherit;font-size:11px;cursor:pointer">close</button></div>
   <div class="vgrid" id="vgrid"></div>
-  <div class="vnote">Kore is the Effectra voice and the default. The others stay here so you can hear the difference; the choice is this device only, and the mouth is set when the door opens, so changing it asks for a fresh tap.</div>
+  <div class="vnote">Kore is the Effectra voice and the default. The others stay here so you can hear the difference; the choice is this device only, and the mouth is set when the door opens, so changing it asks for a fresh tap. The door speaks English: it will not switch to another language because it heard one.</div>
 </div>
 
 <script>
@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 75;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 76;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -359,6 +359,11 @@ const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send e
 const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
+  // Edwin, 8 Nov 13:36: one Afrikaans sentence and the door carried on in Afrikaans, in another voice.
+  'You speak English. If he says something in Afrikaans or any other language, answer in English and ' +
+  'carry on with the work; never switch language to match him and never announce that you understood it. ' +
+  'If he asks you to speak another language, say the door is set to English and that it can be changed, ' +
+  'rather than switching by yourself. ' +
   'A share has exactly one owner for each step. Finding the song is yours: call share and believe its ' +
   'answer. You ask the cover question once, in your own words, as soon as a song is locked in: whether a ' +
   'picture should go with it and what it should show. After that the door owns the rest: it opens the sheet ' +
@@ -540,6 +545,10 @@ const bars = [...document.querySelectorAll('#bars i')];
 // must fall back to Kore rather than open a door that fails on the setup frame.
 const stored = localStorage.getItem('ei-live-voice');
 let ws = null, voice = VOICES.includes(stored) ? stored : 'Kore';
+// The door's spoken language. Pinned at session setup so the mouth cannot drift to whatever it hears.
+// Kore with en-US is the voice the owner knows; a second language becomes a deliberate option here,
+// tested before it is offered, never a side effect of a sentence.
+const LANG = 'en-US';
 let connecting = false;   // a door is being opened and has not answered yet
 let doorGen = 0;          // bumped by anything that cancels an opening in flight
 if (stored !== voice) localStorage.setItem('ei-live-voice', voice);
@@ -1185,7 +1194,16 @@ async function openDoor() {
         model: 'models/' + d.model,
         generationConfig: {
           responseModalities: ['AUDIO'],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+          // The mouth is pinned in BOTH halves. With a voice and no language, the server detects the
+          // language of whatever it hears and follows it — so at 13:36 on 8 Nov he said one Afrikaans
+          // sentence and the door answered in Afrikaans, in a different voice, without asking: "Heard me
+          // speak Afrikaans and just went on. Also different voice." A door that changes its language
+          // because of the person in front of it is not a door, it is a mirror. English is the door's
+          // language; a second one is a decision we make, not something that leaks in through the mic.
+          speechConfig: {
+            languageCode: LANG,
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
+          },
         },
         systemInstruction: { parts: [{ text: brief }] },
         // Eyes for public facts only: a match result, today's weather, a price.
@@ -3024,6 +3042,7 @@ function sayGreeting() {
   const speak = resumeSpeak; resumeSpeak = '';
   resumeLine = '';
   sessionOpenedAt = Date.now();
+  logLine('session.mouth', LANG + ' \u00b7 ' + voice + '\u00b7 pinned at setup', { level: 'info' });
   const line = speak || (fresh
     ? 'I am here. Ask me anything, out loud, and I will do it. If you want to know what I can do, say help.'
     : 'I am here, Boss.');
