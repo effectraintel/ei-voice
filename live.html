@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 71;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 72;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1595,6 +1595,34 @@ let userTurns = 0;             // one per thing he says, so an answer can be tol
 let shareCoverAskedTurn = -1;  // the turn the cover question was asked on
 let shareAddrAskedTurn = -1;   // the turn the address was read back on
 let shareNoMessageTurn = -1;   // the turn the message question was asked on
+// One recording arrives tagged every way the catalogue can think of: "Hello (Turn Your Radio On)",
+// "(Remastered 7\" Version)", "(Album Instrumental)", "(7\" Instrumental)". Those are one song with
+// decoration, and asking him which one is the door handing back its own mess. The bracket is decoration,
+// so the bracket decides: same base title and artist collapse to the plainest member of the family.
+function shareBase(title) {
+  return String(title || '').toLowerCase()
+    .replace(/\s*[\(\[][^\)\]]*[\)\]]/g, ' ')
+    .replace(/\s*[-–]\s*(remaster(ed)?|single|album|radio edit|instrumental|live|deluxe).*$/i, ' ')
+    .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function variantWeight(title) {
+  const t = String(title || '').toLowerCase();
+  if (/instrumental|karaoke|acapella|a cappella|backing track/.test(t)) return 3;
+  if (/\blive\b/.test(t)) return 2;
+  if (/remaster/.test(t)) return 1;
+  return 0;
+}
+function collapseChoices(list) {
+  const best = new Map();
+  for (const c of list) {
+    const k = shareBase(c.title) + '|' + shareBase(c.artist || '');
+    const held = best.get(k);
+    if (!held || variantWeight(c.title) < variantWeight(held.title)) best.set(k, c);
+  }
+  const keep = Array.from(best.values());
+  return keep.length ? keep : list;
+}
+
 let shareChoices = [];
 let shareCoverAsked = false;   // the door asks for the picture once, and does not take the model's word for it
 let shareAddrOk = false;       // set only by a known address, or by him hearing it and saying yes
@@ -1787,12 +1815,37 @@ async function handleShareCall(call) {
           railNote('share · no recording by ' + hint[1] + ' · asking');
         }
       }
+      // the same recording under several labels is one song, not a menu
+      const before = r.candidates.length;
+      r.candidates = collapseChoices(r.candidates);
+      if (r.candidates.length < before) {
+        railNote('share · ' + before + ' listings, ' + r.candidates.length + ' song'
+          + (r.candidates.length === 1 ? '' : 's'));
+      }
       shareChoices = r.candidates;
       if (!shareChoices.length) {
         result = 'Nothing answered to that name on that artist. Ask who sings it, or for a store link, one '
           + 'short question. Nothing has been made.';
         looked = 'sharing · no match for ' + String(query);
         return;
+      }
+      if (shareChoices.length === 1) {
+        // the variants were decoration around one song, so it is already decided
+        const only = shareChoices[0];
+        const w = await withTimeout(gatePost('songShare', { action: 'choose', candidate: only }), 45000,
+          'the sharing rail did not answer in time');
+        if (w && w.ok) {
+          shareCard = { title: w.title || only.title, sub: (w.artist || only.artist || '') + (w.album ? ' · ' + w.album : ''),
+            url: w.url, code: w.code, kind: w.kind, isrc: w.isrc, platforms: w.platforms, art: only.art || '' };
+          shareChoices = [];
+          result = 'Found it, and only one real recording of it exists on the stores, so nothing needs '
+            + 'choosing: "' + (w.title || only.title) + '"' + (w.artist || only.artist ? ' by ' + (only.artist || w.artist) : '')
+            + ' is on his shelf as ' + w.code + '. Say that in one line and offer the message next. '
+            + '(the page can see the shelf: ' + shelfTruth() + ')';
+          looked = 'sharing · ' + (w.title || only.title);
+          railNote('share · ' + w.found + ' · ' + (w.title || '') + (w.code ? ' · ' + w.code : ''));
+          return;
+        }
       }
       shareCoverAsked = false; shareAddrOk = false;
       const few = shareChoices.slice(0, 3);
