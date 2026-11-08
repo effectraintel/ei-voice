@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 104;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 105;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -360,7 +360,14 @@ const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
   // Edwin, 8 Nov 13:36: one Afrikaans sentence and the door carried on in Afrikaans, in another voice.
-  'You speak English. If he says something in Afrikaans or any other language, answer in English and ' +
+  // Edwin, 8 Nov 16:29: "it changed mid sentence to an Indian accent". A door with one speaker in it does
+  // not acquire a second accent because of what it heard, and it never imitates him. The accent is part of
+  // who is speaking, which is the one thing that may not drift.
+  'You are one person with one voice, and the voice does not change: same accent, same tempo, first word to '
+  + 'last, in every reply. Never imitate his accent or anyone else\'s, never drift into another one part-way '
+  + 'through a sentence, and never let what you have just heard about a place or a person colour how you '
+  + 'sound. If you notice yourself about to sound different, keep the voice you started with. ' +
+  'You speak English. If he says something in Afrikaans or any other language, answer in English and ' + +
   'carry on with the work; never switch language to match him and never announce that you understood it. ' +
   'If he asks you to speak another language, say the door is set to English and that it can be changed, ' +
   'rather than switching by yourself. ' +
@@ -3744,6 +3751,7 @@ function handleFrame(text) {
     setTimeout(() => { if (sessionUp && greeting) sayGreeting(); }, 280);
     return;
   }
+  if (msg.serverContent && msg.serverContent.turnComplete) { try { flushFingerprint(); } catch (e) {} }
   if (msg.voiceActivity && msg.voiceActivity.type === 'ACTIVITY_END') {
     // Fallback only. Our own microphone already knows when he stopped talking, and
     // that is the boundary worth clocking: the server's event can arrive in the same
@@ -4112,6 +4120,14 @@ function playing() {
 }
 
 let audioRateSeen = 0;
+let fpZc = 0, fpN = 0, fpSq = 0, fpParts = 0;
+function flushFingerprint() {
+  if (!fpN) return;
+  const zcr = fpZc / fpN, rms = Math.sqrt(fpSq / fpN);
+  logLine('voice.fp', 'zcr ' + zcr.toFixed(4) + ' · rms ' + rms.toFixed(4) + ' · ' + fpParts + ' frames',
+    { level: 'info', target: 'session' });
+  fpZc = 0; fpN = 0; fpSq = 0; fpParts = 0;
+}
 function playPcm(b64, mime) {
   const ctx = playCtxEnsure();
   const bin = atob(b64);
@@ -4130,6 +4146,13 @@ function playPcm(b64, mime) {
   }
   let pcm = new Float32Array(i16.length);
   for (let i = 0; i < i16.length; i++) pcm[i] = i16[i] / 0x8000;
+  // measure this reply as it arrives, never afterwards
+  fpParts++;
+  for (let i = 1; i < pcm.length; i++) {
+    if ((pcm[i] >= 0) !== (pcm[i - 1] >= 0)) fpZc++;
+    fpSq += pcm[i] * pcm[i];
+    fpN++;
+  }
   if (ctx.sampleRate !== rate) pcm = toRate(pcm, rate, ctx.sampleRate);
   const buf = ctx.createBuffer(1, pcm.length, ctx.sampleRate);
   buf.getChannelData(0).set(pcm);
