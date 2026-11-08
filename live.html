@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 110;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 111;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2708,6 +2708,7 @@ function shareArtAnswer(heard) {
     // drawing is asked to make "lightning striking into a dark ocean" and not a sentence about a picture.
     let brief = words;
     for (const lead of [
+      /^[\s\S]*?\b(?:picture|cover|image|drawing|illustration)\b\s*(?:about|of|showing|that shows|with|to show)?\s*/i,
       /^[\s\S]*?\b(?:picture|cover|image|drawing|illustration)\b[^.?!]*?\b(?:should|can|could|would|will)?\s*(?:show|shows|showing|of|with)\b\s*/i,
       /^[\s\S]*?\bit should (?:show|be|look like)\b\s*/i,
       /^(?:yes|yeah|yep|please|i do|i would|sure|okay|ok|definitely|absolutely)[,.\s]*/i,
@@ -2742,7 +2743,7 @@ function shareArtAnswer(heard) {
   // Step 3 opens: the popup, where he types the address himself and writes the message.
   shareStage = 'sheet';
   saveDraft();
-  setTimeout(() => openShareSheet(shareCard, shareArt), 260);
+  openSheetWhenQuiet(shareCard, shareArt, 0);
   doorNote(shareArt.want
     ? 'the sheet is open on his screen now, with their email and his message to fill in, and the picture '
       + 'he described will be drawn when he sends. Say one short line so he knows where to look, and do not '
@@ -3448,6 +3449,14 @@ function openSheet(url, heading) {
 
 /* Sending a card on, by hand (build 60). The same rail the voice uses: this only decides who, which
    way and what it says, and the answer comes back in the sheet rather than being announced. */
+// A sheet that opens by cutting a sentence in half is a screen he meets mid-thought. It waits for the mouth
+// to go quiet, then opens; after four seconds it opens anyway, because a stuck voice must never hold a door.
+function openSheetWhenQuiet(card, art, tries) {
+  const busy = (typeof speaking !== 'undefined' && speaking);
+  if (busy && tries < 16) return setTimeout(() => openSheetWhenQuiet(card, art, tries + 1), 250);
+  try { openShareSheet(card, art); } catch (e) {}
+}
+
 function openShareSheet(card, art) {
   // One sheet, never rebuilt under his finger. A rebuild is a tap that lands on nothing (Edwin, 8 Nov
   // 12:37: "I see it but I tap it but nothing happens"), so an open sheet is reused and focused.
