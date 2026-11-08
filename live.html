@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 86;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 87;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1692,6 +1692,25 @@ async function handleHouseCall(call) {
 // "we need to remember that you will get back more than one song in some instances. So you will have
 // to prompt me back so that i can confirm the right one." Nothing is wrapped or minted until he does.
 let lastShare = null;          // the last delivery this session actually made
+const SHARE_MEM = 'ei.lastShare';
+
+function rememberShare(r) {
+  lastShare = r;
+  try {
+    const at = typeof r.at === 'number' ? r.at : (Date.parse(r.at) || Date.now());
+    localStorage.setItem(SHARE_MEM, JSON.stringify({ ...r, at: at }));
+  } catch (e) {}
+}
+
+function recalledShare(maxAge) {
+  try {
+    const d = JSON.parse(localStorage.getItem(SHARE_MEM) || 'null');
+    if (!d || !d.title) return null;
+    const at = typeof d.at === 'number' ? d.at : (Date.parse(d.at) || 0);
+    if (!at || Date.now() - at > (maxAge || 6 * 3600e3)) return null;
+    return { ...d, at: at };
+  } catch (e) { return null; }
+}
 let shareSentThisTurn = false;   // set only by a send the rail confirmed
 let userTurns = 0;             // one per thing he says, so an answer can be told from a guess
 let shareCoverAskedTurn = -1;  // the turn the cover question was asked on
@@ -2486,10 +2505,10 @@ async function handleShareToCall(call) {
 
     if (r && r.ok && r.channel === 'email') {
       shareSentThisTurn = true;
-      lastShare = {
+      rememberShare({
         title: card.title || '', to_name: shareDraft.to_name || '', to_masked: r.to_masked || '',
         channel: 'email', message_id: r.message_id || '', cover: !!r.cover_url, at: new Date().toISOString(),
-      };
+      });
       if (r.cover_url) mergeCard({ kind: 'cover', title: 'The cover for ' + (card.title || 'the song'), sub: 'drawn from the song and your words', url: r.cover_url, code: 'cover-' + (r.message_id || Date.now()) });
       railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || '') + (r.cover_url ? ' · with a cover' : ''));
       result = 'Sent by email to ' + (shareDraft.to_name ? shareDraft.to_name : 'them') + ' (' + (r.to_masked || 'the address')
@@ -2501,7 +2520,7 @@ async function handleShareToCall(call) {
     }
     if (r && r.ok && r.need === 'tap' && r.wa_link) {
       shareSentThisTurn = false;
-      lastShare = { title: card.title || '', to_name: shareDraft.to_name || '', to_masked: r.to_masked || '', channel: 'whatsapp', message_id: '', cover: false, at: new Date().toISOString() };
+      rememberShare({ title: card.title || '', to_name: shareDraft.to_name || '', to_masked: r.to_masked || '', channel: 'whatsapp', message_id: '', cover: false, at: new Date().toISOString() });
       mergeCard({ kind: 'send', title: 'WhatsApp to ' + (shareDraft.to_name || r.to_masked || 'them'), sub: 'tap to send · written and ready', url: r.wa_link, code: 'wa-' + Date.now() });
       railNote('shared · whatsapp prepared · ' + (card.title || ''));
       result = 'The WhatsApp message is written and on the shelf as a link he taps to send; nothing has left yet. '
@@ -3008,7 +3027,7 @@ function openShareSheet(card, art) {
           } catch (e) {}
         }, 5000);
         shareSentThisTurn = true;
-        lastShare = { title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' };
+        rememberShare({ title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' });
         railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
         setTimeout(() => el.remove(), 1400);
       } else if (r && r.ok && r.need === 'tap' && r.wa_link) {
@@ -3269,6 +3288,20 @@ function primeAudioSession(ms = 260) {
 
 let lastGreetAt = 0;
 function sayGreeting() {
+  // What left, and that it left. A new session knows nothing on its own, so the record is handed to it — not
+  // as something to announce, as the answer if he asks. (14:28: "when I spoke again, it had no idea it was sent")
+  try {
+    const rec = recalledShare(6 * 3600e3);
+    if (rec) {
+      const when = new Date(rec.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      doorNote('What already left, for your information only: "' + rec.title + '" went to '
+        + (rec.to_name || rec.to_masked || 'the person he named') + ' by ' + (rec.channel || 'email')
+        + ' at ' + when + (rec.cover ? ', with the picture drawn in' : ', without a picture')
+        + '. That share is finished. Answer only if he asks about it, and never offer to send it again.');
+      logLine('share.recall', rec.title + ' · ' + (rec.channel || 'email') + ' · ' + when,
+        { level: 'info', target: 'share' });
+    }
+  } catch (e) {}
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
   // Reopening the door a minute later is the same conversation, not a new arrival: it gets no greeting.
