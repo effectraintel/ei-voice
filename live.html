@@ -1043,6 +1043,10 @@ async function gatePost(fn, body) {
   const t0 = Date.now();
   logLine('call.ask', fn + ' ' + askOf(body), { target: fn, ask: askOf(body), gate: '1' });
   if (fn === 'songShare' || fn === 'shelfShare') railCallsThisTurn++;
+  // Only a lock counts as a write, not a search: 'find' asks the rail, 'choose' puts the card up.
+  if (fn === 'payRequestFromDoor' || (fn === 'songShare' && String(askOf(body)).indexOf('choose') >= 0)) {
+    shelfWriteAt = Date.now();
+  }
   try {
     const r = await fetch(FNBASE + fn, {
       method: 'POST',
@@ -1984,6 +1988,24 @@ function judgeClaim() {
       }
       return;
     }
+    // A thing on the shelf is a row someone wrote, so the claim is checkable. At 18:29 on 8 Nov the door
+    // said "a payment request for 10 Rand for charity is on the shelf now waiting for you" and no
+    // payRequestFromDoor call exists in the trace at all: he went to look at nothing. Same class as a rail
+    // claim, same cure - hold the sentence and tell the mouth what is actually true.
+    const shelfWriteClaim = /\b(?:is|are|it'?s|its) (?:now )?on (?:the|your|his) shelf\b|\b(?:has|have) been (?:put|added|placed) (?:on|to) (?:the|your|his) shelf\b|\b(?:put|added|placed) (?:it |that |your |his )?(?:on|to) (?:the|your|his) shelf\b|\bsitting (?:on|in) (?:the|your|his) shelf\b/i;
+    if (shelfWriteClaim.test(t) && !(shelfWriteAt && Date.now() - shelfWriteAt < 60000)) {
+      if (Date.now() - unbackedWarnedAt >= 15000) {
+        unbackedWarnedAt = Date.now();
+        hiddenHold = true;                      // the false sentence is not spoken
+        hiddenHoldUntil = Date.now() + 1500;
+        logLine('claim.shelfwrite', t.slice(0, 160), { level: 'warn', target: 'no-shelf-write' });
+        doorNote('Nothing was written to his shelf just now, so do not say that anything is on it. If he asked '
+          + 'for a payment request and you know the amount and what it is for, call the payment tool now and '
+          + 'only describe it once it answers. If you do not have the amount or the item yet, ask him for the '
+          + 'missing one in a single short question.', true);
+      }
+      return;
+    }
     const claims = /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|the rail (?:is )?(?:down|not answering)|couldn'?t reach (?:the )?(?:rail|sharing rail|sharing service)|there'?s nothing on your shelf/i;
     if (!claims.test(t)) return;
     const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000)
@@ -2251,6 +2273,10 @@ let shareStage = 'idle';                     // idle → art → sheet → sent.
 // door if the model has not done it, because a model that skips the tool will still answer as though it
 // called it.
 let awaitSong = 0, awaitSongNudge = null, doorSearching = false, railAnsweredAt = 0;
+// When a card was last actually written to his shelf (a song locked, a request minted). A sentence that
+// says something IS on the shelf needs one of these behind it. (8 Nov 2026, 18:29: the door said a R10
+// payment request was on the shelf; no payRequestFromDoor call exists in the trace, and the shelf was empty.)
+let shelfWriteAt = 0;
 let heldMouth = [], heldFrames = 0, hiddenHold = false, hiddenHoldUntil = 0, heldEngineLogged = 0;
 // A turn with no words back is the one failure he cannot work around: he spoke and the door went
 // quiet on him. (Edwin, 8 Nov 2026: after a share closed, "Okay, done." was transcribed at 16:46:51
