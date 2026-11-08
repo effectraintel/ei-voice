@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 89;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 90;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1008,6 +1008,7 @@ async function railPost(fn, body) {
 async function gatePost(fn, body) {
   const t0 = Date.now();
   logLine('call.ask', fn + ' ' + askOf(body), { target: fn, ask: askOf(body), gate: '1' });
+  if (fn === 'songShare' || fn === 'shelfShare') railCallsThisTurn++;
   try {
     const r = await fetch(FNBASE + fn, {
       method: 'POST',
@@ -1880,6 +1881,29 @@ function stripRequestFrame(q) {
   return t;
 }
 
+// The record is the only thing allowed to report on the record. A sentence that claims a search, an error, or
+// an empty shelf with no rail call behind it is corrected at once — not just written down for later.
+let unbackedWarnedAt = 0;
+function judgeClaim() {
+  try {
+    const t = String(said.engine || '');
+    if (!t) return;
+    const claims = /couldn'?t find|could not find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|the rail (?:is )?(?:down|not answering)|couldn'?t reach (?:the )?(?:rail|sharing rail|sharing service)|there'?s nothing on your shelf/i;
+    if (!claims.test(t)) return;
+    const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000);
+    if (answered || doorSearching) return;
+    if (Date.now() - unbackedWarnedAt < 15000) return;    // one correction, not a chorus
+    unbackedWarnedAt = Date.now();
+    logLine('claim.unbacked', t.slice(0, 160), { level: 'warn', target: 'no-rail-call' });
+    doorNote('You just told him something about the rail that did not happen: nothing was searched and nothing '
+      + 'failed. Correct it in one short sentence, then ask which song he means. Never describe a result, an '
+      + 'error or an empty shelf that you have not been told about.');
+  } catch (e) {
+  } finally {
+    railCallsThisTurn = 0;
+  }
+}
+
 function looksLikeIntentNotTitle(q) {
   const t = String(q || '').trim().replace(/[.?!,]+$/, '');
   if (!t) return true;
@@ -2139,6 +2163,8 @@ function noteSongAnswer(heard) {
   if (SHARE_INTENT.test(said)) {
     awaitSong = Date.now();
     railNote('share · song expected');
+    doorNote('He wants to share a song and has not named it. Ask one short question: which song? Nothing has '
+      + 'been searched yet, so nothing can have failed. Do not mention an error, the rail, or his shelf.');
     return;
   }
   if (!awaitSong || Date.now() - awaitSong > 90000) return;
@@ -3543,18 +3569,10 @@ function handleFrame(text) {
 
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    judgeClaim();
     if (sessionOpenedAt && Date.now() - sessionOpenedAt > 9 * 60 * 1000 && !renewing) {
       railNote('session · renewing at the pause, nine minutes in');
-      // The record is the only thing allowed to report on the record. This line makes the difference visible
-    // next time: an engine sentence about the rail with no rail call behind it.
-    try {
-      const t = String(said.engine || '');
-      if (/couldn'?t find|could not find|nothing was found|not on (?:the |your )?(?:sharing )?rail/i.test(t)
-          && Date.now() - railAnsweredAt > 20000 && !doorSearching) {
-        logLine('claim.unbacked', t.slice(0, 160), { level: 'warn', target: 'no-rail-call' });
-      }
-    } catch (e) {}
-    logLine('turn.engine', said.engine || '', { role: 'engine', note: 'then the link renewed' });
+      logLine('turn.engine', said.engine || '', { role: 'engine', note: 'then the link renewed' });
       logLine('session.rotate', 'nine minutes in: renewing at a pause', { level: 'info' });
       renewLink('age');
       return;
