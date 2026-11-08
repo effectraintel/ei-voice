@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 67;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 68;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -378,10 +378,24 @@ const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send e
 const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
+  // Edwin, 8 Nov, on the share runs: the same composite question came back three times, and both
+  // openings recited his capabilities. "Notice all the repeating of concepts going on."
+  'Ask ONE question at a time, and never ask again for anything you are told you already hold. ' +
+  'Never list or advertise what you can do: no menus, no "I can walk your house, make a song or ' +
+  'share one of your songs". If he asks what you can do, answer in one short line and stop. ' +
+  'Never repeat a question he has already answered; if you must return to it, say what you have first. ' +
+  // Filler sounds arrived as turns and bought a reply each time: "Eu", "It". He was thinking.
+  'Filler sounds, half words and background noise are not conversation: if what you hear is not a ' +
+  'request or an answer, stay quiet rather than asking again. ' +
+  // The transcription is the ear, and it is not to be trusted with identifiers.
+  'Never type an address or a number from what you think you heard. The door gives you those, and it ' +
+  'reads them back to him. ' +
   // A URL spelled out letter by letter is the clearest example of speech being the wrong
   // channel: it is unlistenable and unusable. The door shows it instead, on the shelf.
   'Never read a web address, a URL, an email address, a phone number or a long code aloud, even ' +
-  'if you have it: say that it is on the shelf, name the source in a few words, and let him tap it. ' +
+  'if you have it, EXCEPT when you are reading one back so he can confirm it before something goes to it: '
+  + 'then say it in full, and say it once. ' +
+  'Say that it is on the shelf, name the source in a few words, and let him tap it. ' +
   'If he asks for a link, say it is on the shelf now rather than describing it. ' +
   // He asked for the weather and for it to go on the shelf, and was told the door cannot put
   // things on the shelf - one breath before the page put it there itself. The shelf is a
@@ -597,6 +611,20 @@ function startClock(label) {
   tick(); clockT = setInterval(tick, 100);
 }
 function stopClock() { if (clockT) clearInterval(clockT); clockT = null; }
+// What is not conversation: a vocalisation, a dangling fragment, or a word too short to be an
+// answer. Yes, no and okay are answers and must never land here.
+const NOISE_WORDS = /^(eu|uh|uhm|um|er|eh|ah|oh|hmm|mm|mhm|hm|it|and it|and it is|and is|ka|ka\.|\u0915\u093e|na|the|a|is|so|ja|nee)$/i;
+function isNoise(text) {
+  const t = String(text || '').trim().replace(/[.?!,\u00bf\u00a1]+$/g, '').trim();
+  if (!t) return true;
+  const words = t.split(/\s+/);
+  if (words.length > 3) return false;
+  if (/\d/.test(t)) return false;
+  if (/^(yes|no|ok|okay|ja|nee|yep|nope|sure)$/i.test(t)) return false;
+  if (NOISE_WORDS.test(t)) return true;
+  if (words.length === 1 && t.length <= 2) return true;
+  return false;
+}
 function warn(text) {
   hintEl.textContent = text;
   hintEl.style.color = '#e8cfae';
@@ -1754,6 +1782,33 @@ function cardPayload(c) {
 // sale", "Etwinn Fund sale" and "Edwin van Zijl at effectra.co.za" - four attempts, no mail, and a
 // frustrated owner who offered to spell it. So the door reads the common spoken shapes into an address,
 // and where it cannot, it stops guessing and asks him to type it into the sheet instead.
+// A number read to us is a transcription, and transcriptions drop digits: 0827699139 became
+// 082769139 on 8 Nov. Normalise the country code, then hold it to the one legal shape.
+function normalisePhone(raw) {
+  let d = String(raw || '').replace(/[^0-9+]/g, '');
+  d = d.replace(/^\+27/, '0').replace(/^0027/, '0');
+  d = d.replace(/[^0-9]/g, '');
+  if (d.length === 9 && d.charAt(0) !== '0') d = '0' + d;
+  return d;
+}
+function looksMobile(d) {
+  return /^0[6-8][0-9]{8}$/.test(String(d || ''));
+}
+function phoneSpoken(d) {
+  const v = String(d || '');
+  return v.length === 10 ? v.slice(0, 3) + ' ' + v.slice(3, 6) + ' ' + v.slice(6) : v;
+}
+function shareHeld() {
+  const d = shareDraft;
+  if (!d) return '';
+  const bits = ['song "' + ((d.card && d.card.title) || '') + '"'];
+  bits.push('to ' + (d.to ? (d.channel === 'whatsapp' ? phoneSpoken(d.to) : d.to) : 'nobody yet'));
+  if (d.to_name) bits.push('their name ' + d.to_name);
+  if (d.channel) bits.push('by ' + d.channel);
+  bits.push(d.message ? 'message written' : 'no message yet');
+  bits.push(d.cover === true ? 'cover yes' : d.cover === false ? 'cover no' : 'cover not asked');
+  return 'Already held: ' + bits.join('; ') + '. Do not ask for any of that again.';
+}
 function normaliseAddress(raw) {
   let t = String(raw || '').trim().toLowerCase();
   t = t.replace(/\s+at\s+/g, '@').replace(/\s*\(at\)\s*/g, '@');
@@ -1832,7 +1887,8 @@ async function handleShareToCall(call) {
     }
     if (!shareDraft.channel) {
       if (looksEmailish) shareDraft.channel = 'email';
-      else if (to.replace(/[^0-9]/g, '').length >= 9) shareDraft.channel = 'whatsapp';
+      else if (looksMobile(shareDraft.to)) shareDraft.channel = 'whatsapp';
+      else if (to.replace(/[^0-9]/g, '').length >= 6) shareDraft.channel = 'whatsapp';
     }
     if (!shareDraft.channel) {
       result = 'He named a person but not how to reach them. Ask for their email address or their WhatsApp '
@@ -1841,8 +1897,27 @@ async function handleShareToCall(call) {
       return;
     }
 
-    // 2. an address he has never sent to is read back before anything else happens, and a read-back in the
-    // same breath as the address is not an answer.
+    // 2. a destination is read back before anything else happens, and a read-back in the same breath as
+    // the answer is not a confirmation.
+    if (shareDraft.channel === 'whatsapp') {
+      shareDraft.to = normalisePhone(shareDraft.to);
+      if (!looksMobile(shareDraft.to)) {
+        shareAddrTries++;
+        if (shareAddrTries >= 2) {
+          openShareSheet(card);
+          result = 'That number is not a mobile number: it came through as ' + shareDraft.to + ', which is '
+            + shareDraft.to.length + ' digits. The typing sheet is open: ask him to type it there. '
+            + 'Nothing has been sent.';
+          looked = 'sharing · typed instead';
+          return;
+        }
+        result = 'The number did not come through whole. Say how many digits you got, ask him to say it '
+          + 'again in three groups - oh eight two, seven six nine, nine one three nine - and take it fresh. '
+          + 'Do not send anything.';
+        looked = 'sharing · number unclear';
+        return;
+      }
+    }
     if (shareDraft.channel === 'email' && !looksAddress(to)) {
       shareAddrTries++;
       if (shareAddrTries >= 2) {
@@ -1857,7 +1932,7 @@ async function handleShareToCall(call) {
       looked = 'sharing · address unclear';
       return;
     }
-    if (shareDraft.channel === 'email' && !shareAddrOk) {
+    if (!shareAddrOk) {
       if (a.confirmed === true && shareDraft.readBack && userTurns > shareAddrAskedTurn) {
         shareAddrOk = true;
         railNote('share · address confirmed · ' + shareDraft.readBack.replace(/^(.{2})[^@]*(@.*)$/, '$1***$2'));
@@ -1866,12 +1941,13 @@ async function handleShareToCall(call) {
           try { await railPost('shelfShare', { action: 'wrong', to: shareDraft.readBack }); } catch (e) {}
           railNote('share · address corrected');
         }
-        shareDraft.readBack = to;
+        shareDraft.readBack = shareDraft.to;
         shareAddrAskedTurn = userTurns;
-        result = 'Read the address back to him in full, exactly as written here: ' + to
-          + ' . Then ask if that is right. Do not send anything yet: when he says yes, call this again with '
-          + 'confirmed true. If he corrects it, take the new address and call again with that instead.';
-        looked = 'sharing · reading the address back';
+        const spoken = shareDraft.channel === 'whatsapp' ? phoneSpoken(shareDraft.to) : shareDraft.to;
+        result = 'Read it back to him in full, exactly as written here: ' + spoken
+          + ' . Say each part plainly, then ask if that is right. Do not send anything yet: when he says '
+          + 'yes, call this again with confirmed true. If he corrects it, take the new one and call again.';
+        looked = 'sharing · reading it back';
         return;
       }
     }
@@ -1972,9 +2048,15 @@ async function handleShareToCall(call) {
       + 'nothing has left, in one line.';
     looked = 'sharing · not sent';
   } catch (e) {
-    result = 'The sharing rail did not answer: ' + String((e && e.message) || e) + '. Nothing was sent. Say that in one line.';
+    result = 'the sharing rail did not answer: ' + String((e && e.message) || e) + '.';
     looked = 'sharing · no answer';
   } finally {
+    // Whatever it is about to ask, it is told what is already in hand, so the same question cannot be
+    // asked twice in a row. Edwin, 8 Nov: three composite questions in a row, all asking for what he had
+    // just given.
+    if (result && /^(Ask|Read|You still|The address|The number|That number|He named|There is nothing)/.test(result)) {
+      result += ' ' + shareHeld();
+    }
     try {
       ws.send(JSON.stringify({
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
@@ -2777,9 +2859,17 @@ function handleFrame(text) {
 
   if (sc.inputTranscription && sc.inputTranscription.text) {
     dbgHeard++;
-    userTurns++;
-    appendLive('you', sc.inputTranscription.text);
-    logLine('turn.you', sc.inputTranscription.text, { role: 'you' });
+    const heard = String(sc.inputTranscription.text || '');
+    if (isNoise(heard)) {
+      // "Eu", "It", "and it is": he was thinking, and each bought a turn and a reply. Noise is
+      // logged as noise and does not advance the turn count, so it cannot be mistaken for an answer.
+     appendLive('noise', heard);
+      logLine('turn.noise', heard, { role: 'noise' });
+    } else {
+      userTurns++;
+      appendLive('you', heard);
+      logLine('turn.you', heard, { role: 'you' });
+    }
   }
   if (sc.outputTranscription && sc.outputTranscription.text) appendLive('engine', sc.outputTranscription.text);
 
