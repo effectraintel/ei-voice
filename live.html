@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 107;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 108;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2304,9 +2304,17 @@ function noteSongAnswer(heard) {
   const said = String(heard || '').trim();
   if (!said) return;
   if (SHARE_INTENT.test(said)) {
+    // "share a song" alone is intent. "share a song by Ed Sheeran called I See Fire" is intent and the song,
+    // and treating it as intent only is how he ended up with a fabricated "I couldn't find anything".
+    const carriesName = /\b(?:by|called|named|titled|from)\s+[A-Za-z]/i.test(said)
+      || /["\u201c\u2018][^"\u201d\u2019]{2,}["\u201d\u2019]/.test(said);
+    if (!carriesName) {
+      awaitSong = Date.now();
+      railNote('share · song expected');
+      return;
+    }
+    // fall through: armed and answered in the same breath
     awaitSong = Date.now();
-    railNote('share · song expected');
-    return;
   }
   if (!awaitSong || Date.now() - awaitSong > 90000) return;
   if (shareStage !== 'idle' || shareQuery) { awaitSong = 0; return; }
@@ -2314,6 +2322,15 @@ function noteSongAnswer(heard) {
   // rail, and a title that shares a word with them is exactly how a wrong search gets born. The door keeps the
   // ear open and says one short line, once; it does not turn a pause into a query.
   const noSong = /\b(?:by|called|named|titled)\b|\b(?:song|track|tune)\b|\bit'?s\b\s+\w+/i;
+  // A question about the door itself — its voice, its hearing, its state — is not a title, however much it
+  // sounds like one. Answering it is the whole reply.
+  const aboutDoor = /\b(?:your voice|you sound|your (?:accent|tone|mouth|ears?)|are you (?:ok|okay|there|awake)|do you (?:hear|understand)|why (?:is|are|did) you|what happened|is the door|the door is)\b/i;
+  if (aboutDoor.test(said) && !/\b(?:called|titled)\b/i.test(said)) {
+    railNote('share · asked about the door');
+    logLine('share.meta', said, { level: 'info', target: 'songShare' });
+    awaitSong = Date.now();                  // still waiting for the song
+    return;                                  // the mouth answers, the door stays armed and quiet
+  }
   const thinking = /\b(?:thinking|th?inking|deciding|choosing|considering|not sure|unsure|let me (?:think|see)|hold on|hang on|one moment|give me a (?:second|moment|minute)|wait|one sec)\b/i;
   if (thinking.test(said) && !noSong.test(said)) {
     railNote('share · still thinking');
