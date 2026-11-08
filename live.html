@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 70;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 71;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -700,6 +700,43 @@ function resetTurns() { turns = { you: null, engine: null }; said = { you: '', e
    reads as the engine replaying an old conversation. The socket is shut, so the
    words are a photograph, not a live turn. Wipe them and say plainly that the
    door is shut, so what is on screen is never mistaken for what is happening. */
+// The live voice session has a hard duration, and the server warns before it ends with a GoAway.
+// On 8 Nov a long test died mid-share at that wall: "Connection aborted because the client failed to
+// close the connection after receiving a GoAway signal". A voice that goes silent in the middle of a
+// sentence about where something is going is worse than one that never opened, so the door now renews
+// itself: a fresh session is opened, the old one is dropped, and the model is told exactly where it was.
+let renewing = false, resumeLine = '', sessionOpenedAt = 0;
+
+function onGoAway(g) {
+  const left = (g && g.timeLeft) ? String(g.timeLeft) : '';
+  railNote('session · the link is ending' + (left ? ' · ' + left + ' left' : ''));
+  logLine('session.goaway', 'the server is ending the session' + (left ? ', ' + left + ' left' : ''), { level: 'warn' });
+  renewLink('goaway');
+}
+
+async function renewLink(why) {
+  if (renewing) return;
+  renewing = true;
+  const held = shareDraft ? shareHeld() : (lastShare && lastShare.title
+    ? 'The last thing that left was "' + lastShare.title + '" to ' + (lastShare.to_name || lastShare.to_masked || 'him') + '.'
+    : '');
+  resumeLine = (why === 'goaway'
+    ? 'The voice link is new, so do not greet again. '
+    : 'The voice link renewed itself, so do not greet again. ')
+    + (held ? 'Where we were: ' + held + ' Carry on from exactly there, in one short line. '
+      : 'Say one short line that you are still here, then wait for him. ');
+  const old = ws;
+  try { if (old) old._renewing = true; } catch (e) {}
+  busy = false; connecting = false; sessionUp = false; listening = false;
+  ws = null;
+  try { if (old) old.close(); } catch (e) {}
+  try { stopClock(); } catch (e) {}
+  try { closeMic(); } catch (e) {}
+  warn('holding the line. renewing the voice link.');
+  try { await openDoor(); } catch (e) { warn('the link could not be renewed. tap the circle.'); }
+  renewing = false;
+}
+
 function shutDoor() {
   try { ws && ws.close(); } catch {}
   ws = null; sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
@@ -1194,6 +1231,7 @@ async function openDoor() {
     sock.onerror = () => { if (sock !== ws) return; warn('the stream dropped. tap the circle to open the door again.'); };
     sock.onclose = (e) => {
       if (sock !== ws) return;   // a socket that has been replaced must never shut the live door
+      if (sock._renewing) return; // the renewal owns this close; the new door is already opening
       // A socket can open and then be refused a session (an exhausted API balance,
       // a model that has been retired). Without this the page would sit on
       // "opening the door" forever, which is the one thing it must never do.
@@ -2803,9 +2841,11 @@ function sayGreeting() {
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
   const fresh = !localStorage.getItem(HELP_SEEN);
-  const line = fresh
+  const resume = resumeLine; resumeLine = '';
+  sessionOpenedAt = Date.now();
+  const line = resume || (fresh
     ? 'I am here. Ask me anything, out loud, and I will do it. If you want to know what I can do, say help.'
-    : 'I am here, Boss.';
+    : 'I am here, Boss.');
   try {
     ws.send(JSON.stringify({
       clientContent: {
@@ -2851,6 +2891,10 @@ function openAfterSpeech() {
 
 function handleFrame(text) {
   let msg; try { msg = JSON.parse(text); } catch { return; }
+
+  // the server's warning that the session is about to end. Caught before anything else so the
+  // renewal starts while there is still time to finish the sentence.
+  if (msg.goAway) onGoAway(msg.goAway);
 
   if (msg.setupComplete) {
     dbgOpens++;
@@ -2936,6 +2980,13 @@ function handleFrame(text) {
 
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
+    if (sessionOpenedAt && Date.now() - sessionOpenedAt > 9 * 60 * 1000 && !renewing) {
+      railNote('session · renewing at the pause, nine minutes in');
+      logLine('turn.engine', said.engine || '', { role: 'engine', note: 'then the link renewed' });
+      logLine('session.rotate', 'nine minutes in: renewing at a pause', { level: 'info' });
+      renewLink('age');
+      return;
+    }
     logLine('turn.engine', said.engine || '', {
       role: 'engine',
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
