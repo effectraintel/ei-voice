@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 69;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 70;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1611,13 +1611,58 @@ function shareResultLine(r) {
 // found two songs actually titled "Which" (Govzx, Kaesarian), which the door then read back to him as
 // candidates. The search was honest; the question should never have reached it. So the door refuses a
 // question here in code, the same way the song rail refuses a rights claim it cannot back.
+// A question is open and something arrived. The one failure underneath every bad run in this door is the
+// same: the slot needs filling, so whatever came in gets stuffed into it. "Good Question" became a song
+// title; a silence became "no message"; a promise became a send. So an answer is tested against the SHAPE
+// of what is being asked before it may be committed, and a failure never produces a value - it produces
+// one question that names the two readings. An unfilled slot is honest; a coerced value is a fabrication.
+const SLOT_SHAPE = { title: 'title', contact: 'contact', yesno: 'yesno', freetext: 'freetext' };
+
+function looksMeta(t) {
+  const v = String(t || '').trim().toLowerCase();
+  if (!v) return false;
+  const words = v.split(/\s+/).filter(Boolean);
+  // "X by Y" is a title, however many conversational words it holds: "Good Question by The Jet Stone
+  // Conspiracy" is a song. Shape first, suspicion second.
+  if (/\b(by|feat\.?|ft\.?)\b|\s-\s/.test(v)) return false;
+  if (/\b(what do you|what did you|you said|say again|repeat|hold on|hang on|never mind|i was|let me|sorry|not that|no that|mean)\b/.test(v)) return true;
+  if (words.length <= 4 && /\b(question|thinking|asking|say|talk)\b/.test(v)) return true;
+  return v.endsWith('?') && words.length <= 6;
+}
+
+function shapeOk(shape, t) {
+  const v = String(t || '').trim();
+  if (shape === 'freetext') return !!v;
+  if (shape === 'yesno') return /\b(yes|yeah|yep|sure|ok|okay|no|nope|don\'t|do not|not)\b/.test(v.toLowerCase());
+  if (shape === 'contact') return v.includes('@') || v.replace(/[^0-9]/g, '').length >= 9;
+  if (shape === 'title') {
+    const w = v.split(/\s+/).filter(Boolean);
+    if (!w.length || w.length > 12) return false;
+    if (!/[a-z0-9]/i.test(v)) return false;
+    return !looksMeta(v);
+  }
+  return true;
+}
+
+function resolveAnswer(shape, text) {
+  const t = String(text || '').trim();
+  if (!t) return { kind: 'empty' };
+  if (!shapeOk(shape, t)) return { kind: looksMeta(t) ? 'meta' : 'unclear' };
+  return { kind: 'value', value: t };
+}
+
+function repairLine(slot, heard, alt) {
+  const said = String(heard || '').trim();
+  const a = slot === 'title' ? 'a song title' : slot === 'contact' ? 'their address or number'
+    : slot === 'yesno' ? 'a yes or a no' : 'what you want it to say';
+  return 'You heard "' + said + '", which does not read as ' + a + '. Ask one question that names both '
+    + 'readings: was that meant as ' + a + (alt ? ' (' + alt + ')' : '') + ', or were you talking to yourself? '
+    + 'Quote his words back in the question. Do not guess and do not move on.';
+}
+
 function looksLikeQuestion(q) {
-  const t = String(q || '').trim();
-  if (!t) return true;
-  if (t.endsWith('?')) return true;
-  if (/\b(would you like|do you want|shall i|should i|can you tell|tell me which|which one)\b/i.test(t)) return true;
-  if (/^(which|what|who|whose|name a|pick a)\b/i.test(t) && /\b(song|track|tune|one)\b/i.test(t)) return true;
-  return /^(a |the |my |some )?(song|track|tune|music)$/i.test(t);
+  // kept as the name the share flow already calls; the judgement is the shape rule now, not a phrase list
+  return resolveAnswer('title', q).kind !== 'value';
 }
 
 async function handleShareCall(call) {
@@ -1670,10 +1715,15 @@ async function handleShareCall(call) {
 
     // A question is not a query. Refuse it here rather than searching the catalogue for the words.
     if (looksLikeQuestion(query)) {
-      result = 'He has not named a song yet. Ask him which song it is, in one short question, and stop. '
-        + 'Never put your own question in as the search.';
-      looked = 'sharing · which song';
-      railNote('share · held · that was a question, not a song');
+      // not a title: either he was thinking aloud or he asked something. Either way the slot stays open
+      // and the reply is a question about his question, quoting him, instead of a catalogue search.
+      const v = resolveAnswer('title', query);
+      result = v.kind === 'meta'
+        ? repairLine('title', query, 'the song we are sharing')
+        : 'He has not named a song yet. Ask him which song it is, in one short question, and stop. '
+          + 'Never put your own question in as the search.';
+      looked = v.kind === 'meta' ? 'sharing · was that a name?' : 'sharing · which song';
+      railNote('share · held · ' + (v.kind === 'meta' ? 'talked about it, did not name it' : 'no title yet'));
       return;
     }
 
@@ -1930,9 +1980,8 @@ async function handleShareToCall(call) {
         looked = 'sharing · typed instead';
         return;
       }
-      result = 'Read nothing back yet: what came through does not look like an address. Ask him to say it again '
-        + 'slowly, or to spell it, saying each letter. Nothing is sent.';
-      looked = 'sharing · address unclear';
+      result = repairLine('contact', to, '') + ' Nothing is sent until it is right.';
+      looked = 'sharing · was that an address?';
       return;
     }
     if (!shareAddrOk) {
