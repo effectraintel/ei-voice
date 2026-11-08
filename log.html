@@ -58,7 +58,10 @@
   <input id="ses" placeholder="session" size="7">
   <input id="q" placeholder="filter text">
   <button id="pause" title="stop following">pause</button>
+  <button id="clear" title="hide everything logged so far. Nothing is deleted: the dated files and
+    the stream keep every line, and this button toggles back.">clear view</button>
   <span class="meta" id="hits"></span>
+  <span class="meta" id="cleared"></span>
   <span class="meta live" id="live">connecting</span>
 </header>
 <div class="empty" id="empty">reading the log…</div>
@@ -101,6 +104,7 @@ function merge(list) {
 }
 
 function matches(e) {
+  if (clearedAt && olderOrSame(e.id, clearedAt)) return false;
   if (fac.value && e.facility !== fac.value) return false;
   if (lvl.value && e.level !== lvl.value) return false;
   var s = ses.value.trim().toLowerCase();
@@ -131,7 +135,9 @@ function paint() {
           + '<td class="ms' + (ms > 4000 ? ' slow' : '') + '">' + (ms ? (ms / 1000).toFixed(1) + 's' : '') + '</td></tr>';
   }
   tb.innerHTML = html;
-  hits.textContent = out.length + ' of ' + rows.length + ' line' + (rows.length === 1 ? '' : 's');
+  hits.textContent = out.length + ' of ' + rows.length + ' line' + (rows.length === 1 ? '' : 's')
+    + (hidden() ? ' \u00b7 ' + hidden() + ' cleared' : '');
+  showCleared();
   empty.style.display = rows.length ? 'none' : 'block';
   empty.textContent = rows.length ? '' : 'nothing logged yet';
 }
@@ -186,6 +192,21 @@ function tick() {
    without EventSource, and as a nudge when the tab comes back into view. */
 var es = null;
 
+/* Clearing the view (Edwin, 8 Nov 2026: "add a clear option so that I can clear the log before I do
+   a trace"). It hides, it never deletes: the boundary is the newest line at the moment he presses it,
+   and everything older stops matching. The dated files and the stream keep every line, so a trace
+   starts on a blank screen without evidence going missing. Clicking again shows the cleared lines. */
+var clearedAt = '';
+try { clearedAt = localStorage.getItem('eiLogClearedAt') || ''; } catch (x) {}
+
+/* Stream ids are "<ms>-<seq>", so compare the parts as numbers rather than as text. */
+function olderOrSame(a, b) {
+  var pa = String(a || '').split('-'), pb = String(b || '').split('-');
+  var x = Number(pa[0] || 0), y = Number(pb[0] || 0);
+  if (x !== y) return x <= y;
+  return Number(pa[1] || 0) <= Number(pb[1] || 0);
+}
+
 function cursor() { return rows.length ? rows[rows.length - 1].id : '-'; }
 
 function startStream() {
@@ -234,6 +255,42 @@ tb.addEventListener('click', function (ev) {
   td.classList.add('copied');
   setTimeout(function () { td.classList.remove('copied'); }, 900);
 });
+
+function hidden() {
+  if (!clearedAt) return 0;
+  var n = 0, i;
+  for (i = 0; i < rows.length; i++) if (olderOrSame(rows[i].id, clearedAt)) n++;
+  return n;
+}
+
+var clearBtn = document.getElementById('clear');
+var clearedNote = document.getElementById('cleared');
+
+function showCleared() {
+  if (clearedAt) {
+    clearBtn.textContent = 'show cleared';
+    clearBtn.className = 'on';
+    clearedNote.textContent = 'cleared \u00b7 new lines only';
+  } else {
+    clearBtn.textContent = 'clear view';
+    clearBtn.className = '';
+    clearedNote.textContent = '';
+  }
+}
+
+clearBtn.onclick = function () {
+  if (clearedAt) {
+    clearedAt = '';
+    try { localStorage.removeItem('eiLogClearedAt'); } catch (x) {}
+  } else {
+    clearedAt = rows.length ? rows[rows.length - 1].id : '-';
+    try { localStorage.setItem('eiLogClearedAt', clearedAt); } catch (x) {}
+  }
+  showCleared();
+  paint();
+};
+
+showCleared();
 
 pauseBtn.onclick = function () {
   paused = !paused;
