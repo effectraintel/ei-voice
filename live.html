@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 76;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 77;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -554,6 +554,9 @@ let doorGen = 0;          // bumped by anything that cancels an opening in fligh
 if (stored !== voice) localStorage.setItem('ei-live-voice', voice);
 let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
 let listening = false, busy = false, sessionUp = false;
+try {
+  logLine('page.load', 'build ' + BUILD_NO + ' \u00b7 ' + String(navigator.userAgent || '').slice(0, 70));
+} catch (e) {}
 let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency = null;
 // Echo bookkeeping. A phone speaker feeds its own voice back into its own microphone.
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
@@ -809,6 +812,19 @@ const LOG_SID = (() => {
   } catch (e) { return 'nosid'; }
 })();
 
+// Every failure this morning that could not be reproduced left the same emptiness in the log, so the page
+// now reports its own birth and its own errors: a dead door becomes a line with a reason in it.
+try {
+  window.addEventListener('error', (e) => {
+    logLine('page.error', (e && (e.message || e.type) || 'error') + ' @' + (e && e.lineno || '?'),
+      { level: 'error' });
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e && e.reason;
+    logLine('page.error', 'unhandled: ' + ((r && r.message) || String(r)).slice(0, 300), { level: 'error' });
+  });
+} catch (e) {}
+
 function logLine(facility, text, extra) {
   try {
     const body = Object.assign(
@@ -944,7 +960,24 @@ async function gatePost(fn, body) {
   }
 }
 
+// A tap that fails must say why, and must leave the door tappable. On 8 Nov at 13:46 the door "would not
+// open at all" and the log held nothing: no ask, no refusal, no line. A door that cannot be entered and
+// cannot say why is the one failure that teaches nobody anything. The wrapper logs it, shows it, and
+// always hands the button back.
 async function unlockWithFingerprint(mode, enrolCode) {
+  try {
+    return await unlockFingerprint(mode, enrolCode);
+  } catch (e) {
+    const why = (e && e.message) ? e.message : String(e);
+    logLine('door.fail', why, { level: 'error', target: 'unlock', mode: mode });
+    try { warn('the door did not open: ' + why); } catch (_) {}
+    try { gateSay('the door stayed shut'); } catch (_) {}
+  } finally {
+    try { gBtn.disabled = false; gAlt.disabled = false; } catch (_) {}
+  }
+}
+
+async function unlockFingerprint(mode, enrolCode) {
   gBtn.disabled = true;
   gAlt.disabled = true;
   gateSay(mode === 'register' ? 'asking the phone to make a key' : 'asking the phone for your fingerprint');
