@@ -1996,12 +1996,16 @@ function judgeClaim() {
     // "What amount would you like to put on your shelf?" is an offer, not a claim: the same words
     // appear in both, so the asking shape is excluded rather than the whole rule weakened.
     const shelfAsk = /\?|\b(?:would you like|do you want|shall (?:i|we)|want me to|let me know)\b/i;
-    if (shelfWriteClaim.test(t) && !shelfAsk.test(t) && !(shelfWriteAt && Date.now() - shelfWriteAt < 60000)) {
+    // One turn can hold a claim and a question ("...is on the shelf now waiting for you. Is that all?"),
+    // so each sentence is judged on its own instead of the whole turn being excused by its question mark.
+    const shelfClaimSentence = (String(t).match(/[^.!?]+[.!?]*/g) || [String(t)])
+      .find(x => shelfWriteClaim.test(x) && !shelfAsk.test(x));
+    if (shelfClaimSentence && !(shelfWriteAt && Date.now() - shelfWriteAt < 60000)) {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
         hiddenHold = true;                      // the false sentence is not spoken
         hiddenHoldUntil = Date.now() + 1500;
-        logLine('claim.shelfwrite', t.slice(0, 160), { level: 'warn', target: 'no-shelf-write' });
+        logLine('claim.shelfwrite', String(shelfClaimSentence).trim().slice(0, 160), { level: 'warn', target: 'no-shelf-write' });
         doorNote('Nothing was written to his shelf just now, so do not say that anything is on it. If he asked '
           + 'for a payment request and you know the amount and what it is for, call the payment tool now and '
           + 'only describe it once it answers. If you do not have the amount or the item yet, ask him for the '
