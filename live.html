@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 92;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 93;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -530,15 +530,27 @@ async function keepCurrent() {
     // cached copy it was trying to escape. So: check unless a conversation is actually open, and land on a
     // fresh address when it takes the new build.
     if (sessionUp || listening || busy) return;
-    const url = location.pathname + '?fresh=' + Date.now();
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return;
-    const t = await r.text();
-    const m = t.match(/const BUILD_NO = (\d+)/);
-    if (m && Number(m[1]) > BUILD_NO) {
+    // The check asks a three-byte file, not the whole door. Fetching live.html to read its own version
+    // downloaded the page twice on every open and made the log look like two builds running at once.
+    let latest = 0;
+    try {
+      const rb = await fetch('build.txt?fresh=' + Date.now(), { cache: 'no-store' });
+      if (rb.ok) latest = Number((await rb.text()).trim()) || 0;
+    } catch (e) {}
+    if (!latest) {
+      const r = await fetch(location.pathname + '?fresh=' + Date.now(), { cache: 'no-store' });
+      if (r.ok) {
+        const m = (await r.text()).match(/const BUILD_NO = (\d+)/);
+        latest = m ? Number(m[1]) : 0;
+      }
+    }
+    if (latest > BUILD_NO) {
       sessionStorage.setItem('ei-build-check', '0');
-      logLine('page.update', 'taking build ' + m[1] + ' over ' + BUILD_NO, { level: 'info' });
-      location.replace(location.pathname + '?v=' + m[1]);
+      logLine('page.update', 'taking build ' + latest + ' over ' + BUILD_NO, { level: 'info' });
+      location.replace(location.pathname + '?v=' + latest);
+    } else {
+      logLine('build.probe', 'latest is ' + (latest || BUILD_NO) + ', this door is ' + BUILD_NO,
+        { level: 'info' });
     }
   } catch { /* a check that cannot run must never stand in the way of the door */ }
 }
