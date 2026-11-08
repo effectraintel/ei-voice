@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 72;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 73;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -346,25 +346,6 @@ const DECLS = [{
                 required: ['query'],
               },
             },
-            {
-              // Anything on the shelf can be sent on. The door asks, he answers, and only his answer
-              // sends anything: this tool never guesses a recipient and never invents a message.
-              name: 'shareTo',
-              description: 'Send something that is already on his shelf to a person, with his message. Use it when he says yes to sending a card on, or asks to send/share something to someone. Call it with what you have; if you do not have their address, call it with just the person and it will tell you what to ask. Never invent an address, a number or a message.',
-              parameters: {
-                type: 'OBJECT',
-                properties: {
-                  which: { type: 'STRING', description: 'which thing on the shelf, in his words. Leave out for the one that just landed' },
-                  to: { type: 'STRING', description: 'who it is for: their email address or their WhatsApp number, exactly as he gave it' },
-                  channel: { type: 'STRING', description: 'email or whatsapp, only if he has said which' },
-                  message: { type: 'STRING', description: 'the words he wants sent with it. An empty string means send it with no message' },
-                  to_name: { type: 'STRING', description: 'the name of the person it is going to, as he said it. Needed for the greeting and the cover' },
-                  cover: { type: 'BOOLEAN', description: 'true if he wants a cover image drawn to go with it, false if he does not. Leave it out until you have asked him and he has answered' },
-                  confirmed: { type: 'BOOLEAN', description: 'true only once he has heard the email address read back and said it is right. Never set it to save a turn' },
-                },
-                required: [],
-              },
-            },
             ];
 
 // Edwin's log, 8 Nov 22:13, lines 1409-1410: nothing was called, and the engine said "I have just sent
@@ -378,9 +359,11 @@ const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send e
 const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
-  'Every step of a share or a send is a tool call: the song, the person, the address, the message, ' +
-  'the cover, the send itself. Never ask or promise one of those steps in words alone, and never say ' +
-  'a send will happen: call it, and let its result be what you report. A promise to send is not a send. ' +
+  'A share has exactly one owner for each step. Finding the song is yours: call share and believe its ' +
+  'answer. Everything after that belongs to the door: it asks about the cover picture, it opens the sheet ' +
+  'where he types the address and writes his message himself, and it sends. So never ask for an address, ' +
+  'never ask for the message, never ask whether to make a cover, never offer to send, and never say a send ' +
+  'is happening. If you have no share tool for it, that is why: it is not yours to call. ' +
   // Edwin, 8 Nov, on the share runs: the same composite question came back three times, and both
   // openings recited his capabilities. "Notice all the repeating of concepts going on."
   'Ask ONE question at a time, and never ask again for anything you are told you already hold. ' +
@@ -1666,9 +1649,8 @@ function shareResultLine(r) {
     + (r.found === 'shelf'
       ? 'It plays from the vault, good for a day, and no file is handed over.'
       : 'It opens on ' + (r.platform_text || 'whichever store the listener uses') + (r.found === 'wrapped' ? ', powered by MTShare' : '.'))
-    + ' Say the title once and that it is on the shelf. Then offer the whole thing in one question, in your own'
-    + ' words: sending it to someone with his own message and a cover drawing made for it, and that you will read'
-    + ' the address back before anything leaves. Do not read the url out loud.';
+    + ' Say the title once and that it is on the shelf. Do not offer to send it and do not ask who it is for:'
+    + ' the door asks about the picture in the next breath and opens the sheet itself. Do not read the url out loud.';
 }
 
 
@@ -1835,13 +1817,12 @@ async function handleShareCall(call) {
         const w = await withTimeout(gatePost('songShare', { action: 'choose', candidate: only }), 45000,
           'the sharing rail did not answer in time');
         if (w && w.ok) {
-          shareCard = { title: w.title || only.title, sub: (w.artist || only.artist || '') + (w.album ? ' · ' + w.album : ''),
-            url: w.url, code: w.code, kind: w.kind, isrc: w.isrc, platforms: w.platforms, art: only.art || '' };
+          shareSongLocked({ title: w.title || only.title, sub: (w.artist || only.artist || '') + (w.album ? ' · ' + w.album : ''),
+            url: w.url, code: w.code, kind: w.kind, isrc: w.isrc, platforms: w.platforms, art: only.art || '' });
           shareChoices = [];
-          result = 'Found it, and only one real recording of it exists on the stores, so nothing needs '
-            + 'choosing: "' + (w.title || only.title) + '"' + (w.artist || only.artist ? ' by ' + (only.artist || w.artist) : '')
-            + ' is on his shelf as ' + w.code + '. Say that in one line and offer the message next. '
-            + '(the page can see the shelf: ' + shelfTruth() + ')';
+          result = 'Found it: "' + (w.title || only.title) + '"' + (only.artist || w.artist ? ' by ' + (only.artist || w.artist) : '')
+            + '. The door has taken over from here and is asking him about the picture. Do not ask about the address, '
+            + 'the message or the send, and do not offer anything: the sheet does that. Keep this turn to the finding alone.';
           looked = 'sharing · ' + (w.title || only.title);
           railNote('share · ' + w.found + ' · ' + (w.title || '') + (w.code ? ' · ' + w.code : ''));
           return;
@@ -1857,18 +1838,20 @@ async function handleShareCall(call) {
       looked = 'sharing · ' + shareChoices.length + ' to choose from';
       railNote('share · asked which · ' + shareChoices.length + ' matches');
     } else if (r && r.ok && r.url) {
-      mergeCard({
+      const cardNow = {
         kind: r.found === 'shelf' ? 'song' : 'store',
         title: r.title || 'a song',
         sub: r.found === 'shelf'
           ? 'made here · a day of listening'
           : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
         url: r.url, code: r.code || '', song_id: r.song_id || '', sha: r.sha || '',
-      });
-      result = shareResultLine(r);
+      };
+      mergeCard(cardNow);
+      shareSongLocked(cardNow);
+      result = shareResultLine(r) + ' The door has taken over: it is asking him about the picture now, so do not ask '
+        + 'about the address, the message or the send, and do not offer anything.';
       looked = 'sharing · ' + (r.title || 'a song');
       shareChoices = [];
-      shareCoverAsked = false; shareAddrOk = false;   // a new song is a new ask
       railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
     } else {
       const why = (r && (r.error || r.note)) || 'no answer';
@@ -1904,6 +1887,68 @@ let shareAddrTries = 0;      // how many times an address came in unusable befor
 // What he has actually told this door about the share in progress. Kept here because the model has lost
 // the message, the card and the address on three separate runs (8 Nov 2026).
 let shareDraft = null;
+
+// ---- the share, in four locked steps and only four (Edwin, 8 Nov 2026 12:19) -------------------
+// "1) Determine the song (title and artist). If that is correct 2) Determine if there needs to be
+// art... get the description of the art and lock that in 3) Lock in the destination... For now go
+// straight to the popup for the user to add it 4) send."
+//
+// What went wrong without this: the model owned the destination and the send, so it asked for the
+// address four times, read back a masked placeholder ("[mail]") it had never been given, and sent the
+// same song three times. Nothing here is a guard bolted onto that; the order is the design, each step
+// closes before the next opens, and the send is the door's alone.
+let shareStage = 'idle';                     // idle → art → sheet → sent. One step open at a time.
+let shareArt = { want: false, brief: '' };   // his description, locked, and never invented by the model
+
+function sayLine(text) {
+  try {
+    if (!ws) return;
+    ws.send(JSON.stringify({
+      clientContent: {
+        turns: [{ role: 'user', parts: [{ text: '(Say exactly this, in that tone, and nothing else: "'
+          + String(text).replace(/"/g, "'") + '")' }] }],
+        turnComplete: true,
+      },
+    }));
+  } catch (e) {}
+}
+
+// Step 1 done: the song is decided. Step 2 opens: does a picture go with it, and what should it show.
+function shareSongLocked(card) {
+  if (!card || !card.title) return;
+  shareCard = card;
+  shareCardTarget = card;
+  shareStage = 'art';
+  shareArt = { want: false, brief: '' };
+  shareCoverAsked = false; shareAddrOk = false;
+  railNote('share · song locked · ' + card.title);
+  sayLine('Got it, ' + card.title + '. Do you want a cover drawing to go with it? If you do, tell me what it should show, and I will draw that.');
+}
+
+// Step 2 done: his own words, or a plain no. The words are the brief, not a starting point for one.
+function shareArtAnswer(heard) {
+  const words = String(heard || '').trim();
+  const no = /^(no|nope|nothing|just the song|no cover|no picture|no drawing|don'?t|skip)/i.test(words);
+  if (no) {
+    shareArt = { want: false, brief: '' };
+    railNote('share · art · none');
+  } else {
+    const brief = words
+      .replace(/^(yes|yeah|yep|please|i do|i would|sure|okay|ok|definitely|absolutely)[,.\s]*/i, '')
+      .replace(/^(and\s+)?(please\s+)?(make|draw|add|create)\s+(me\s+)?(a\s+|an\s+)?(cover|picture|drawing|image)\s*(of|showing|that shows)?\s*/i, '')
+      .trim();
+    shareArt = { want: true, brief: brief || 'a scene the song suggests' };
+    railNote('share · art locked · ' + shareArt.brief.slice(0, 60));
+    logLine('share.art', shareArt.brief, { level: 'info' });
+  }
+  // Step 3 opens: the popup, where he types the address himself and writes the message.
+  shareStage = 'sheet';
+  setTimeout(() => openShareSheet(shareCard, shareArt), 260);
+  sayLine(shareArt.want
+    ? 'Sheet is open, Boss. Their email and your message there, and I will draw the picture you described when you send.'
+    : 'Sheet is open, Boss. Their email and your message there, then send it.');
+}
+
 
 function shelfFind(words) {
   const q = shareTokens(words);
@@ -2596,7 +2641,7 @@ function openSheet(url, heading) {
 
 /* Sending a card on, by hand (build 60). The same rail the voice uses: this only decides who, which
    way and what it says, and the answer comes back in the sheet rather than being announced. */
-function openShareSheet(card) {
+function openShareSheet(card, art) {
   let el = document.getElementById('sharesheet');
   if (el) el.remove();
   el = document.createElement('div');
@@ -2616,6 +2661,9 @@ function openShareSheet(card) {
   const msg = document.createElement('textarea');
   msg.rows = 3; msg.placeholder = 'say something (leave it empty to send without a message)';
   msg.style.cssText = to.style.cssText + 'resize:none';
+  const artLine = document.createElement('div');
+  artLine.textContent = art && art.want ? 'cover: ' + art.brief : 'no cover';
+  artLine.style.cssText = 'font-size:11px;color:#9b9182;margin:2px 0 10px;line-height:1.4';
   const status = document.createElement('div');
   status.style.cssText = 'font-size:11px;color:#9b9182;min-height:15px;margin:8px 0';
   const row = document.createElement('div');
@@ -2634,11 +2682,14 @@ function openShareSheet(card) {
     if (!addr) { status.textContent = 'who is it for?'; to.focus(); return; }
     send.disabled = true; status.textContent = 'sending\u2026';
     try {
+      const wanted = !!(art && art.want);
       const r = await railPost('shelfShare', {
-        action: 'send', card: cardPayload(card), to: addr, message: msg.value.trim(),
+        action: 'send', card: cardPayload(card), to: addr, channel: 'email',
+        message: msg.value.trim(), cover: wanted, cover_brief: wanted ? (art.brief || '') : '',
       });
       if (r && r.ok && r.channel === 'email') {
         status.textContent = 'sent by email to ' + (r.to_masked || 'them') + '.';
+        shareStage = 'sent';            // the share is closed; nothing may send it again
         shareSentThisTurn = true;
         lastShare = { title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' };
         railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
@@ -2662,7 +2713,7 @@ function openShareSheet(card) {
     }
   };
   row.appendChild(close); row.appendChild(send);
-  box.appendChild(h); box.appendChild(to); box.appendChild(msg); box.appendChild(status); box.appendChild(row);
+  box.appendChild(h); box.appendChild(artLine); box.appendChild(to); box.appendChild(msg); box.appendChild(status); box.appendChild(row);
   el.appendChild(box);
   el.onclick = (e) => { if (e.target === el) el.remove(); };
   document.body.appendChild(el);
@@ -3018,6 +3069,9 @@ function handleFrame(text) {
       userTurns++;
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
+      // Step 2 of the share: this utterance IS the answer about the picture. The door takes it, locks it,
+      // and opens the sheet. The model is not asked, because a model asked twice answers twice.
+      if (shareStage === 'art') { shareArtAnswer(heard); }
     }
   }
   if (sc.outputTranscription && sc.outputTranscription.text) appendLive('engine', sc.outputTranscription.text);
