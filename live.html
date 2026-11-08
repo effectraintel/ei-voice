@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 73;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 74;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1899,6 +1899,7 @@ let shareDraft = null;
 // closes before the next opens, and the send is the door's alone.
 let shareStage = 'idle';                     // idle → art → sheet → sent. One step open at a time.
 let shareArt = { want: false, brief: '' };   // his description, locked, and never invented by the model
+let shareArtTries = 0;                       // one re-ask when the description arrives cut off
 
 function sayLine(text) {
   try {
@@ -1920,6 +1921,7 @@ function shareSongLocked(card) {
   shareCardTarget = card;
   shareStage = 'art';
   shareArt = { want: false, brief: '' };
+  shareArtTries = 0;
   shareCoverAsked = false; shareAddrOk = false;
   railNote('share · song locked · ' + card.title);
   sayLine('Got it, ' + card.title + '. Do you want a cover drawing to go with it? If you do, tell me what it should show, and I will draw that.');
@@ -1937,9 +1939,25 @@ function shareArtAnswer(heard) {
       .replace(/^(yes|yeah|yep|please|i do|i would|sure|okay|ok|definitely|absolutely)[,.\s]*/i, '')
       .replace(/^(and\s+)?(please\s+)?(make|draw|add|create)\s+(me\s+)?(a\s+|an\s+)?(cover|picture|drawing|image)\s*(of|showing|that shows)?\s*/i, '')
       .trim();
-    shareArt = { want: true, brief: brief || 'a scene the song suggests' };
-    railNote('share · art locked · ' + shareArt.brief.slice(0, 60));
-    logLine('share.art', shareArt.brief, { level: 'info' });
+    // A brief of one or two words, or one that stops on an article ("draw a a drawing of a"), is a
+    // sentence that got cut off, not a description. Asked for again exactly once, then it takes the
+    // song's own scene rather than drawing a fragment. (Edwin, 8 Nov 12:35: the art brief logged as
+    // "draw a a drawing of a" and the picture still went out.)
+    const words = brief.replace(/\s+/g, ' ').trim();
+    // Two words can be a whole picture ("a car"), so the test is a fragment, not a length: one word, or
+    // a sentence that stops on the article it was about to fill in.
+    const thin = words.split(' ').filter(Boolean).length < 2
+      || /(^|\s)(a|an|the|of|with|in|and|at|to)$/i.test(words);
+    if (brief && thin && shareArtTries < 1) {
+      shareArtTries++;
+      railNote('share · art too thin · asking again');
+      logLine('share.art.thin', words, { level: 'warn' });
+      sayLine('I only caught part of that, Boss. Describe the picture in a few words and I will draw exactly that, or say no cover.');
+      return;                                  // still on the art step, nothing locked
+    }
+    shareArt = { want: true, brief: thin ? '' : words };   // empty brief = the song's own scene
+    railNote('share · art locked · ' + (shareArt.brief || 'from the song').slice(0, 60));
+    logLine('share.art', shareArt.brief || '(from the song)', { level: 'info' });
   }
   // Step 3 opens: the popup, where he types the address himself and writes the message.
   shareStage = 'sheet';
@@ -2642,12 +2660,21 @@ function openSheet(url, heading) {
 /* Sending a card on, by hand (build 60). The same rail the voice uses: this only decides who, which
    way and what it says, and the answer comes back in the sheet rather than being announced. */
 function openShareSheet(card, art) {
-  let el = document.getElementById('sharesheet');
-  if (el) el.remove();
-  el = document.createElement('div');
+  // One sheet, never rebuilt under his finger. A rebuild is a tap that lands on nothing (Edwin, 8 Nov
+  // 12:37: "I see it but I tap it but nothing happens"), so an open sheet is reused and focused.
+  const existing = document.getElementById('sharesheet');
+  if (existing) {
+    const f = existing.querySelector('input');
+    if (f) { try { f.focus(); } catch (e) {} }
+    return;
+  }
+  const el = document.createElement('div');
   el.id = 'sharesheet';
-  el.style.cssText = 'position:fixed;inset:0;z-index:60;background:rgba(12,11,9,.86);display:flex;'
-    + 'align-items:center;justify-content:center;padding:18px;font-family:inherit;color:#e8dfcc';
+  // Top-aligned, not centred: on a phone the keyboard rises from the bottom and a centred card puts
+  // the very fields he is being asked to type into behind it.
+  el.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(12,11,9,.9);display:flex;'
+    + 'align-items:flex-start;justify-content:center;padding:9vh 16px 20px;overflow-y:auto;'
+    + '-webkit-overflow-scrolling:touch;touch-action:manipulation;font-family:inherit;color:#e8dfcc';
   const box = document.createElement('div');
   box.style.cssText = 'width:100%;max-width:420px;background:#191713;border:1px solid #3a352d;'
     + 'border-radius:14px;padding:16px';
@@ -2655,11 +2682,14 @@ function openShareSheet(card, art) {
   h.textContent = 'send "' + (card.title || 'this') + '"';
   h.style.cssText = 'font-size:12px;letter-spacing:.1em;color:#c9a86a;text-transform:lowercase;margin-bottom:12px';
   const to = document.createElement('input');
-  to.type = 'text'; to.placeholder = 'their email, or their WhatsApp number';
+  to.type = 'email'; to.placeholder = 'their email address';
+  to.setAttribute('inputmode', 'email'); to.setAttribute('autocomplete', 'email');
+  to.setAttribute('autocapitalize', 'none'); to.setAttribute('autocorrect', 'off'); to.spellcheck = false;
   to.style.cssText = 'width:100%;box-sizing:border-box;background:#0f0e0b;border:1px solid #3a352d;'
-    + 'border-radius:9px;color:#e8dfcc;font-size:13px;padding:10px;margin-bottom:9px;outline:none';
+    + 'border-radius:9px;color:#e8dfcc;font-size:16px;padding:12px;margin-bottom:9px;outline:none';
   const msg = document.createElement('textarea');
   msg.rows = 3; msg.placeholder = 'say something (leave it empty to send without a message)';
+  msg.style.fontSize = '16px';
   msg.style.cssText = to.style.cssText + 'resize:none';
   const artLine = document.createElement('div');
   artLine.textContent = art && art.want ? 'cover: ' + art.brief : 'no cover';
@@ -2714,6 +2744,15 @@ function openShareSheet(card, art) {
   };
   row.appendChild(close); row.appendChild(send);
   box.appendChild(h); box.appendChild(artLine); box.appendChild(to); box.appendChild(msg); box.appendChild(status); box.appendChild(row);
+  // Whatever he taps, he ends up typing somewhere useful. The target of the tap decides which field.
+  el.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t === msg || t === to) return;
+    if (t && t.tagName === 'BUTTON') return;
+    if (t === msg || t === to || (t && t.tagName === 'TEXTAREA')) { try { t.focus(); } catch (err) {} return; }
+    try { to.focus(); } catch (err) {}
+  });
+  setTimeout(() => { try { to.focus(); railNote('sheet · open · waiting for an address'); } catch (e) {} }, 120);
   el.appendChild(box);
   el.onclick = (e) => { if (e.target === el) el.remove(); };
   document.body.appendChild(el);
