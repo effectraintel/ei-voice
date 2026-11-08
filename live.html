@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 78;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 79;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -510,6 +510,7 @@ window.addEventListener('DOMContentLoaded', () => {
     applyFold(next);
   };
   const b = document.getElementById('build');
+  // The address never carries the version, so the page has to say it: the footer is the build he is in.
   if (b) b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST · '
     + DECLS.map((d) => d.name).join('+');
   keepCurrent();
@@ -523,7 +524,12 @@ async function keepCurrent() {
     const last = Number(sessionStorage.getItem('ei-build-check') || 0);
     if (Date.now() - last < 60000) return;
     sessionStorage.setItem('ei-build-check', String(Date.now()));
-    if (doorSession && doorSession()) return;
+    // Edwin, 8 Nov 13:53: "I'm accessing from the live.html not with a build number." He should not have
+    // to carry a version in the address. Two faults kept him on an old page: a held 30-minute door token
+    // made this check skip itself entirely, and the reload went back to the bare path, straight into the
+    // cached copy it was trying to escape. So: check unless a conversation is actually open, and land on a
+    // fresh address when it takes the new build.
+    if (sessionUp || listening || busy) return;
     const url = location.pathname + '?fresh=' + Date.now();
     const r = await fetch(url, { cache: 'no-store' });
     if (!r.ok) return;
@@ -531,7 +537,8 @@ async function keepCurrent() {
     const m = t.match(/const BUILD_NO = (\d+)/);
     if (m && Number(m[1]) > BUILD_NO) {
       sessionStorage.setItem('ei-build-check', '0');
-      location.replace(location.pathname);
+      logLine('page.update', 'taking build ' + m[1] + ' over ' + BUILD_NO, { level: 'info' });
+      location.replace(location.pathname + '?v=' + m[1]);
     }
   } catch { /* a check that cannot run must never stand in the way of the door */ }
 }
