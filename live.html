@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 100;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 101;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -547,6 +547,9 @@ async function keepCurrent() {
     if (latest > BUILD_NO) {
       sessionStorage.setItem('ei-build-check', '0');
       logLine('page.update', 'taking build ' + latest + ' over ' + BUILD_NO, { level: 'info' });
+      // the outgoing page must not leave a socket behind: two sockets are two voices
+      try { shutDoor(); logLine('door.handed', 'this page closed its door before taking the new build',
+        { level: 'info', target: 'session' }); } catch (e) {}
       location.replace(location.pathname + '?v=' + latest);
     } else {
       logLine('build.probe', 'latest is ' + (latest || BUILD_NO) + ', this door is ' + BUILD_NO,
@@ -1314,6 +1317,19 @@ async function openDoor() {
     if (gen !== doorGen) { closeMic(); stopClock(); busy = false; connecting = false; return; }
 
     sessionVoice = voice; sessionModel = String(d.model || '');
+    // One phone, one mouth. A second socket is a second voice, and that is what he heard at 14:00:51.
+    if (ws) {
+      try {
+        const wasOpen = ws.readyState === 0 || ws.readyState === 1;
+        if (wasOpen) {
+          ws._renewing = true;
+          logLine('door.replaced', 'a second door was opening: the first was closed rather than left speaking',
+            { level: 'warn', target: 'session' });
+        }
+        ws.close();
+      } catch (e) {}
+      ws = null;
+    }
     const sock = new WebSocket(d.ws + '?access_token=' + encodeURIComponent(d.token));
     ws = sock;
     sock.onopen = () => {
@@ -2360,6 +2376,17 @@ function scheduleNoteFlush(delay) {
     if (busy) { scheduleNoteFlush(400); return; }
     flushNotes();
   }, delay || 600);
+}
+
+// A held sentence is one event, reported once. It used to arrive as a warn line per fragment ("song",
+// "would you", "like"), which read as a stream of separate faults and was really one suppressed aside.
+let heldMouthAt = 0;
+function flushHeldMouth() {
+  heldMouthAt = 0;
+  if (!heldMouth.length) return;
+  const all = heldMouth.join(' ').replace(/\s+/g, ' ').trim();
+  heldMouth = [];
+  logLine('mouth.held', 'held while the door searched: ' + all.slice(0, 200), { level: 'info', target: 'held' });
 }
 
 function doorNote(text, speak) {
@@ -3659,8 +3686,8 @@ function handleFrame(text) {
   }
   if (sc.outputTranscription && sc.outputTranscription.text) {
     if (doorSearching) {
-      heldMouth.push(String(sc.outputTranscription.text).slice(0, 120));
-      logLine('mouth.held', String(sc.outputTranscription.text).slice(0, 160), { level: 'warn', target: 'held' });
+      heldMouth.push(String(sc.outputTranscription.text));
+      if (!heldMouthAt) heldMouthAt = setTimeout(flushHeldMouth, 500);
     } else if (hiddenHold) {
       if (!heldEngineLogged) {
         heldEngineLogged = Date.now();
