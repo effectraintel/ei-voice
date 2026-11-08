@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 98;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 99;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -686,7 +686,12 @@ const MANNERS = '\n\nTwo rules about the working, added 8 November after he hear
   + '- Never narrate what you are doing. No "trying to find", no "let me look", no "one moment", no running '
   + 'commentary. Either ask the one question you need, or say what is true.\n'
   + '- A sentence about the record comes only from a record. If no search was made, nothing was found and '
-  + 'nothing failed. If a search answered, say what it answered and nothing more.';
+  + 'nothing failed. If a search answered, say what it answered and nothing more.\n'
+  + '- Never say a thing twice. If the song is already on the shelf, do not tell him again that it is: say '
+  + 'the new thing only.\n'
+  + '- Never close a step that is still open. No "anything else I can do", no "anything else", while a sheet '
+  + 'is on his screen or a step remains. While the sheet is open, one short line about where to look and '
+  + 'nothing about the song, the rail or the shelf.';
 
 function appendLive(who, text) {
   // A new engine bubble means his turn is over, so the next thing he says starts its own
@@ -2324,6 +2329,13 @@ function flushNotes() {
   }
   noteQueue = [];
   noteQueuedAt = 0;
+  // A note that says "searching right now" is stale the moment the result is also in the queue.
+  const finalKept = kept.filter((n, i) => !(/searching the rail/i.test(n.text)
+    && kept.some((m) => m !== n && /rail answered|has searched the rail|might be searching/i.test(m.text))));
+  if (finalKept.length !== kept.length) logLine('note.stale', 'dropped the searching note, the answer was there',
+    { level: 'info', target: 'note' });
+  kept.length = 0;
+  kept.push(...finalKept);
   if (!kept.length) return;
   // Anything that wanted to speak but waited too long arrives as context instead: late is better than
   // cutting a sentence in half.
