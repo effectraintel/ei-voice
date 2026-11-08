@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 81;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 82;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -852,6 +852,35 @@ function logLine(facility, text, extra) {
 
 const DOOR_KEY = 'ei-door-session';
 
+// ONE PHONE, ONE VOICE. 8 Nov 14:05: he heard "I couldn't find that song on the rail" twice, and the log
+// shows why — three door sessions were live at once (aa3494 on build 76, 702c79 on 79, c1fb7c on 80), each
+// with its own microphone and its own mouth. Two rooms listening to one man is not a bug in the words; it
+// is two of everything. The tab that opens last takes the voice, and the others stand down and say so.
+const VOICE_KEY = 'ei.voice.owner';
+const MY_VOICE = LOG_SID + '.' + Date.now();
+
+function takeTheVoice() {
+  try { localStorage.setItem(VOICE_KEY, MY_VOICE); } catch (e) {}
+}
+
+function standDown(why) {
+  try {
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    sessionUp = false; listening = false; busy = false;
+    try { micBtn.classList.remove('hot'); micBtn.classList.add('quiet'); } catch (e) {}
+    try { stateEl.textContent = 'this door is open in another tab. that one has the voice.'; } catch (e) {}
+    logLine('session.standdown', why || 'another door opened on this device', { level: 'info' });
+  } catch (e) {}
+}
+
+try {
+  window.addEventListener('storage', (e) => {
+    if (e.key === VOICE_KEY && e.newValue && e.newValue !== MY_VOICE) {
+      standDown('another tab took the voice at ' + String(e.newValue).split('.')[1]);
+    }
+  });
+} catch (e) {}
+
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
   .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = (s) => {
@@ -1232,6 +1261,7 @@ async function openDoor() {
     sock.onopen = () => {
       if (sock !== ws) { try { sock.close(); } catch (e) {} return; }
       seedShelf();
+      takeTheVoice();   // one phone, one voice: the newest door that opens is the one that speaks
       try {
         logLine('session.mouth', LANG + ' \u00b7 ' + voice + ' \u00b7 pinned in the setup frame',
           { level: 'info', target: 'session' });
