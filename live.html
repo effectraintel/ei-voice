@@ -246,8 +246,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T19:05';
-const BUILD_NO = 116;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD = '2026-11-08T19:14';
+const BUILD_NO = 117;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1454,7 +1454,11 @@ const SONG_SCRIPT =
   'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
   'make and hand it exactly what he said. Then say the line it returns, in your own voice, in one or two ' +
   'sentences, and stop. Do not describe how it will sound, do not promise more than a few minutes, and ' +
-  'never imply it is already in his inbox. ' +
+  'never imply it is already in his inbox unless the door tells you it has sent it. ' +
+  // 8 Nov 2026, 17:05: asked "it is in my inbox", the model said the door could not see that, while the
+  // delivery record held the send. The record is the door's to hold, and answering from it is not a claim.
+  'The door keeps the delivery record of everything it sends, so never tell him the door cannot see a '
+  + 'send: if he asks whether something went, the record answers, and you say what the record says. ' +
   // Build 38. A song is made to a brief, not to a phrase. The web portal used to ask him
   // who it was for, what it should say and how it should sound before anything was made;
   // the door must ask the same three things, in the same order, one question at a time.
@@ -2252,6 +2256,31 @@ let heldMouth = [], heldFrames = 0, hiddenHold = false, hiddenHoldUntil = 0, hel
 // quiet on him. (Edwin, 8 Nov 2026: after a share closed, "Okay, done." was transcribed at 16:46:51
 // and no engine turn followed.) Short waits are fine; silence after he has spoken is not.
 let silenceWatch = null, silenceAt = 0, silenceNudges = 0;
+// His own record answers questions about a send. A door that says "I cannot see that" while the
+// delivery record sits on the shelf is worse than no answer at all. (8 Nov 2026, 17:05: the door
+// told him it could not see a send that had gone at 17:04:27, and he had to say it three times.)
+function isDeliveryQuestion(heard) {
+  const t = String(heard || '').toLowerCase();
+  if (/(in my|to my|the) inbox/.test(t)) return true;
+  if (/\b(already|it'?s|its) (done|sent|gone|through)\b/.test(t)) return true;
+  if (/\b(did|didn'?t|has|hasn'?t|have|was|is) (it|that|the (song|link|mail|email))\b/.test(t)
+      && /\b(go|gone|sent|send|arrive|arrived|deliver|delivered|through|off)\b/.test(t)) return true;
+  if (/\b(did|has) (it|that) (go|gone|send|sent|arrive)\b/.test(t)) return true;
+  return false;
+}
+function deliveryAnswer() {
+  const r = lastShare || recalledShare(6 * 3600e3);
+  if (!r || !r.at) return 'Nothing has left this door yet, Boss. There is no send on the record.';
+  const hhmm = new Date(r.at).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const who = r.to_name || r.to_masked || 'the address';
+  const how = (r.channel === 'email') ? 'by email' : (r.channel ? 'by ' + r.channel : 'by email');
+  const cover = r.cover_url ? ', with the picture' : '';
+  return 'It went at ' + hhmm + ' ' + how + ' to ' + who + cover + '. The record says sent, so it has left.';
+}
+
+// A reply already in the air is never strangled: the door may hold the FIRST sound of an answer
+// (so it cannot narrate a search before the rail has answered), never the middle of a sentence.
+let replyAudible = false;
 let artLockedAt = 0;
 const SHARE_INTENT = /\b(?:share|send|seal)\b[^.?!]{0,30}\b(?:song|track)\b|\bi (?:want|would like) to share\b/i;
 
@@ -4033,6 +4062,15 @@ function handleFrame(text) {
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
       armSilenceWatch(heard);
+      replyAudible = false;                  // a new answer begins, so its first sound may be held
+      // If he is asking whether something went, the record answers - not the model's guess and not
+      // a denial. Only while no share is in flight, so it can never talk over an open sheet.
+      if ((shareStage === 'idle' || shareStage === 'closed') && !sharePending && isDeliveryQuestion(heard)) {
+        const line = deliveryAnswer();
+        logLine('turn.record', 'answered from the delivery record: ' + line.slice(0, 100),
+          { level: 'info', target: 'record' });
+        doorNote('say exactly this, in one line, and nothing else: "' + line + '"', true);
+      }
       // Step 2 of the share: this utterance IS the answer about the picture. The door takes it, locks it,
       // and opens the sheet. The model is not asked, because a model asked twice answers twice.
       if (sharePending && resolvePending(heard)) { /* the name was being checked: that was the answer */ }
@@ -4065,7 +4103,10 @@ function handleFrame(text) {
     const data = p.inlineData && p.inlineData.data;
     // Held, not dropped: if the door's search comes back empty the model may say so, but it may not say it
     // while the search is still open.
-    if (data) { if (doorSearching || hiddenHold) { heldFrames++; } else playPcm(data, p.inlineData.mimeType); }
+    if (data) {
+      if (doorSearching || (hiddenHold && !replyAudible)) { heldFrames++; }
+      else { replyAudible = true; playPcm(data, p.inlineData.mimeType); }
+    }
   }
   // Barge-in: the model stopped mid-reply, so its remaining words are a new bubble rather
   // than a continuation of the one he cut off.
