@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 108;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 109;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2244,6 +2244,22 @@ const SHARE_INTENT = /\b(?:share|send|seal)\b[^.?!]{0,30}\b(?:song|track)\b|\bi 
 let lastSongWords = '';
 let sharePending = null;   // { card, words, at } — found, read back, not yet locked
 
+// The narrowest honest slice of what he said: what followed "called", or the words before "by/from" with
+// the plumbing removed. Never a re-ranking of the engine's answer — a cleaner question to the same engine.
+function narrowedQuery(said) {
+  const s = String(said || '');
+  const m = s.match(/\b(?:called|named|titled)\s+([^.;!?]{2,60})/i);
+  if (m) return m[1].replace(/\s+/g, ' ').trim();
+  const m2 = s.match(/^(.*?)\b(?:by|from)\s+([^.;!?]{2,40})/i);
+  if (m2) {
+    const t = m2[1]
+      .replace(/\b(?:i want to|would like to|let'?s|please|share|send|seal|a|an|the|song|track|tune|it'?s|it is|this is)\b/gi, ' ')
+      .replace(/[^\w\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (t.length > 1) return t;
+  }
+  return '';
+}
+
 function wordsCover(text, title) {
   const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   const hay = norm(text), t = norm(title);
@@ -2368,6 +2384,41 @@ function noteSongAnswer(heard) {
         // my name on it. Shape first, then decide.
         const decided = !!(r && r.url && r.found && r.found !== 'choice' && r.found !== 'none');
         if (!r || r.found === 'none' || (!decided && !(r.candidates || []).length)) {
+          // one narrower ask, once, before the door says nothing was found
+          const again = narrowedQuery(said);
+          if (again && again.toLowerCase() !== said.toLowerCase()) {
+            logLine('share.door.retry', again, { level: 'info', target: 'songShare' });
+            const t1 = Date.now();
+            songShareCall({ action: 'find', query: again }).then((r2) => {
+              const d2 = !!(r2 && r2.url && r2.found && r2.found !== 'choice' && r2.found !== 'none');
+              if (!d2) {
+                doorNote('the rail answered: nothing found for those exact words, twice. Say that plainly in '
+                  + 'one line and ask for the title and artist as he would say them.', true);
+                railNote('share · the rail found nothing · ' + said);
+                logLine('share.door.none', said, { level: 'warn', target: 'songShare' });
+                hiddenHold = false;
+                return;
+              }
+              const card2 = {
+                kind: r2.found === 'shelf' ? 'song' : 'store',
+                title: r2.title || 'a song',
+                sub: r2.artist || r2.album || '',
+                url: r2.url, code: r2.code || '', song_id: r2.song_id || '', sha: r2.sha || '',
+              };
+              railNote('share · ' + r2.found + ' · ' + (r2.title || '') + ' (on a second ask)');
+              logLine('share.door.done', (r2.title || '') + ' · ' + r2.found + ' · retry · '
+                + (Date.now() - t1) + 'ms', { level: 'info', target: 'songShare' });
+              if (!wordsCover(said, card2.title)) { hiddenHold = false; askAboutCard(card2, said); return; }
+              mergeCard(card2);
+              railAnsweredAt = Date.now();
+              shareSongLocked(card2);
+              doorNote('The rail found it on a second, narrower ask: "' + (card2.title || '') + '"'
+                + (card2.artist ? ' by ' + card2.artist : '') + '. It is on his shelf now with its listening '
+                + 'link. Say the title once, say it is on the shelf, and ask once whether a picture should go '
+                + 'with it and what it should show.', true);
+            });
+            return;
+          }
           doorNote('the rail answered: nothing found for those exact words. Say that plainly in one line.', true);
           railNote('share · the rail found nothing · ' + said);
           logLine('share.door.none', said, { level: 'warn', target: 'songShare' });
