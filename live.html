@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 96;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 97;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1915,7 +1915,7 @@ function judgeClaim() {
     logLine('claim.unbacked', t.slice(0, 160), { level: 'warn', target: 'no-rail-call' });
     doorNote('You just told him something about the rail that did not happen: nothing was searched and nothing '
       + 'failed. Correct it in one short sentence, then ask which song he means. Never describe a result, an '
-      + 'error or an empty shelf that you have not been told about.');
+      + 'error or an empty shelf that you have not been told about.', true);
   } catch (e) {
   } finally {
     railCallsThisTurn = 0;
@@ -2208,7 +2208,7 @@ function noteSongAnswer(heard) {
         // my name on it. Shape first, then decide.
         const decided = !!(r && r.url && r.found && r.found !== 'choice' && r.found !== 'none');
         if (!r || r.found === 'none' || (!decided && !(r.candidates || []).length)) {
-          doorNote('the rail answered: nothing found for those exact words. Say that plainly in one line.');
+          doorNote('the rail answered: nothing found for those exact words. Say that plainly in one line.', true);
           railNote('share · the rail found nothing · ' + said);
           logLine('share.door.none', said, { level: 'warn', target: 'songShare' });
           return;
@@ -2231,7 +2231,7 @@ function noteSongAnswer(heard) {
           doorNote('the door has searched the rail and put "' + (r.title || 'a song') + '"'
             + (r.artist ? ' by ' + r.artist : '') + ' on his shelf with its listening link. Say the title once '
             + 'and that it is on the shelf. Do not read the url and do not offer to send it. Then ask, once, '
-            + 'in your own words, whether a picture should go with it and in one short question.');
+            + 'in your own words, whether a picture should go with it and in one short question.', true);
           return;
         }
         let picks = collapseChoices(r.candidates);
@@ -2239,7 +2239,7 @@ function noteSongAnswer(heard) {
           // let him choose: the rail answered more than one song and the door does not guess between them
           doorNote('the rail answered with ' + picks.length + ' songs: '
             + picks.slice(0, 3).map((c, i) => (i + 1) + ') ' + c.title + (c.artist ? ' by ' + c.artist : '')).join('; ')
-            + '. Ask which one, in one short question.');
+            + '. Ask which one, in one short question.', true);
           railNote('share · ' + picks.length + ' songs to choose from');
           return;
         }
@@ -2247,7 +2247,7 @@ function noteSongAnswer(heard) {
         const c = await gatePost('songShare', { action: 'choose', candidate: only });
         if (!c || !c.url) {
           doorNote('the rail could not wrap that song: ' + ((c && (c.error || c.note)) || 'no answer')
-            + '. Say that in one line and nothing else.');
+            + '. Say that in one line and nothing else.', true);
           return;
         }
         mergeCard({
@@ -2262,11 +2262,11 @@ function noteSongAnswer(heard) {
         logLine('share.door.done', (c.title || '') + ' · ' + (c.found || '') + ' · ' + (Date.now() - t0) + 'ms',
           { level: 'info', target: 'songShare' });
         doorNote('the door has already searched and put "' + (c.title || 'a song') + '" on his shelf with its '
-          + 'listening link. Say what it is and that it is on the shelf, in one line. Do not search again.');
+          + 'listening link. Say what it is and that it is on the shelf, in one line. Do not search again.', true);
       })
       .catch((e) => {
         logLine('share.door.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
-        doorNote('the rail did not answer. Say you could not reach it, in one line, and do not guess at the song.');
+        doorNote('the rail did not answer. Say you could not reach it, in one line, and do not guess at the song.', true);
       })
       .finally(() => { doorSearching = false; });
   }, 250);
@@ -2282,7 +2282,12 @@ let shareArtTries = 0;                       // one re-ask when the description 
 // the words to the one voice that owns them.
 let noteQueue = [], noteTimer = null, noteQueuedAt = 0;
 
-function sendNoteNow(text) {
+// Two kinds of note, and the difference is what stops the skipping:
+//   speak = true   the model must say this out loud, so the server is asked to answer (turnComplete: true).
+//   speak = false  plain context: it rides along with the next turn and never asks for a reply
+//                  (turnComplete: false). At 15:50 a context note was sent as a turn twice in three seconds,
+//                  and the model answered it every time: the answer, then an apology for having answered.
+function sendNoteNow(text, speak) {
   try {
     if (!ws) return;
     ws.send(JSON.stringify({
@@ -2290,9 +2295,11 @@ function sendNoteNow(text) {
         turns: [{ role: 'user', parts: [{ text: '(Door note, not from Edwin — never read it aloud, and never '
           + 'reply to it: it is context for your next turn only. If you have already said what it says, say '
           + 'nothing at all.) ' + String(text).replace(/\s+/g, ' ') }] }],
-        turnComplete: true,
+        turnComplete: !!speak,
       },
     }));
+    logLine('note.sent', (speak ? 'speak: ' : 'context: ') + String(text).slice(0, 80),
+      { level: 'info', target: 'note' });
   } catch (e) {}
 }
 
@@ -2301,9 +2308,9 @@ function flushNotes() {
   const kept = [];
   for (const n of noteQueue) {
     // An instruction to ask something he was already asked is not information, it is a duplicate answer.
-    if (/ask one short question|ask him which song|ask which song/i.test(n) && Date.now() - lastTurnEndAt < 12000
+    if (/ask one short question|ask him which song|ask which song/i.test(n.text) && Date.now() - lastTurnEndAt < 12000
         && /which song|what song|which one/i.test(String(said.engine || ''))) {
-      logLine('note.dropped', n.slice(0, 90), { level: 'info', target: 'note' });
+      logLine('note.dropped', n.text.slice(0, 90), { level: 'info', target: 'note' });
       continue;
     }
     kept.push(n);
@@ -2311,7 +2318,10 @@ function flushNotes() {
   noteQueue = [];
   noteQueuedAt = 0;
   if (!kept.length) return;
-  sendNoteNow(kept.join(' '));
+  // Anything that wanted to speak but waited too long arrives as context instead: late is better than
+  // cutting a sentence in half.
+  const speak = kept.some((n) => n.speak && Date.now() - n.at < 8000);
+  sendNoteNow(kept.map((n) => n.text).join(' '), speak);
 }
 
 function scheduleNoteFlush(delay) {
@@ -2322,25 +2332,26 @@ function scheduleNoteFlush(delay) {
     // busy means a turn is open, sound is in the air, or the reply has not started yet — all three cut a
     // sentence if a note lands in them. Only silence counts as free.
     const busy = turnInFlight || speaking || awaitingFirstAudio;
-    if (busy && held < 4000) { scheduleNoteFlush(300); return; }
+    if (busy) { scheduleNoteFlush(400); return; }
     flushNotes();
   }, delay || 600);
 }
 
-function doorNote(text) {
+function doorNote(text, speak) {
   const t = String(text || '').trim();
   if (!t) return;
   // A turn in flight is not the same as a sound in the air: from the moment he stops talking until the model
-  // finishes, a note would cut the reply. It waits.
+  // finishes, a note would cut the reply. Everything waits for the end of the turn, and only the end of a
+  // turn releases the queue.
   if ((turnInFlight || speaking || awaitingFirstAudio) && !hiddenHold) {
-    noteQueue.push(t);
+    noteQueue.push({ text: t, speak: !!speak, at: Date.now() });
     noteQueuedAt = noteQueuedAt || Date.now();
     if (noteQueue.length > 6) noteQueue.shift();
-    logLine('note.held', t.slice(0, 90), { level: 'info', target: 'note' });
-    scheduleNoteFlush(350);
+    logLine('note.held', (speak ? 'speak: ' : 'context: ') + t.slice(0, 80), { level: 'info', target: 'note' });
+    scheduleNoteFlush(400);
     return;
   }
-  sendNoteNow(t);
+  sendNoteNow(t, speak);
 }
 
 // Step 1 done: the song is decided. Step 2 opens: does a picture go with it, and what should it show.
@@ -2397,7 +2408,7 @@ function shareArtAnswer(heard) {
       railNote('share · art too thin · asking again');
       logLine('share.art.thin', clean, { level: 'warn' });
       doorNote('his description of the picture arrived cut off, so nothing is locked yet. Ask him once, '
-        + 'in one short sentence, for a few words about the picture, or whether he would rather skip it.');
+        + 'in one short sentence, for a few words about the picture, or whether he would rather skip it.', true);
       return;                                  // still on the art step, nothing locked
     }
     shareArt = { want: true, brief: thin ? '' : clean };   // empty brief = the song's own scene
@@ -2412,7 +2423,7 @@ function shareArtAnswer(heard) {
       + 'he described will be drawn when he sends. Say one short line so he knows where to look, and do not '
       + 'ask for the address or the message in words — he is typing them.'
     : 'the sheet is open on his screen now, with their email and his message to fill in. Say one short line '
-      + 'so he knows where to look, and do not ask for the address or the message in words.');
+      + 'so he knows where to look, and do not ask for the address or the message in words.', true);
 }
 
 
