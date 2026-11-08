@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 113;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 115;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -4307,12 +4307,69 @@ function playing() {
 
 let audioRateSeen = 0;
 let fpZc = 0, fpN = 0, fpSq = 0, fpParts = 0;
+// THE ACCENT EAR (Edwin, 8 Nov 18:12: "if the tone is not the problem we need to look elsewhere. It is the
+// accent.")
+// zcr and level cannot see an accent: they move with the words, not with the person saying them. Pitch is
+// the one property of a voice that belongs to the speaker rather than the sentence, so it is measured here
+// from the same PCM that is being played — median F0 over voiced frames, by autocorrelation. Accent drift
+// then has a number instead of a hunch, and a real change in speaker (register plus brightness moving
+// together) can be told apart from a sentence that merely has more sibilance in it.
+let fpPcm = [], fpPcmN = 0, fpF0 = [], fpVoiced = 0, fpWindows = 0;
+function f0Of(pcm, rate) {
+  // 40ms windows with a 20ms hop, autocorrelation, 70-350 Hz: a speaking voice, not a bird.
+  const W = Math.round(rate * 0.04), H = Math.round(rate * 0.02);
+  const lo = Math.round(rate / 350), hi = Math.round(rate / 70);
+  const out = [];
+  for (let st = 0; st + W + hi < pcm.length; st += H) {
+    let e = 0;
+    for (let i = 0; i < W; i++) e += pcm[st + i] * pcm[st + i];
+    if (e / W < 0.0006) continue;                       // silence is not a pitch
+    let best = 0, bestLag = 0;
+    const accs = new Float32Array(hi - lo + 1);
+    for (let lag = lo; lag <= hi; lag++) {
+      let acc = 0;
+      for (let i = 0; i < W; i += 2) acc += pcm[st + i] * pcm[st + i + lag];
+      acc /= (W / 2);                                    // normalise so longer lags do not win by count
+      accs[lag - lo] = acc;
+      if (acc > best) { best = acc; bestLag = lag; }
+    }
+    // A voice has harmonics, so the autocorrelation peaks again at every multiple of the period. Taking the
+    // highest peak reports the octave below about a third of the time (a 210 Hz voice measured 70 Hz), which
+    // would turn every real accent shift into a fake one. The TRUE period is the SHORTEST lag that is nearly
+    // as good as the best, so the shortest near-peak wins.
+    if (best > 0) {
+      for (let lag = lo; lag <= hi; lag++) {
+        if (accs[lag - lo] >= best * 0.88) { bestLag = lag; break; }
+      }
+    }
+    if (bestLag) out.push(rate / bestLag);
+  }
+  return out;
+}
 function flushFingerprint() {
   if (!fpN) return;
   const zcr = fpZc / fpN, rms = Math.sqrt(fpSq / fpN);
-  logLine('voice.fp', 'zcr ' + zcr.toFixed(4) + ' · rms ' + rms.toFixed(4) + ' · ' + fpParts + ' frames',
+  // the ear asks once, at the end of the reply, so a single short answer still yields a number
+  let f0 = 0, voiced = 0, windows = 0;
+  try {
+    if (fpPcmN >= (audioRateSeen || 24000) * 0.35) {
+      const all = new Float32Array(fpPcmN);
+      let at = 0;
+      for (const c of fpPcm) { all.set(c, at); at += c.length; }
+      const found = f0Of(all, audioRateSeen || 24000);
+      windows = found.length;
+      if (windows) {
+        found.sort((a, b) => a - b);
+        f0 = found[Math.floor(windows / 2)];
+        voiced = windows;
+      }
+    }
+  } catch (e) {}
+  logLine('voice.fp', 'zcr ' + zcr.toFixed(4) + ' · rms ' + rms.toFixed(4) + ' · ' + fpParts + ' frames'
+    + (f0 ? ' · f0 ' + f0.toFixed(1) + ' Hz over ' + voiced + ' voiced windows' : ' · f0 none'),
     { level: 'info', target: 'session' });
   fpZc = 0; fpN = 0; fpSq = 0; fpParts = 0;
+  fpPcm = []; fpPcmN = 0; fpF0 = []; fpVoiced = 0; fpWindows = 0;
 }
 function playPcm(b64, mime) {
   const ctx = playCtxEnsure();
@@ -4332,6 +4389,15 @@ function playPcm(b64, mime) {
   }
   let pcm = new Float32Array(i16.length);
   for (let i = 0; i < i16.length; i++) pcm[i] = i16[i] / 0x8000;
+  // the accent ear keeps the first 1.5s of the reply it is measuring
+  try {
+    const cap = (audioRateSeen || 24000) * 1.5;
+    if (fpPcmN < cap) {
+      const take = Math.min(pcm.length, cap - fpPcmN);
+      const part = pcm.slice(0, take);
+      fpPcm.push(part); fpPcmN += take;
+    }
+  } catch (e) {}
   // measure this reply as it arrives, never afterwards
   fpParts++;
   for (let i = 1; i < pcm.length; i++) {
