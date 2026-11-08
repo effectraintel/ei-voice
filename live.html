@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 85;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 86;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1192,8 +1192,11 @@ function demoCards() {
   shelfAdd({ kind: 'source', title: 'Effectra Intelligence', url: 'https://effectraintel.github.io' });
 }
 
+let lastOpenAt = 0;
 async function openDoor() {
   if (busy || connecting) return;
+  if (Date.now() - lastOpenAt < 2000) return;   // a double tap is one door
+  lastOpenAt = Date.now();
   // One door, one socket. Anything already open is closed here rather than left to run
   // beside the new one: two sockets sharing one token is what made a reopened door give
   // nothing back, because the replaced socket's handlers kept acting on the live one.
@@ -2191,10 +2194,19 @@ function shareArtAnswer(heard) {
     shareArt = { want: false, brief: '' };
     railNote('share · art · none');
   } else {
-    const brief = words
-      .replace(/^(yes|yeah|yep|please|i do|i would|sure|okay|ok|definitely|absolutely)[,.\s]*/i, '')
-      .replace(/^(and\s+)?(please\s+)?(make|draw|add|create)\s+(me\s+)?(a\s+|an\s+)?(cover|picture|drawing|image)\s*(of|showing|that shows)?\s*/i, '')
-      .trim();
+    // The lead-in is fence, not picture: everything before the thing he wants shown is stripped, so the
+    // drawing is asked to make "lightning striking into a dark ocean" and not a sentence about a picture.
+    let brief = words;
+    for (const lead of [
+      /^[\s\S]*?\b(?:picture|cover|image|drawing|illustration)\b[^.?!]*?\b(?:should|can|could|would|will)?\s*(?:show|shows|showing|of|with)\b\s*/i,
+      /^[\s\S]*?\bit should (?:show|be|look like)\b\s*/i,
+      /^(?:yes|yeah|yep|please|i do|i would|sure|okay|ok|definitely|absolutely)[,.\s]*/i,
+      /^(?:and\s+)?(?:please\s+)?(?:you can\s+|can you\s+|could you\s+|would you\s+)?(?:make|draw|add|create|put)\s+(?:me\s+)?(?:a\s+|an\s+|the\s+)?(?:cover|picture|drawing|image|illustration)\b\s*(?:of|showing|that shows|on it)?\s*/i,
+    ]) {
+      const next = brief.replace(lead, '').trim();
+      if (next && next !== brief) brief = next;
+    }
+    brief = brief.replace(/^(?:and\s+)?(?:it\s+)?(?:should\s+)?(?:show|showing)\s+/i, '').trim();
     // A brief of one or two words, or one that stops on an article ("draw a a drawing of a"), is a
     // sentence that got cut off, not a description. Asked for again exactly once, then it takes the
     // song's own scene rather than drawing a fragment. (Edwin, 8 Nov 12:35: the art brief logged as
@@ -2985,6 +2997,16 @@ function openShareSheet(card, art) {
       if (r && r.ok && r.channel === 'email') {
         status.textContent = 'sent by email to ' + (r.to_masked || 'them') + '.';
         shareStage = 'sent';            // the share is closed; nothing may send it again
+        // and the door forgets the song it just sent, or the next "share a song" is answered with the last one
+        setTimeout(() => {
+          try {
+            shareCard = null; shareCardTarget = null; shareQuery = ''; shareChoices = [];
+            shareArt = { want: false, brief: '' }; shareArtTries = 0;
+            shareCoverAsked = false; shareAddrOk = false;
+            if (shareStage === 'sent') shareStage = 'idle';
+            railNote('share · closed · ready for the next one');
+          } catch (e) {}
+        }, 5000);
         shareSentThisTurn = true;
         lastShare = { title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' };
         railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
@@ -3245,9 +3267,13 @@ function primeAudioSession(ms = 260) {
   } catch (e) { return false; }
 }
 
+let lastGreetAt = 0;
 function sayGreeting() {
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
+  // Reopening the door a minute later is the same conversation, not a new arrival: it gets no greeting.
+  if (Date.now() - lastGreetAt < 120000) { resumeSpeak = ''; resumeNote = ''; greeting = false; return; }
+  lastGreetAt = Date.now();
   const fresh = !localStorage.getItem(HELP_SEEN);
   const note = resumeNote; resumeNote = '';
   const speak = resumeSpeak; resumeSpeak = '';
