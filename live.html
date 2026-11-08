@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 82;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 83;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -759,6 +759,16 @@ window.addEventListener('pageshow', (e) => {
   logEl.innerHTML = '';
 });
 
+// A home-screen app spends most of its life in the background. Two costs, and one of them is a lie: a socket
+// left running speaks a buffered turn when the app comes back (which is how one line arrives twice), and the
+// shelf polls keep paying for every suspended copy of an old document. So a hidden page holds nothing open.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) return;
+  try {
+    if (ws || sessionUp) { logLine('session.hidden', 'the app went to the background: door shut', { level: 'info' }); shutDoor(); }
+  } catch (e) {}
+});
+
 /* A session is bounded, not immortal. iOS keeps the page alive when he switches
    away, so a door he opened at six could still be holding a nine o'clock
    conversation, which then sounds exactly like a memory the engine does not have.
@@ -809,12 +819,17 @@ const FNBASE = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/'
 const LOGBASE = FNBASE + 'eiTurnLog';
 const LOG_SID = (() => {
   try {
+    // localStorage, not sessionStorage: on iOS a home-screen app loses sessionStorage on every launch, so
+    // one phone produced a dozen "sessions" and I read that as several devices. (8 Nov 14:11: "I only have
+    // the app ... just one instance from the app on my home screen.")
     const k = 'ei.log.sid';
-    let v = sessionStorage.getItem(k);
-    if (!v) { v = Math.random().toString(16).slice(2, 8); sessionStorage.setItem(k, v); }
+    let v = localStorage.getItem(k);
+    if (!v) { v = Math.random().toString(16).slice(2, 8); localStorage.setItem(k, v); }
     return v;
   } catch (e) { return 'nosid'; }
 })();
+// Each launch is still its own document, so the document gets a tag of its own while the device keeps one name.
+const DOC_TAG = Math.random().toString(16).slice(2, 6);
 
 // Every failure this morning that could not be reproduced left the same emptiness in the log, so the page
 // now reports its own birth and its own errors: a dead door becomes a line with a reason in it.
@@ -1227,7 +1242,7 @@ async function openDoor() {
     const r = await fetch(FN, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ session_token: session.token }),
+      body: JSON.stringify({ doc: DOC_TAG, session_token: session.token }),
     });
     const d = await r.json();
     if (!d.ok) {
@@ -2847,9 +2862,9 @@ async function shelfSync() {
 const seedShelf = () => { shelfSync(); refreshCards(true); loadGarage(true); };
 
 // While anything on the shelf is still open, keep it honest without being asked.
-setInterval(() => { if (shelf.length) shelfSync(); }, 15000);
+setInterval(() => { if (!document.hidden && shelf.length) shelfSync(); }, 15000);
 // A song made a minute ago should be on the shelf without him asking for it.
-setInterval(() => { refreshCards(true); }, 60000);
+setInterval(() => { if (!document.hidden) refreshCards(true); }, 60000);
 
 /* ---------- the shelf: what the door hands over ---------- */
 
