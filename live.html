@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 87;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 88;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1846,6 +1846,36 @@ function repairLine(slot, heard, alt) {
     + 'Quote his words back in the question. Do not guess and do not move on.';
 }
 
+// The frame around a request is not part of the title: "can you find Stay" is Stay, and the catalogue does
+// not stock sentences. Stripped first, then what is left is judged.
+function stripRequestFrame(q) {
+  let t = String(q || '').trim();
+  for (let i = 0; i < 2; i++) {
+    const n = t
+      .replace(/^(?:please|hey|ok|okay)[,.\s]+/i, '')
+      .replace(/^(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:find|search|look up|get|play|share|send)\s+(?:me\s+)?(?:the\s+song\s+|a\s+song\s+)?/i, '')
+      .replace(/^(?:i|we)\s+(?:want|wanna|would like|'?d like|need|feel like)\s+(?:you\s+)?(?:to\s+)?(?:share|find|send|play|sing|hear)\s+(?:me\s+)?/i, '')
+      // only a verb followed by a determiner is a frame: "sing this song" strips, "Sing by Ed Sheeran" does not
+      .replace(/^(?:share|send|sing|play)\s+(?:me\s+)?(?:the\s+|a\s+|an\s+|this\s+|that\s+|some\s+)(?:song\s+|track\s+)?/i, '')
+      .trim();
+    if (n === t) break;
+    t = n;
+  }
+  return t;
+}
+
+function looksLikeIntentNotTitle(q) {
+  const t = String(q || '').trim().replace(/[.?!,]+$/, '');
+  if (!t) return true;
+  // "this song", "a song", "that one", "it": a pointer with nothing to point at.
+  if (/^(?:(?:this|that|the|a|an|some|any|another|one|it)\s*)?(?:song|track|tune|one|thing)?$/i.test(t)) return true;
+  if (/^(?:i|we)\s+(?:want|wanna|would|'?d|need|feel like|am going to|'?m going to)\b/i.test(t)) return true;
+  if (/^(?:can|could|would|will)\s+you\b/i.test(t)) return true;
+  if (/^(?:please|let'?s|why don'?t)\b/i.test(t)) return true;
+  if (/^(?:share|send|sing|play|put)\s+(?:me\s+)?(?:this|that|a|an|the|some)\b/i.test(t)) return true;
+  return false;
+}
+
 function looksLikeQuestion(q) {
   // kept as the name the share flow already calls; the judgement is the shape rule now, not a phrase list
   return resolveAnswer('title', q).kind !== 'value';
@@ -1911,6 +1941,25 @@ async function handleShareCall(call) {
           + 'Never put your own question in as the search.';
       looked = v.kind === 'meta' ? 'sharing · was that a name?' : 'sharing · which song';
       railNote('share · held · ' + (v.kind === 'meta' ? 'talked about it, did not name it' : 'no title yet'));
+      return;
+    }
+
+    // A WISH IS NOT A TITLE. At 14:32 he said "I want to sing this song" and the door searched the words
+    // "this song", coming back with This & That by Stray Kids, THIS by Sofiane Pamart and This by Ed Sheeran:
+    // three wrong answers to a sentence nobody meant as a search. A phrase that is about wanting a song
+    // names no song, so it is answered with the one question that does.
+    query = stripRequestFrame(query);
+    if (!query) {
+      result = 'He has not named a song yet. Ask him which song, in one short question, and stop.';
+      looked = 'sharing · which song';
+      return;
+    }
+    if (looksLikeIntentNotTitle(query)) {
+      result = 'Those words are not a song title, they are him saying he wants one. Search nothing. Ask him '
+        + 'once, in one short sentence, which song he means. Do not offer titles and do not name any.';
+      looked = 'sharing · asked for a song, not a title';
+      railNote('share · held · that was a wish, not a title');
+      logLine('share.hold.intent', String(query).slice(0, 120), { level: 'info', target: 'songShare' });
       return;
     }
 
