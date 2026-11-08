@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 112;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 113;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1966,7 +1966,7 @@ function judgeClaim() {
     }
     // "You can type the address and message right here on the sheet" when no sheet exists is the same class of
     // lie as a rail claim, and it strands him at a dead end with nothing to touch.
-    const sheetClaim = /\b(?:on|in) the sheet\b|right here on the sheet|type the address|sheet is (?:open|on)|on (?:your|his|the|user) screen\b/i;
+    const sheetClaim = /\b(?:on|in) the sheet\b|right here on the sheet|type the address|sheet is (?:still |currently |now )?(?:open|on|waiting|there)|still open for you|waiting for you to send|on (?:your|his|the|user) screen\b/i;
     if (sheetClaim.test(t) && shareStage !== 'sheet' && shareStage !== 'sent') {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
