@@ -246,7 +246,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-08T02:55';
-const BUILD_NO = 102;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
+const BUILD_NO = 103;   // 8 Nov: the door will not search for its own question, and the shelf stops narrating itself.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2334,6 +2334,26 @@ function noteSongAnswer(heard) {
       .finally(() => { doorSearching = false; });
   }, 250);
 }
+const DRAFT_KEY = 'ei-share-draft';
+function saveDraft() {
+  try {
+    if (!shareCard || shareStage === 'idle') { localStorage.removeItem(DRAFT_KEY); return; }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      card: shareCard, stage: shareStage, art: shareArt, at: Date.now(),
+    }));
+  } catch (e) {}
+}
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !d.card || !d.stage) return null;
+    if (Date.now() - (d.at || 0) > 2 * 3600e3) { localStorage.removeItem(DRAFT_KEY); return null; }
+    return d;
+  } catch (e) { return null; }
+}
+
 let shareArt = { want: false, brief: '' };   // his description, locked, and never invented by the model
 let shareArtTries = 0;                       // one re-ask when the description arrives cut off
 
@@ -2459,6 +2479,7 @@ function shareSongLocked(card) {
   shareArt = { want: false, brief: '' };
   shareArtTries = 0;
   shareCoverAsked = false; shareAddrOk = false;
+  saveDraft();
   railNote('share · song locked · ' + card.title);
   // No scripted line: the tool result already tells the model to ask about the picture in its own words.
   shareCoverAsked = true;                    // one question, one answer, never a loop of the same ask
@@ -2544,11 +2565,13 @@ function shareArtAnswer(heard) {
       return;                                  // still on the art step, nothing locked
     }
     shareArt = { want: true, brief: thin ? '' : clean };   // empty brief = the song's own scene
+    saveDraft();
     railNote('share · art locked · ' + (shareArt.brief || 'from the song').slice(0, 60));
     logLine('share.art', shareArt.brief || '(from the song)', { level: 'info' });
   }
   // Step 3 opens: the popup, where he types the address himself and writes the message.
   shareStage = 'sheet';
+  saveDraft();
   setTimeout(() => openShareSheet(shareCard, shareArt), 260);
   doorNote(shareArt.want
     ? 'the sheet is open on his screen now, with their email and his message to fill in, and the picture '
@@ -3316,6 +3339,7 @@ function openShareSheet(card, art) {
       if (r && r.ok && r.channel === 'email') {
         status.textContent = 'sent by email to ' + (r.to_masked || 'them') + '.';
         shareStage = 'sent';            // the share is closed; nothing may send it again
+        saveDraft();
         // and the door forgets the song it just sent, or the next "share a song" is answered with the last one
         setTimeout(() => {
           try {
@@ -3610,6 +3634,16 @@ function sayGreeting() {
   } catch (e) {}
   // A share that is locked but not sent is the state he left the room in. A fresh mouth is told, once.
   try {
+    // after a crash the page has no memory of its own, so the draft it wrote is what restores the flow
+    if (!shareCard) {
+      const d = loadDraft();
+      if (d && d.stage && d.stage !== 'sent' && d.stage !== 'idle') {
+        shareCard = d.card; shareCardTarget = d.card; shareStage = d.stage;
+        shareArt = d.art || { want: false, brief: '' };
+        logLine('share.resume', (d.card && d.card.title || 'a song') + ' · ' + d.stage,
+          { level: 'info', target: 'share' });
+      }
+    }
     if (shareCard && (shareStage === 'art' || shareStage === 'sheet')) {
       const what = shareCard.title || 'a song';
       doorNote('A share is in progress and nothing has gone anywhere yet: "' + what + '"'
@@ -3619,6 +3653,7 @@ function sayGreeting() {
           : 'He has not answered about a picture yet: ask once, in one sentence, whether one should go with it and what it should show.')
         + ' Do not search for it again and do not start over.');
       logLine('share.restore', what + ' · ' + shareStage, { level: 'info', target: 'share' });
+      if (shareStage === 'sheet') setTimeout(() => { try { openShareSheet(); } catch (e) {} }, 600);
     }
   } catch (e) {}
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
@@ -3785,7 +3820,7 @@ function handleFrame(text) {
     const data = p.inlineData && p.inlineData.data;
     // Held, not dropped: if the door's search comes back empty the model may say so, but it may not say it
     // while the search is still open.
-    if (data) { if (doorSearching || hiddenHold) { heldFrames++; } else playPcm(data); }
+    if (data) { if (doorSearching || hiddenHold) { heldFrames++; } else playPcm(data, p.inlineData.mimeType); }
   }
   // Barge-in: the model stopped mid-reply, so its remaining words are a new bubble rather
   // than a continuation of the one he cut off.
@@ -4055,13 +4090,24 @@ function playing() {
   return !!playCtx && playAt > 0 && playCtx.currentTime < playAt - 0.06;
 }
 
-function playPcm(b64) {
+let audioRateSeen = 0;
+function playPcm(b64, mime) {
   const ctx = playCtxEnsure();
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const i16 = new Int16Array(bytes.buffer);
-  const buf = ctx.createBuffer(1, i16.length, 24000);
+  // "audio/pcm;rate=24000" is a claim the server makes and the page used to ignore. Playing a 16 kHz frame
+  // as 24 kHz lifts the voice by half an octave; playing a 24 kHz frame as 16 kHz drops it. Same voice, wrong
+  // person. The rate in the frame wins, and a change of rate inside one session is logged.
+  const m = /rate=(\d+)/.exec(String(mime || ''));
+  const rate = m ? parseInt(m[1], 10) : 24000;
+  if (rate !== audioRateSeen) {
+    logLine('voice.rate', 'audio at ' + rate + ' Hz' + (audioRateSeen ? ' (was ' + audioRateSeen + ')' : ''),
+      { level: audioRateSeen && audioRateSeen !== rate ? 'warn' : 'info', target: 'session' });
+    audioRateSeen = rate;
+  }
+  const buf = ctx.createBuffer(1, i16.length, rate);
   const ch = buf.getChannelData(0);
   for (let i = 0; i < i16.length; i++) ch[i] = i16[i] / 0x8000;
 
