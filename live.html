@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-09T20:35';
-const BUILD_NO = 122;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-09T21:00';
+const BUILD_NO = 123;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -274,6 +274,21 @@ const BUILD_NO = 122;   // 8 Nov: a reopened door resumes the session it was in,
 // The declarations the door actually sends, kept in one place so that what it claims
 // on screen and what it hands the model cannot drift apart.
 const DECLS = [{
+              // The world outside his house, rented engines and all. 9 Nov 2026: the door said
+              // "According to AccuWeather, it's around 21 degrees Celsius in Ballitoville right now"
+              // with no tool call in the log. A sentence about the world has to come from a lookup.
+              name: 'world',
+              description: 'Look up a PUBLIC fact about the world outside his house: the weather, a place, a price, a score, a news event, a date, who someone outside the family is. Call this before saying anything about the world, and never name a source (AccuWeather, Google, the news) you have not asked. Not for his own rooms, family, money or records: that is house.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  ask: { type: 'STRING', description: 'the question exactly as he asked it, in his own words, e.g. "what is the current weather in Ballito"' },
+                  kind: { type: 'STRING', description: 'weather = weather or temperature; fact = any other public fact; auto when unsure' },
+                },
+                required: ['ask'],
+              },
+            },
+            {
               name: 'house',
               description: 'Walk Edwin\'s own house in his Known For Me account. USE THIS FIRST for any question about his rooms/worlds, the people in them, his keepsakes, songs and gifts, and what he has sent or not sent to anyone. Never web-search his own family details, and never say a person or room is missing before calling this. Read only.',
               parameters: {
@@ -599,6 +614,7 @@ let sessionVoice = '', sessionModel = '';   // what this door asked for, shown i
 // for... I think the best way is actually to say something before it goes open for inputs.")
 let greeting = false, greetWatch = null;
 let lastEngineSaid = '', stuckRepeats = 0;   // the mouth must not answer the same thing twice
+let lastHeardText = '', worldLookedAt = 0, worldGrounding = false;   // what the world rail last answered
 let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0, dbgReplies = 0, dbgHeard = 0, dbgUnsought = 0;
 const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
@@ -1749,6 +1765,48 @@ function houseIntent(args) {
   else if (/^(find|search|lookup|who|person|gift|gifts|keepsakes?)$/.test(a)) action = 'find';
   else action = words ? 'find' : 'worlds';
   return { action, ask: words, world: words };
+}
+
+// The world, asked properly. One query, one engine, and the answer carries the engine's own name and
+// the time it was measured, so the sentence that follows can be traced to a fact rather than a voice.
+async function handleWorldCall(call) {
+  const args = call.args || {};
+  const ask = String(args.ask || lastHeardText || '').slice(0, 300).trim();
+  const kind = String(args.kind || 'auto');
+  let result = '';
+  const t0 = Date.now();
+  try {
+    if (!ask) throw new Error('nothing was asked');
+    const r = await fetch(FNBASE + 'eiWorldLookup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ q: ask, kind }),
+    }).then((x) => x.json());
+    worldLookedAt = Date.now();
+    if (!r || !r.ok) {
+      result = 'the world lookup returned nothing for "' + ask + '"'
+        + (r && r.error ? ' (' + r.error + ')' : '')
+        + '. Say plainly that you have not looked and could not see it. Never invent the fact and never name a source.';
+      logLine('world.miss', ask + ' · ' + ((r && r.trouble) ? r.trouble.join(' | ') : 'no answer'), { level: 'warn', target: 'world' });
+    } else {
+      const facts = (r.facts || []).join(' ');
+      result = facts
+        + ' (source: ' + r.engine + ', as of ' + r.as_of + '. If you name a source, name this one and nothing else. '
+        + 'If the place or thing is not the one he meant, ask him which he meant rather than answering about it.)';
+      logLine('world.look', ask + ' · ' + r.engine + ' · ' + String(facts).slice(0, 120), { level: 'info', target: 'world' });
+      looked = 'the world · ' + (r.engine || 'looked up');
+    }
+  } catch (e) {
+    result = 'the world lookup could not run: ' + ((e && e.message) ? e.message : String(e))
+      + '. Say plainly that you could not look, and never invent the fact.';
+    logLine('world.miss', ask + ' · ' + ((e && e.message) ? e.message : String(e)), { level: 'warn', target: 'world' });
+  }
+  logLine('tool.world', result.slice(0, 160), { ms: Date.now() - t0, args: JSON.stringify(args), level: result.indexOf('could not') === 0 ? 'warn' : 'info' });
+  try {
+    ws.send(JSON.stringify({
+      toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+    }));
+  } catch { /* the socket is gone; the turn will end on its own */ }
 }
 
 async function handleHouseCall(call) {
@@ -4111,7 +4169,8 @@ function handleFrame(text) {
   }
   if (msg.toolCall && msg.toolCall.functionCalls) {
     for (const call of msg.toolCall.functionCalls) {
-      if (call.name === 'song') handleSongCall(call);
+      if (call.name === 'world') handleWorldCall(call);
+      else if (call.name === 'song') handleSongCall(call);
       else if (call.name === 'pay') handlePayCall(call);
       else if (call.name === 'wrap') handleWrapCall(call);
       else if (call.name === 'share') handleShareCall(call);
@@ -4129,6 +4188,7 @@ function handleFrame(text) {
   // claim we can back with the metadata that produced it.
   const gm = sc.groundingMetadata;
   if (gm) {
+    worldGrounding = true;
     shelfFromGrounding(gm);
     const src = (gm.webSearchQueries || []).length
       ? gm.webSearchQueries.join(' · ')
@@ -4147,6 +4207,7 @@ function handleFrame(text) {
     } else {
       userTurns++;
       silenceNudges = 0;
+      lastHeardText = heard;
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
       armSilenceWatch(heard);
@@ -4235,6 +4296,48 @@ function handleFrame(text) {
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
       greeting: greeting ? '1' : '',
     });
+    // A claim about the world with no lookup behind it. 9 Nov 2026, 20:38: he asked for the weather in
+    // "Belito" and the door answered "According to AccuWeather, it's around 21 degrees Celsius in
+    // Ballitoville right now, mostly sunny" with nothing in the log between the question and the answer.
+    // Naming a source it never contacted is the same false claim as a rail result with no rail call, so
+    // it is held the same way: the log catches it, the door looks for itself, and the fact arrives as a
+    // fact. (Grounding counts as looking: a real search leaves groundingMetadata on the turn.)
+    try {
+      const claim = String(said.engine || '');
+      const worldShape = /\b(according to|the forecast|the latest|right now|currently|at the moment|today's|this morning|this evening|tomorrow's)\b/i.test(claim)
+        || /\b\d+\s*(?:degrees|\u00b0|%|km\/h)\b/i.test(claim);
+      // A door tool that answered this turn counts as looking: his own shelf, a payment, a song. Only an
+      // answer with no lookup of any kind is a claim about the world that nobody checked.
+      const lookedThisTurn = (Date.now() - worldLookedAt < 30000) || worldGrounding || !!looked;
+      if (!greeting && claim && worldShape && !lookedThisTurn) {
+        logLine('world.claim', 'stated a world fact with no lookup behind it: "' + claim.slice(0, 140) + '"',
+          { level: 'warn', target: 'world' });
+        const ask = String(lastHeardText || '').slice(0, 200);
+        if (ask) {
+          // The door looks with his own words, so the next sentence is true even when the model won't.
+          fetch(FNBASE + 'eiWorldLookup', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ q: ask, kind: 'auto' }),
+          }).then((x) => x.json()).then((r) => {
+            if (r && r.ok) {
+              worldLookedAt = Date.now();
+              const facts = (r.facts || []).join(' ');
+              logLine('world.rescue', ask + ' · ' + r.engine + ' · ' + String(facts).slice(0, 120),
+                { level: 'info', target: 'world' });
+              sendNoteNow('You just answered a world question without looking anything up, so the door looked for you. '
+                + 'These are the measured facts, from ' + r.engine + ', as of ' + r.as_of + ': ' + facts + ' '
+                + 'Correct yourself in one short line using only these. Name that source or none.', false);
+              looked = 'the world · ' + (r.engine || 'looked up');
+            } else {
+              sendNoteNow('You just answered a world question without looking anything up, and the door could not look either. '
+                + 'Say plainly that you have not looked. Do not repeat the numbers you just said and do not name a source.', false);
+            }
+          }).catch(() => {});
+        }
+      }
+    } catch (e) {}
+    worldGrounding = false;
     // A mouth that repeats itself is not answering. Seen 9 Nov 2026, 20:28: after the opening line the
     // model answered "Hello", "Hello" and "are you stuck in a loop or something?" with that same greeting
     // three times, because the opening instruction ("say exactly this") was still standing in front of
