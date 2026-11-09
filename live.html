@@ -248,7 +248,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-09T21:00';
-const BUILD_NO = 123;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD_NO = 124;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2655,11 +2655,17 @@ function noteSongAnswer(heard) {
           return;
         }
         mergeCard(planned);
-        railNote('share · ' + c.found + ' · ' + (c.title || '')); 
+        railNote('share · ' + c.found + ' · ' + (c.title || ''));
         logLine('share.door.done', (c.title || '') + ' · ' + (c.found || '') + ' · ' + (Date.now() - t0) + 'ms',
           { level: 'info', target: 'songShare' });
+        // 9 Nov 19:04: this branch wrapped the song and never entered the cover step, so when he answered
+        // "add a picture of a nice countryside home" the door was not listening for it: no share.art row,
+        // no sheet, and eight seconds later he said "I'm still waiting". The song is locked here exactly as
+        // it is in the tool path, so the question the model asks is a question the door can take back.
+        shareSongLocked(planned);
         doorNote('the door has already searched and put "' + (c.title || 'a song') + '" on his shelf with its '
-          + 'listening link. Say what it is and that it is on the shelf, in one line. Do not search again.', true);
+          + 'listening link. Say what it is and that it is on the shelf, in one line. Do not search again. '
+          + 'Then ask, once, in one short question, whether a picture should go with it and what it should show.', true);
       })
       .catch((e) => {
         logLine('share.door.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
@@ -2859,6 +2865,13 @@ function resolveChoice(heard) {
     logLine('share.choose.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
     doorNote('the rail did not answer. Say you could not reach it, in one line, and do not guess at the song.', true);
   });
+}
+
+function wantsCoverArt(heard) {
+  const w = String(heard || '');
+  if (!/\b(picture|photo|cover|image|drawing|illustration|artwork|painting)\b/i.test(w)) return false;
+  // a song is not a picture: an utterance that names a song stays on the song step
+  return !/\b(song|track|tune|play|share)\b/i.test(w) || /\b(add|draw|make|with|go with|show)\b/i.test(w);
 }
 
 function shareArtAnswer(heard) {
@@ -4224,6 +4237,14 @@ function handleFrame(text) {
       // and opens the sheet. The model is not asked, because a model asked twice answers twice.
       if (sharePending && resolvePending(heard)) { /* the name was being checked: that was the answer */ }
       else if (shareStage === 'art') { shareArtAnswer(heard); }
+      // The cover question may still be asked by the model rather than the door. If he answers it with a
+      // picture in mind while a song is on the shelf, that is the art step whether or not the door opened
+      // it: the answer is taken here rather than dropped on the floor.
+      else if (shareCard && !sharePending && wantsCoverArt(heard)) {
+        shareStage = 'art';
+        railNote('share · art · taken from his answer with the step not open');
+        shareArtAnswer(heard);
+      }
       // The door asked "which one?" — so the door takes the answer. It used to offer two songs, keep no
       // record of them, and then have nothing to lock when he chose.
       if (!shareCard && shareChoices.length && !doorSearching) resolveChoice(heard);
