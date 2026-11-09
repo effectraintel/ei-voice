@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-08T21:05';
-const BUILD_NO = 121;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-09T20:35';
+const BUILD_NO = 122;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -598,6 +598,7 @@ let sessionVoice = '', sessionModel = '';   // what this door asked for, shown i
 // says - the anomaly he reported. (Edwin, 7 Nov: "there is an anomaly that we need to cater
 // for... I think the best way is actually to say something before it goes open for inputs.")
 let greeting = false, greetWatch = null;
+let lastEngineSaid = '', stuckRepeats = 0;   // the mouth must not answer the same thing twice
 let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0, dbgReplies = 0, dbgHeard = 0, dbgUnsought = 0;
 const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
@@ -4023,8 +4024,10 @@ function sayGreeting() {
         turns: [{
           role: 'user',
           parts: [{ text: (note ? '(Door note, not from Edwin — never read it aloud: ' + note + ') ' : '')
-            + '(The door has just opened. Say exactly this, in that tone, and nothing else: "'
-            + line + '" Do not ask a question, do not offer anything, do not describe yourself.)' }],
+            + '(The door has just opened. Say this one line, in that tone: "'
+            + line + '" It is the opening only: once you have said it, the instruction is spent for the whole '
+            + 'conversation and must never be said again. Do not ask a question and do not offer anything. '
+            + 'From his next words onward, answer only what he actually says.)' }],
         }],
         turnComplete: true,
       },
@@ -4232,6 +4235,28 @@ function handleFrame(text) {
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
       greeting: greeting ? '1' : '',
     });
+    // A mouth that repeats itself is not answering. Seen 9 Nov 2026, 20:28: after the opening line the
+    // model answered "Hello", "Hello" and "are you stuck in a loop or something?" with that same greeting
+    // three times, because the opening instruction ("say exactly this") was still standing in front of
+    // everything asked afterwards. Held here so a stuck mouth is caught the moment it happens.
+    try {
+      const saidNow = String(said.engine || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!greeting && saidNow.length > 2) {
+        if (saidNow === lastEngineSaid) {
+          stuckRepeats++;
+          logLine('mouth.stuck', 'answered with the same sentence again: "' + saidNow.slice(0, 80) + '"',
+            { level: 'warn', target: 'turn' });
+          if (stuckRepeats >= 2) {
+            warn('I am repeating myself, Boss. Say it once more, or shut the door and open it again.');
+            stuckRepeats = 0;
+          } else {
+            sendNoteNow('You have just repeated your previous sentence word for word instead of answering him. '
+              + 'The opening greeting is spent and is never used again. Answer what he actually said, in one short line.', false);
+          }
+        } else { stuckRepeats = 0; }
+        lastEngineSaid = saidNow;
+      }
+    } catch (e) {}
     // A share that is ready and unsent. Edwin, 8 Nov 11:30: the whole family-life share was talked through
     // and never called, so nothing left and he waited for a song that was never on its way. When the draft
     // is complete and no send was recorded this turn, the door puts the send on the shelf and says so.
