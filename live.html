@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T16:22';
-const BUILD_NO = 144;
+const BUILD = '2026-11-10T16:45';
+const BUILD_NO = 145;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1808,6 +1808,20 @@ function isRouteSentence(t) {
   return /\b(?:share|sharing|send|sending)\b/i.test(s) && /\b(?:song|tune|track)\b/i.test(s);
 }
 
+/* Build 145: the question the door tells the model to ask is a question the door itself has to remember.
+   10 Nov 16:28: he said "I want to make a song", the route opened, and the mouth asked what it should say in
+   its own words without ever calling the song tool. Nothing was written down, so when the app came back from
+   the background there was no open beat to resume and a fresh mouth greeted him over a question he was still
+   holding an answer to. The door keeps the draft, not the model: the asking is recorded here, where the asking
+   is decided, so a return mid-journey finishes the question instead of arriving as a stranger. */
+function openSongBeat() {
+  const stale = !songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000;
+  if (songDraft.said && !stale) return;      // he has already given the words: nothing is open
+  if (stale) { songDraftReset(); songDraft.at = Date.now(); }
+  if (!songDraft.askBeat) songDraft.askBeat = 'subject';
+  logLine('journey.open', 'open at ' + songDraft.askBeat, { level: 'info', target: 'music' });
+}
+
 function songRouteGate(heard) {
   const raw = String(heard || '');
   const cue = correctionCue(raw);
@@ -1825,11 +1839,13 @@ function songRouteGate(heard) {
   const wantShare = /\b(?:share|sharing|send|sending)\b/.test(t);
   if (wantMake && wantShare) {
     songRoute = { pick: 'make_then_share', at: Date.now() };
+    openSongBeat();
     doorNote('Confirm the route in one short line before anything else: a new song made first, then it goes '
       + 'out to whoever he names. Then carry on with the make, asking what it should say if you do not have '
       + 'his words yet.', true);
   } else if (wantMake) {
     songRoute = { pick: 'make', at: Date.now() };
+    openSongBeat();
     doorNote('The route is a NEW song. Say so in one short line ("a new one, then"), and ask what it should '
       + 'say if you do not already have his words. Do not search for an existing song.', true);
   } else if (wantShare) {
