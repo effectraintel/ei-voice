@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T17:35';
-const BUILD_NO = 147;
+const BUILD = '2026-11-10T17:55';
+const BUILD_NO = 148;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -3812,6 +3812,47 @@ function shareArtAnswer(heard) {
    behind. Engine: the platform's image model, rented (railway rule). Station: the record it is written to
    (which song, what he asked for, when) and the card that carries it. Nothing is drawn before he answers. */
 let descentDrawing = 0;
+/* Build 148. Edwin, 10 Nov 17:13: "Shelf was good... But I never got the opportunity to create the art?"
+   The landing note carried two instructions, the shelf line first and the picture question second, and the
+   model said the first and stopped. The question was never asked, so the descent never happened and the
+   song stayed bare. Two changes: the question now comes FIRST in the landing note (a model that answers only
+   the opening clause still asks it), and the door keeps the question open itself - artOpen - so his answer
+   is taken and the picture drawn even if the mouth never asked. */
+let artOpen = null;   // {at, request_id, title}: the art question is waiting for his answer
+
+/* His answer to the descent, heard by the door rather than trusted to the mouth. A no draws nothing; a yes,
+   or a description on its own, is the brief. A question back at the door is not an answer, so it is left
+   open. */
+function descentHear(heard) {
+  const t = String(heard || '').trim();
+  if (!t || !artOpen) return;
+  if (Date.now() - artOpen.at > 15 * 60 * 1000) { artOpen = null; return; }
+  const no = /^(?:no|nope|nah|not now|skip|leave it|nothing|no picture|no art|no cover|without)\b/i.test(t)
+    || /\bno (?:picture|art|cover|thanks|thank you)\b/i.test(t)
+    || /\b(?:don'?t|do not|dont) (?:want|need|bother)\b[^.!?]{0,30}\b(?:picture|art|cover)\b/i.test(t);
+  if (no) {
+    shareArt = { want: false, brief: '', url: '' };
+    artOpen = null;
+    try { localStorage.removeItem(ART_KEY); } catch (e) {}
+    logLine('made.descent.no', t.slice(0, 90), { level: 'info', target: 'coverDraw' });
+    railNote('descent · no picture · it is left bare');
+    return;
+  }
+  const yes = /^(?:yes|yeah|yep|sure|please|ok|okay|go on|go ahead|do it|make it|draw it|absolutely|definitely)\b/i.test(t);
+  if (/\?\s*$/.test(t) && !yes) return;                 // he is asking something, not answering
+  const brief = t
+    .replace(/^(?:yes|yeah|yep|sure|please|ok|okay|go on|go ahead|do it|make it|draw it|absolutely|definitely)[,.:;\s]*/i, '')
+    .replace(/\b(?:a|the|some) (?:picture|cover|art|artwork|image)\b/gi, ' ')
+    .replace(/^(?:of|with|showing)\b/i, ' ')
+    .replace(/\s+/g, ' ').trim().slice(0, 240);
+  shareArt = { want: true, brief: brief, url: '' };
+  const reqId = artOpen.request_id;
+  artOpen = null;
+  try { saveDraft(); saveArtBrief(reqId); } catch (e) {}
+  logLine('made.descent.yes', brief || '(from the song)', { level: 'info', target: 'coverDraw' });
+  railNote('descent · his yes · drawing' + (brief ? ' · ' + brief.slice(0, 40) : ' · from the song'));
+  try { drawDescent(); } catch (e) {}
+}
 async function drawDescent() {
   if (!shareArt || !shareArt.want) return;
   // Build 139: only a song that has landed gets a picture, and only its own record gets it. On 10 Nov a
@@ -3972,6 +4013,14 @@ async function madeReady(r) {
   const forWho = songWhoClean(String(madeShare.who || '').trim(), madeShare.band || '', madeShare.feel || '');
   const landedReq = String(madeShare.request_id || '');
   if (onShelf) shelfWriteAt = Date.now();    // it is on his shelf: the claim guard may now allow the sentence
+  // Build 148: this song's own answer, never a previous song's. A held yes is paid here; no answer means the
+  // descent is still open, and the question is asked below with nothing else in front of it.
+  const heldArt = loadArtBrief(landedReq);
+  const artHeld = !!(heldArt && (heldArt.want || heldArt.brief));
+  shareArt = artHeld
+    ? { want: !!heldArt.want, brief: heldArt.brief || '', url: heldArt.url || '' }
+    : { want: false, brief: '', url: '' };
+  if (!artHeld) artOpen = { at: Date.now(), request_id: landedReq, title: landedTitle };
   // Build 139: a yes given while the song was still being made pays for its picture HERE, the moment the song
   // lands and on its own record. Before this the yes was held and then thrown away with the draft.
   if (shareArt && shareArt.want) drawDescent();
@@ -3986,24 +4035,24 @@ async function madeReady(r) {
   // guessed. It is asked once, nothing is drawn before he answers, and his answer is what pays for it
   // (consent-before-spend). If he already described one while it was being made, it is held and is not
   // asked again.
-  const heldArt = loadArtBrief(landedReq);
-  const artHeld = !!(heldArt && (heldArt.want || heldArt.brief));
-  if (artHeld) shareArt = { want: !!heldArt.want, brief: heldArt.brief || '' };
   descentAskedAt = artHeld ? 0 : Date.now();
   logLine('made.descent', artHeld ? 'held from the making: ' + (heldArt.brief || 'his yes')
     : 'asking, once', { level: 'info', target: 'music' });
   const artLine = artHeld
     ? 'His picture is already noted, so do not ask about it again: say it goes with the song when he shares it.'
-    : 'Then ask the last question of the making, once, in your own words: would he like a picture to go with '
-      + 'it, and what should it show. Draw nothing until he answers, and if he says no, leave it bare.';
-  doorNote((onShelf
+    : 'Ask the last question of the making, once, in your own words: would he like a picture to go with it, '
+      + 'and what should it show. Draw nothing until he answers, and if he says no, leave it bare.';
+  // Build 148: when the picture has not been answered, the question is the FIRST thing in the note and the
+  // shelf line follows it. On 10 Nov 17:05 the shelf line came first, the model said it and stopped, and the
+  // descent was silently skipped.
+  doorNote((!artHeld ? artLine + ' ' : '') + (onShelf
       ? '"' + landedTitle + '" has landed and it is on his shelf' + (forWho ? ', made for ' + forWho : '')
         + '. Say one short line: the title once, plainly, that it is on his shelf, and that he can share it '
         + 'from there whenever he wants. '
       : '"' + landedTitle + '" has landed and is kept. It is not showing on his shelf yet, so do not say that '
         + 'it is: say one short line, the title once, that it is made and kept, and that it will be on the '
         + 'shelf. ')
-    + artLine
+    + (artHeld ? artLine : '')
     + ' Do not ask for an address or an email, do not say it has been sent or will arrive, and do not mention '
     + 'a sheet.', true);
 }
@@ -5390,6 +5439,7 @@ function handleFrame(text) {
       try { songRouteGate(heard); } catch (e) {}
       try { shadowRouteNote(heard, songRoute && songRoute.pick); } catch (e) {}
       try { songHearTurn(heard); } catch (e) {}
+      try { descentHear(heard); } catch (e) {}
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
       armSilenceWatch(heard);
