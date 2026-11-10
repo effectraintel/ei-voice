@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T22:20';
-const BUILD_NO = 157;
+const BUILD = '2026-11-10T22:30';
+const BUILD_NO = 155;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1592,11 +1592,18 @@ const SONG_SCRIPT =
   // in one breath: the mail that does not exist, and a next step promised for later that nobody had agreed.
   // The door cut the text and nothing could unsay the audio, so the lever left is the sentence itself: while
   // a take is in flight there is exactly ONE thing that is true, and he is given it word for word.
-  'While a take is being made, the only sentence you may say about it is: "It is being made now, and it ' +
-  'lands on your shelf." Nothing else is true yet, so add nothing: no minutes, no waiting, no mail, no ' +
-  'cover, no next step. Never announce what will happen later - no "once it arrives", no "after that", no ' +
-  '"we can talk about ... when" - and if he asks what happens next, say the picture is asked after it lands ' +
-  'and nothing is drawn before he answers. ' +
+  // Build 155. Edwin, 10 Nov 22:24: "Still saying inbox :) and we can also add to that message that the user
+  // ... will get the opportunity to create a cover art before sharing and could think about it while the song
+  // is being made." So the in-flight line now carries the cover too, and it is given as the words to say
+  // rather than as a rule to obey: a rule invites a paraphrase, and every paraphrase is a place a word the
+  // door does not have can appear.
+  'While a take is being made, say these words and nothing else about it: "It is being made now, and it ' +
+  'lands on your shelf. When you share it you will get the chance to make a cover for it, so you can be ' +
+  'thinking about what it should look like while it is being made." Do not add a minute, a wait, a ' +
+  'destination, or a next step. Where it goes has exactly one name, and it is your shelf: there is no other ' +
+  'word for it in this house, and if you are about to name somewhere else, say shelf. Never announce what ' +
+  'will happen later - no "once it arrives", no "after that", no "we can talk about ... when". If he asks ' +
+  'what happens next, say the cover is chosen when he shares it and nothing is drawn before he says yes. ' +
   // 8 Nov 2026, 17:05: asked "it is in my inbox", the model said the door could not see that, while the
   // delivery record held the send. The record is the door's to hold, and answering from it is not a claim.
   'The door keeps the delivery record of everything it sends, so never tell him the door cannot see a '
@@ -2810,7 +2817,10 @@ function judgeClaim() {
        which is where Edwin read the word and corrected us: "We don't have an inbox. It is a shelf." So the
        word is now caught wherever it is said, at any stage, not only while a song is being made, and the
        correction names the shelf without naming the thing it is not. */
-    if (/\binbox\b/i.test(t)) {
+    // Build 155: three times now the mouth has reached for a place this house does not have, even with the
+    // word gone from what it is told. The guard cannot unsay it, but it catches the whole family of words, so
+    // the screen never agrees with the sound and the log names the sentence that did it.
+    if (/\binbox\b|\bin-box\b|\b(?:your|his|the) (?:mail|email|inbox)\b|\b(?:is|will be) (?:delivered|posted) to you\b/i.test(t)) {
       if (Date.now() - unbackedWarnedAt >= 12000) {
         unbackedWarnedAt = Date.now();
         hiddenHold = true; hiddenHoldUntil = Date.now() + 1200;
