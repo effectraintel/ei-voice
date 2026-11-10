@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T11:45';
-const BUILD_NO = 132;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T13:05';
+const BUILD_NO = 133;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2329,9 +2329,25 @@ function judgeClaim() {
           + 'the song lands.', true);
       return;
     }
+    // "It should arrive in your inbox in a few minutes" while the take is still being made (10 Nov 10:54:31).
+    // He then went to his inbox and found nothing he had asked for. While a make is in flight the only true
+    // sentence is that it lands on his shelf. (build 133)
+    const copyClaim = /\binbox\b|\barrive|\bon its way\b|\bfew minutes\b|\bbeing sent to you\b/i;
+    if (copyClaim.test(t) && madeShare && madeShare.stage === 'making') {
+      if (Date.now() - unbackedWarnedAt >= 15000) {
+        unbackedWarnedAt = Date.now();
+        hiddenHold = true;
+        hiddenHoldUntil = Date.now() + 1500;
+        logLine('claim.copy', t.slice(0, 160), { level: 'warn', target: 'copy' });
+        doorNote('Nothing is in his inbox and nothing is on its way there. The take is still being made and '
+          + 'it lands on his shelf. Say one short line that it is still being made and that it goes on his '
+          + 'shelf when it lands. Do not mention an inbox, an arrival, minutes, or a sheet.', true);
+      }
+      return;
+    }
     // "You can type the address and message right here on the sheet" when no sheet exists is the same class of
     // lie as a rail claim, and it strands him at a dead end with nothing to touch.
-    const sheetClaim = /\b(?:on|in) the sheet\b|right here on the sheet|type the address|sheet is (?:still |currently |now )?(?:open|on|waiting|there)|still open for you|waiting for you to send|on (?:your|his|the|user) screen\b/i;
+    const sheetClaim = /\b(?:on|in) the sheet\b|right here on the sheet|type the address|sheet is (?:still |currently |now )?(?:open|on|waiting|there)|still open for you|waiting for you to send|on (?:your|his|the|user) screen\b|\bthe sheet\b[^.]{0,30}\bopen|\bopen(?:s|ing)? (?:the |a )?sheet\b|\bsheet will\b/i;
     if (sheetClaim.test(t) && shareStage !== 'sheet' && shareStage !== 'sent') {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
