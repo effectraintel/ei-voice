@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T16:16';
-const BUILD_NO = 142;
+const BUILD = '2026-11-10T16:22';
+const BUILD_NO = 143;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -2152,6 +2152,7 @@ async function handleSongCall(call) {
           const whoNamed = String(payload.who || '').trim();
           madeShare = {
             request_id: lastSongRequest || '', who: whoNamed, text: payload.text || '',
+            band: songDraft.band || '', feel: songDraft.feel || '',
             title: r.title || '', stage: 'making',
           };
           shareCard = { kind: 'made', title: r.title || 'the song he is making',
@@ -2222,8 +2223,14 @@ function shelfTruth() {
     const open = cards.filter((c) => c.kind === 'pay');
     const other = cards.filter((c) => c.kind === 'notpaid');
     const said = (list) => list.map((c) => String(c.title || '').replace(/\s*\u00b7\s*/g, ' ').trim()).join('; ');
+    // Build 143: songs and found links are on the shelf too. This line used to name only money cards, so a
+    // shelf holding his songs read as a shelf holding nothing he had made.
+    const songs = cards.filter((c) => c.kind === 'song' || c.kind === 'made');
+    const found = cards.filter((c) => c.kind === 'store');
     let line = 'The shelf in front of him holds ' + cards.length + ' card' + (cards.length === 1 ? '' : 's') + '.';
-    if (paid.length) line += ' Settled, and nothing is owed on them: ' + said(paid) + '.';
+    if (songs.length) line += ' Made here, and playable from it: ' + said(songs) + '.';
+    if (found.length) line += ' Found elsewhere: ' + said(found) + '.';
+    if (paid.length) line += ' Settled, and nothing is owed on them: ' + said(paid) + '.'
     if (open.length) line += ' Still open and unpaid: ' + said(open) + '.';
     if (other.length) line += ' Closed without payment: ' + said(other) + '.';
     line += paid.length && !open.length
@@ -2943,6 +2950,7 @@ function madeSave() {
     if (!madeShare || !madeShare.request_id) return;
     localStorage.setItem(MADE_KEY, JSON.stringify({
       request_id: madeShare.request_id, who: madeShare.who || '', said: madeShare.text || '',
+      band: madeShare.band || '', feel: madeShare.feel || '',
       title: madeShare.title || '', at: Date.now(),
     }));
   } catch (e) {}
@@ -3815,7 +3823,20 @@ async function madeReady(r) {
       }
     }
   } catch (e) { /* a link that will not wrap is not a song that did not land */ }
+  // Build 143: the shelf line is earned, not assumed. On 10 Nov 16:01 the door said "it is on his shelf" and
+  // the row held nothing of the kind: the find that should have put the card there is slow enough to time out,
+  // and the licence to say it was handed out whether or not a card had been written. So the vault is read
+  // straight after a take lands, twice if it has to, and the sentence is only licensed once the card is
+  // actually in the row. If it still cannot be confirmed, the door says what is true instead.
+  const sid = String((madeShare && madeShare.song_id) || (r && r.song_id) || '');
+  const onShelfNow = () => !!shelf.some((c) => (sid && String(c.song_id || '') === sid)
+    || (title && String(c.title || '').trim().toLowerCase() === String(title).trim().toLowerCase()));
   if (card) mergeCard(card);
+  let onShelf = onShelfNow();
+  for (let i = 0; i < 2 && !onShelf; i++) {
+    try { await withTimeout(refreshCards(true), 15000, 'the shelf did not answer'); } catch (e) {}
+    onShelf = onShelfNow();
+  }
   shareCard = card || { kind: 'made', title: title || 'your song', sub: 'made here', url: '', code: '', song_id: '' };
   shareCardTarget = shareCard;
   madeShare.stage = 'ready';
@@ -3825,9 +3846,11 @@ async function madeReady(r) {
   // released rather than held: there is no sheet to wait for, and a door left holding a step drops the
   // turns that come after it.
   const landedTitle = shareCard.title || 'the song';
-  const forWho = String(madeShare.who || '').trim();
+  // A name is never the style read back to him: "laid back blues" is not a person called Laid. (build 142,
+  // carried through here so the door note cannot say "made for Laid" even on a draft written before it.)
+  const forWho = songWhoClean(String(madeShare.who || '').trim(), madeShare.band || '', madeShare.feel || '');
   const landedReq = String(madeShare.request_id || '');
-  shelfWriteAt = Date.now();                 // it is on his shelf: the claim guard may now allow the sentence
+  if (onShelf) shelfWriteAt = Date.now();    // it is on his shelf: the claim guard may now allow the sentence
   // Build 139: a yes given while the song was still being made pays for its picture HERE, the moment the song
   // lands and on its own record. Before this the yes was held and then thrown away with the draft.
   if (shareArt && shareArt.want) drawDescent();
@@ -3848,12 +3871,18 @@ async function madeReady(r) {
   descentAskedAt = artHeld ? 0 : Date.now();
   logLine('made.descent', artHeld ? 'held from the making: ' + (heldArt.brief || 'his yes')
     : 'asking, once', { level: 'info', target: 'music' });
-  doorNote('"' + landedTitle + '" has landed and it is on his shelf' + (forWho ? ', made for ' + forWho : '')
-    + '. Say one short line: the title once, plainly, that it is on his shelf, and that he can share it from '
-    + 'there whenever he wants. ' + (artHeld
-      ? 'His picture is already noted, so do not ask about it again: say it goes with the song when he shares it.'
-      : 'Then ask the last question of the making, once, in your own words: would he like a picture to go with '
-        + 'it, and what should it show. Draw nothing until he answers, and if he says no, leave it bare.')
+  const artLine = artHeld
+    ? 'His picture is already noted, so do not ask about it again: say it goes with the song when he shares it.'
+    : 'Then ask the last question of the making, once, in your own words: would he like a picture to go with '
+      + 'it, and what should it show. Draw nothing until he answers, and if he says no, leave it bare.';
+  doorNote((onShelf
+      ? '"' + landedTitle + '" has landed and it is on his shelf' + (forWho ? ', made for ' + forWho : '')
+        + '. Say one short line: the title once, plainly, that it is on his shelf, and that he can share it '
+        + 'from there whenever he wants. '
+      : '"' + landedTitle + '" has landed and is kept. It is not showing on his shelf yet, so do not say that '
+        + 'it is: say one short line, the title once, that it is made and kept, and that it will be on the '
+        + 'shelf. ')
+    + artLine
     + ' Do not ask for an address or an email, do not say it has been sent or will arrive, and do not mention '
     + 'a sheet.', true);
 }
@@ -5074,6 +5103,7 @@ function sayGreeting() {
     const pend = madeLoad();
     if (pend && (!madeShare || !madeShare.request_id)) {
       madeShare = { request_id: pend.request_id, who: pend.who || '', text: pend.said || '',
+        band: pend.band || '', feel: pend.feel || '',
         title: pend.title || '', stage: 'making' };
       logLine('made.resume', pend.request_id + ' · still watching', { level: 'info', target: 'music' });
       startMadeWatch();
