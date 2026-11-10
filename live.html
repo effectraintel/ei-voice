@@ -256,8 +256,19 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T13:55';
-const BUILD_NO = 137;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T15:20';
+const BUILD_NO = 138;
+
+/* Build 138: ONE rule about the picture, in one place.
+   At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
+   share sheet. The landed-song block was updated; four older strings on this page kept saying "a cover is
+   drawn when he shares it from the shelf", and the standing brief both forbade the question and permitted
+   it. The model read all of it every turn with nothing saying which won, so it asked mid-make and nothing
+   was ever drawn. There is now one sentence, and everything that talks about the picture uses it. */
+const PICTURE_RULE = 'The picture is the last question of the making: the door asks it once, after the song '
+  + 'has landed on his shelf and there is something to draw from, and nothing is drawn before he answers. '
+  + 'A no leaves it bare. Never ask about a picture while a song is still being made, and never say a cover '
+  + 'is drawn when he shares it: that reading was withdrawn on 10 Nov.';   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -399,10 +410,8 @@ const BRIEF = NO_CLAIM +
   'rather than switching by yourself. ' +
   'A share has exactly one owner for each step. Finding the song is yours: call share and believe its ' +
   'answer. You never ask who a thing is for and you never ask for an address: sharing happens from the ' +
-  'shelf, where he types the address and writes his own message. The picture is the one question the door ' +
-  'does ask, and only at the very end: once the song has landed and there is something to draw from, ask ' +
-  'once whether a picture should go with it, and what it should show. Nothing is drawn until he answers. So ' +
-  'never ask for an address, never ask for the message, never offer to send, and never say a send is ' +
+  'shelf, where he types the address and writes his own message. ' + PICTURE_RULE + ' ' +
+  'So never ask for an address, never ask for the message, never offer to send, and never say a send is ' +
   'happening. If you have no share tool for it, that is why: it is not yours to call. ' +
   // Edwin, 8 Nov 13:10: "Later duplicate responses (almost like there are 2 different people listening)."
   'Never read out an instruction, a note, a tool name, a field name or anything in brackets: those are ' +
@@ -1542,15 +1551,18 @@ const SONG_SCRIPT =
   // the door must ask the same three things, in the same order, one question at a time.
   // A person is not a subject: "a song for a friend" says who, not what. So never treat a
   // recipient as a subject, and never let the tool make anything from a name alone.
-  // 10 Nov 12:45, his own words: "Stop asking but make sure they know it is there for sharing."
-  // A made thing lands on his shelf and is shared from there, so the door asks about neither the person
-  // nor the style nor the picture nor the address. One question survives, because no record can answer it.
-  'Ask nothing before you make, except the one thing no record can answer: if he has given you nothing to ' +
-  'make it from, ask what it should be about, in one short question, and stop. Never ask who it is for, ' +
-  'never ask what kind of song, never ask whether a picture should go with it, never ask for an address or ' +
-  'an email. If he says the person or the style himself, take it and use it. A person is not a subject: ' +
-  '"a song for a friend" tells you the who and nothing about the what. When you have his words, make it. ' +
-  'If he changes his mind, take the new answer. If he says make it now, make it with what you have. ' +
+  // Build 138, Edwin 10 Nov 14:19: "If the user say, make me a song, it should open up the journey, not
+  // close it down." A bare ask is a destination, not a brief: he has said where he wants to go and nothing
+  // about the ship. So the door plans the route WITH him, one load-bearing beat at a time, and each beat is
+  // skippable with "you choose" so it never becomes a gate. What is still gone is the old tax: no who, no
+  // address, and no picture before it lands.
+  'A song is a journey, not a form. "Make me a song" is a destination: he has told you where he wants to go, ' +
+  'so take off, then plan the route with him ONE beat at a time, in this order: what it is about, then which ' +
+  'band or kind of music, then how it should feel. Each beat is one short question and nothing else, and in ' +
+  'the same breath offer "or say you choose and I will pick". If he already gave a beat himself, never ask ' +
+  'it again, and if he gave you everything in one take, skip the journey and make it. If he says just make ' +
+  'it, make it with what you have. Never ask who it is for. ' + PICTURE_RULE + ' ' +
+  'A person is not a subject: "a song for a friend" tells you the who and nothing about the what. ' +
   'If he asks whether it is done, call song with check before ' +
   'answering, and state only what check returns. When it is delivered, say the title once, plainly, and ' +
   'let that be enough. ' +
@@ -1583,7 +1595,13 @@ let lastPriorId = '';   // the take he already has, named by the last prompt-bac
    turn, in the order that matters: what it should say, who it is for, how it should sound.
    Nothing reaches the rail until the first is answered, whatever the model decides. */
 
-const songDraft = { who: '', said: '', feel: '', asks: 0, at: 0 };
+const songDraft = { who: '', said: '', feel: '', band: '', asks: 0, at: 0, askBeat: '', skipped: [] };
+/* Build 138: the route, one beat at a time. subject -> band -> feel, three questions at most, and any of
+   them is skipped by saying "you choose". askBeat is which one is open, so his answer is taken by the door
+   itself before the model is asked anything. */
+const JOURNEY_BEATS = ['subject', 'band', 'feel'];
+const JOURNEY_SKIP = /\b(?:you (?:choose|pick|decide)|your (?:call|choice|pick)|up to you|surprise me|anything you|whatever you|doesn'?t matter|don'?t mind|no idea|you know best)\b/i;
+const JOURNEY_NOMORE = /\b(?:just make|make it now|no more questions|stop asking|get on with it|enough questions)\b/i;
 // Which route he chose for a song: MAKE a new one, or SHARE one that already exists. The door states the
 // route it understood in one line, and asks when it genuinely cannot tell, because assuming is what sent a
 // make down the share path and a share down the make path. (Edwin, 10 Nov 2026: "we should always confirm
@@ -1599,6 +1617,29 @@ function songHearTurn(heard) {
   if (!t) return;
   if (!songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000) return;   // no draft open
   const words = t.split(/\s+/);
+  // Build 138: a beat is open, so his next answer is that beat's answer, taken here rather than trusting
+  // the mouth to pass it on. "You choose" skips it, which is the promise that keeps the journey honest.
+  const beat = songDraft.askBeat || '';
+  if (beat) {
+    if (JOURNEY_SKIP.test(t)) {
+      songDraft.skipped.push(beat);
+      songDraft.askBeat = '';
+      logLine('song.journey.skip', beat, { level: 'info', target: 'music' });
+      return;
+    }
+    if (beat === 'band' && words.length <= 14) {
+      songDraft.band = t.slice(0, 160);
+      songDraft.askBeat = '';
+      logLine('song.journey.band', songDraft.band, { level: 'info', target: 'music' });
+      return;
+    }
+    if (beat === 'feel' && words.length <= 18) {
+      songDraft.feel = t.slice(0, 160);
+      songDraft.askBeat = '';
+      logLine('song.journey.feel', songDraft.feel, { level: 'info', target: 'music' });
+      return;
+    }
+  }
   if (!songDraft.feel && words.length <= 10) {
     const m = t.match(SONG_FEEL);
     if (m) {
@@ -1856,7 +1897,10 @@ function songConcrete(raw) {
 // A name we must never treat as a recipient: our own brand, said while describing a picture.
 const SONG_NEVER_PERSON = /^(?:effectra|intelligence|ei|static|atrium|base44|knownforme|known|enshrine|shrine|engine|boss|door|platform|music|song|south|africa|african|durban|ballito)$/i;
 
-function songDraftReset() { songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.asks = 0; songDraft.at = 0; }
+function songDraftReset() {
+  songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.band = '';
+  songDraft.asks = 0; songDraft.at = 0; songDraft.askBeat = ''; songDraft.skipped = [];
+}
 
 async function handleSongCall(call) {
   const args = call.args || {};
@@ -1916,7 +1960,9 @@ async function handleSongCall(call) {
       const said = songSaid(words);
       const feel = (words.match(SONG_FEEL) || [])[0] || '';
       if (who) songDraft.who = who;
-      if (feel) songDraft.feel = feel;
+      // A genre word is a style, so it only fills the style when no beat is open: answering "country" to
+      // "which band" must not be mistaken for an answer to "how should it feel". (build 138)
+      if (feel && !songDraft.askBeat) songDraft.feel = feel;
 
       // Is this turn an answer to the question we asked? A bare name answers "who"; a
       // sentence answers "what should it say"; a genre word answers "how should it sound".
@@ -1946,24 +1992,58 @@ async function handleSongCall(call) {
       // 10 Nov 12:45: the who and the what-kind questions are gone. He names a person or a band if he
       // wants one, and the style is the making's business, not an interrogation. The subject stays,
       // because a song about nothing is not a song and no record holds the answer.
+      // ---- Build 138: the journey ----
+      // Take off, then the route with him, one load-bearing beat at a time. Each beat is one short question,
+      // each is skippable with "you choose", and there are three at most: after three the brief he gave is
+      // the brief he gets, because refusing to make his song is a worse failure than making it thin.
+      const askedBeat = songDraft.askBeat || '';
+      if (askedBeat && JOURNEY_SKIP.test(words)) {
+        songDraft.skipped.push(askedBeat);
+        logLine('song.journey.skip', askedBeat, { level: 'info', target: 'music' });
+      } else if (askedBeat === 'band' && words) {
+        songDraft.band = words.slice(0, 160);
+        logLine('song.journey.band', songDraft.band, { level: 'info', target: 'music' });
+      } else if (askedBeat === 'feel' && words) {
+        songDraft.feel = words.slice(0, 160);
+        logLine('song.journey.feel', songDraft.feel, { level: 'info', target: 'music' });
+      }
+      if (JOURNEY_NOMORE.test(words)) {
+        JOURNEY_BEATS.forEach(b => { if (songDraft.skipped.indexOf(b) < 0) songDraft.skipped.push(b); });
+        logLine('song.journey.nomore', words.slice(0, 80), { level: 'info', target: 'music' });
+      }
+      songDraft.askBeat = '';
+
+      let askBeat = '';
+      if (!hasSaid && songDraft.skipped.indexOf('subject') < 0) askBeat = 'subject';
+      else if (!songDraft.band && !songDraft.feel && songDraft.skipped.indexOf('band') < 0) askBeat = 'band';
+      else if (!songDraft.feel && songDraft.skipped.indexOf('feel') < 0) askBeat = 'feel';
+      if (asked >= 3) askBeat = '';        // the journey is over: three is the whole route
+
       let ask = '';
-      if (!hasSaid && asked < 3) {
+      if (askBeat === 'subject') {
         // "for a friend" is a role, not a person: asking "what should it say to friend"
         // sounds like a machine reading a field.
         const role = /^(friend|mate|buddy|partner|someone|somebody|person|people|client)$/i.test(songDraft.who);
         ask = songDraft.who
           ? '"What should it say to ' + (role ? 'them' : songDraft.who) + '?"'
           : '"What should the song be about?"';
+      } else if (askBeat === 'band') {
+        ask = '"Which band, or what kind of music? Say you choose and I will pick."';
+      } else if (askBeat === 'feel') {
+        ask = '"How should it feel: slow and warm, big and driving, something else? Say you choose and I will pick."';
       }
 
       if (ask) {
         songDraft.asks = asked + 1;
         songDraft.at = Date.now();
-        result = 'Nothing has been made, and nothing should be yet. Ask him this one question and stop, '
-          + 'in your own voice, short: ' + ask + ' Do not describe the song, do not name a style you '
-          + 'were not given, and do not call this tool again until he has answered.';
-        looked = 'song · asking first';
-        railNote('asking first · ' + (songDraft.who && !hasSaid ? 'what should it say' : (!hasSaid ? 'what is it about' : (!songDraft.who ? 'who for' : 'what kind'))));
+        songDraft.askBeat = askBeat;
+        result = 'Nothing has been made, and nothing should be yet: this is the route, and the journey has a '
+          + 'beat to go. Ask him this one question and stop, in your own voice, short: ' + ask + ' Offer '
+          + 'plainly that he can say "you choose" and you will pick, because no beat is a gate. Do not '
+          + 'describe the song, do not name a style you were not given, and do not call this tool again '
+          + 'until he has answered.';
+        looked = 'song · ' + askBeat;
+        railNote('journey · ' + askBeat);
       } else if (!hasSaid && action !== 'again') {
         // Three questions asked and still no subject: he is not giving one, so say so rather
         // than making a song about nothing.
@@ -1979,12 +2059,21 @@ async function handleSongCall(call) {
           who: songDraft.who || String(args.who || '').trim(),
           session_id: s.token.slice(0, 24),
         };
+        // Build 138: the band and the feel he chose on the journey travel WITH the song. Two places,
+        // because the record is what the making actually reads: the payload may be ignored, so the door
+        // also writes the style onto the request the moment it exists.
+        const styleLine = [songDraft.band, songDraft.feel].filter(Boolean).join(', ').slice(0, 200);
+        if (styleLine) { payload.feel = styleLine; payload.style = styleLine; }
         // "new" is his decision after being asked, so it overrides the similarity guard.
         if (action === 'new') payload.force = true;
         const r = await withTimeout(
           gatePost('giftSongStart', payload), 20000, 'the music rail did not answer in time');
         if (r.needs_word && r.prior_id) lastPriorId = r.prior_id;
         if (r.request_id) lastSongRequest = r.request_id;
+        if (styleLine && lastSongRequest && !r.needs_word) {
+          gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.band || '',
+            feel_word: songDraft.feel || '' }).catch(() => {});
+        }
         if (!r.needs_word) songDraftReset();   // the brief became a song; the next one starts clean
         result = r.line + (lastSongRequest ? ' (request ' + lastSongRequest + ')' : '');
         if (r.needs_word) {
@@ -2694,7 +2783,7 @@ async function handleShareCall(call) {
       mergeCard(cardNow);
       shareSongLocked(cardNow);
       result = shareResultLine(r) + ' It is locked in and it is open on his shelf, where the share button is. '
-        + 'Say that in one line. Do not ask about a cover (one is drawn when he shares it), do not ask about the '
+        + 'Say that in one line. Do not ask about a cover here: ' + PICTURE_RULE + ' Do not ask about the '
         + 'address, the message or the send, and do not search again.';
       looked = 'sharing · ' + (r.title || 'a song');
       shareChoices = [];
@@ -3029,7 +3118,7 @@ function noteSongAnswer(heard) {
           doorNote('the door has searched the rail and put "' + (r.title || 'a song') + '"'
             + (r.artist ? ' by ' + r.artist : '') + ' on his shelf with its listening link. Say the title once '
             + 'and that it is on the shelf. Do not read the url, do not offer to send it, and do not ask about '
-            + 'a picture: a cover is drawn when he shares it from the shelf.', true);
+            + 'a picture now: it is asked once, at the end, and nothing is drawn before he answers.', true);
           return;
         }
         let picks = collapseChoices(r.candidates);
@@ -3075,7 +3164,7 @@ function noteSongAnswer(heard) {
         shareSongLocked(planned);
         doorNote('the door has already searched and put "' + (c.title || 'a song') + '" on his shelf with its '
           + 'listening link. Say what it is and that it is on the shelf, in one line. Do not search again and '
-          + 'do not ask about a picture: a cover is drawn when he shares it from the shelf.', true);
+          + 'do not ask about a picture now: it is asked once, at the end.', true);
       })
       .catch((e) => {
         logLine('share.door.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
@@ -3118,7 +3207,7 @@ function saveArtBrief(requestId) {
   try {
     const id = requestId || (madeShare && madeShare.request_id) || lastSongRequest || '';
     localStorage.setItem(ART_KEY, JSON.stringify({ request_id: id, want: !!shareArt.want,
-      brief: shareArt.brief || '', at: Date.now() }));
+      brief: shareArt.brief || '', url: shareArt.url || '', at: Date.now() }));
   } catch (e) {}
 }
 
@@ -3126,6 +3215,7 @@ function loadArtBrief(requestId) {
   try {
     const d = JSON.parse(localStorage.getItem(ART_KEY) || 'null');
     if (!d || Date.now() - (d.at || 0) > 6 * 3600e3) return null;
+  if (d.url && !shareArt.url) shareArt.url = d.url;
     if (requestId && d.request_id && d.request_id !== requestId) return null;
     return d;
   } catch (e) { return null; }
@@ -3330,8 +3420,9 @@ function resolveChoice(heard) {
     shareSongLocked(card);
     railNote('share · ' + (c.found || 'wrapped') + ' · ' + (card.title || ''));
     doorNote('the door has put "' + (card.title || 'a song') + '"' + (c.artist ? ' by ' + c.artist : '')
-      + ' on his shelf with its listening link. Say the title once and that it is on the shelf, then ask once, '
-      + 'that a cover is drawn when he shares it from the shelf, so he has nothing to describe now.', true);
+      + ' on his shelf with its listening link. Say the title once and that it is on the shelf, then ask once '
+      + 'whether a picture should go with it and what it should show, because it is the last question now. '
+      + 'Nothing is drawn until he answers.', true);
   }).catch((e) => {
     hiddenHold = false;
     logLine('share.choose.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
@@ -3430,6 +3521,9 @@ function shareArtAnswer(heard) {
   // Answered is answered, whether the answer was a picture or a plain no. It used to be stamped only on
   // the yes path, so a "no cover" left the step looking unanswered and the question came back. (build 125)
   artLockedAt = Date.now();
+  // Build 138: the yes draws the picture, here, whether or not he ever shares it. Until now the only draw
+  // call on this page lived inside a share send, which is why "yes" produced nothing for two songs.
+  if (shareArt.want) drawDescent();
   // A song still being made has no link yet, so a sheet now would be a form that cannot send. The brief
   // is locked here and the sheet opens the moment the rail says the song is delivered. (build 125)
   if (madeShare && madeShare.stage !== 'ready') {
@@ -3455,6 +3549,45 @@ function shareArtAnswer(heard) {
       + 'so he knows where to look, and do not ask for the address or the message in words.', true);
 }
 
+
+/* Build 138, the descent's landing. A yes used to buy nothing: the only place a cover could be drawn was
+   inside a share send, so the picture waited for a send that might never come, and the song had already
+   been mailed bare. The picture is the last question of the making, so its answer has to leave a picture
+   behind. Engine: the platform's image model, rented (railway rule). Station: the record it is written to
+   (which song, what he asked for, when) and the card that carries it. Nothing is drawn before he answers. */
+let descentDrawing = 0;
+async function drawDescent() {
+  if (!shareArt || !shareArt.want) return;
+  const at = Date.now();
+  descentDrawing = at;
+  const card = shareCard || shareCardTarget || {};
+  const reqId = (madeShare && madeShare.request_id) || lastSongRequest || '';
+  const scene = (madeShare && madeShare.text) || '';
+  railNote('descent · drawing' + (shareArt.brief ? ' · ' + String(shareArt.brief).slice(0, 40) : ' · from the song'));
+  try {
+    const r = await gatePost('coverDraw', {
+      brief: shareArt.brief || '', title: card.title || '', scene: scene, request_id: reqId,
+    });
+    if (descentDrawing !== at) return;                 // he answered again: the newer draw owns the card
+    if (r && r.cover_url) {
+      shareArt.url = r.cover_url;
+      saveDraft(); saveArtBrief(reqId);
+      mergeCard({ kind: 'cover', title: 'The picture for ' + (card.title || 'the song'),
+        sub: shareArt.brief ? 'from your words' : 'from the song', url: r.cover_url, img: r.cover_url,
+        code: 'cover-' + (reqId || 'door') });
+      if (shareCard) shareCard.img = r.cover_url;
+      logLine('made.descent.drawn', r.cover_url, { level: 'info', target: 'coverDraw' });
+      railNote('descent · drawn · with the song on his shelf');
+      doorNote('the picture he said yes to is drawn and it is with the song on his shelf. Say one short line '
+        + 'that it is there. Do not describe it in detail and do not offer another one.', false);
+    }
+  } catch (e) {
+    logLine('made.descent.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'coverDraw' });
+    railNote('descent · the drawing did not come back');
+    doorNote('the drawing did not come back. Say plainly, in one line, that the picture did not come through '
+      + 'and that the song is safe on his shelf. Do not offer to try again in a moment.', false);
+  }
+}
 
 /* The rail makes the song in the background, so the door watches the record instead of asking him to come
    back later. It checks every eight seconds for about a minute and a half, holds no turn open, and says
