@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T11:05';
-const BUILD_NO = 128;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T11:25';
+const BUILD_NO = 129;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1549,6 +1549,44 @@ let lastPriorId = '';   // the take he already has, named by the last prompt-bac
    Nothing reaches the rail until the first is answered, whatever the model decides. */
 
 const songDraft = { who: '', said: '', feel: '', asks: 0, at: 0 };
+// Which route he chose for a song: MAKE a new one, or SHARE one that already exists. The door states the
+// route it understood in one line, and asks when it genuinely cannot tell, because assuming is what sent a
+// make down the share path and a share down the make path. (Edwin, 10 Nov 2026: "we should always confirm
+// which route the user wants to go and not just assume".)
+let songRoute = { pick: '', at: 0 };
+
+function songRouteGate(heard) {
+  const t = String(heard || '').toLowerCase();
+  // A song is usually named as one ("share a song"), but he also names the track directly ("share I See
+  // Fire with me"), so a share verb followed by a capitalised word counts as the same ask.
+  if (!/\bsong\b|\btune\b|\btrack\b/.test(t)
+      && !/\b(?:share|send)\b[^.?!]{0,30}\b[A-Z][a-z]{2,}/.test(String(heard || ''))) return;
+  // Mid-flow turns (a picture answer, a name, an address) are not route choices. Only a fresh ask is.
+  if (shareStage !== 'idle' && shareStage !== 'closed') return;
+  const negMake = /\b(?:not|don'?t|do not|no)\b[^.]{0,25}\b(?:make|making|write|writing|create)\b/.test(t)
+    || /\b(?:make|write|create)\w*\s+(?:nothing|no song)\b/.test(t);
+  const wantMake = /\b(?:make|making|write|writing|create|compose)\b/.test(t) && !negMake;
+  const wantShare = /\b(?:share|sharing|send|sending)\b/.test(t);
+  if (wantMake && wantShare) {
+    songRoute = { pick: 'make_then_share', at: Date.now() };
+    doorNote('Confirm the route in one short line before anything else: a new song made first, then it goes '
+      + 'out to whoever he names. Then carry on with the make, asking what it should say if you do not have '
+      + 'his words yet.', true);
+  } else if (wantMake) {
+    songRoute = { pick: 'make', at: Date.now() };
+    doorNote('The route is a NEW song. Say so in one short line ("a new one, then"), and ask what it should '
+      + 'say if you do not already have his words. Do not search for an existing song.', true);
+  } else if (wantShare) {
+    songRoute = { pick: 'share', at: Date.now() };
+    doorNote('The route is SHARING a song that already exists: nothing is made. Say so in one short line, '
+      + 'then find the song he means by title or artist.', true);
+  } else if (negMake) {
+    songRoute = { pick: '', at: Date.now() };
+    doorNote('You cannot tell which he wants. Ask exactly one short question and nothing else: a new song '
+      + 'made, or one he already has shared?', true);
+  }
+  if (songRoute.pick) logLine('song.route', songRoute.pick, { level: 'info', target: 'music' });
+}
 const SONG_FILLER = /\b(i|we|you|want|wanna|would|like|please|can|could|will|make|making|write|create|sing|do|need|give|me|us|a|an|the|to|for|about|of|on|in|with|some|song|songs|tune|tracks|track|music|thing|something|anything|one|another|new|it|that|this|and|my|our|his|her|their|just|now|again|actually|really|be|is|are|it's|its)\b/gi;
 const SONG_PERSON = /\b(friend|mate|buddy|girlfriend|boyfriend|wife|husband|partner|mom|mum|mother|dad|father|sister|brother|son|daughter|kid|child|family|someone|somebody|person|people|colleague|boss|client|gran|grandma|grandpa)\b/i;
 const SONG_FEEL = /\b(rock|alternative|country|soul|jazz|blues|pop|folk|acoustic|piano|guitar|ballad|club|dance|house|hip hop|rap|metal|indie|gospel|reggae|swing|lullaby|orchestral|cinematic|drum|bass)\b/i;
@@ -1655,6 +1693,13 @@ async function handleSongCall(call) {
           madeReady(r).catch(() => {});
         }
       }
+    } else if (action === 'make' && songRoute.pick === 'share' && Date.now() - songRoute.at < 10 * 60 * 1000) {
+      // He said share, and nothing since has said make. A make here is the door assuming, and it costs a
+      // take and a junk song. (10 Nov 2026, the day a share became a make.)
+      logLine('song.route.blocked', 'a make arrived while the route was share', { level: 'warn', target: 'music' });
+      railNote('nothing made · the route is share');
+      result = 'Nothing has been made, and nothing should be: he asked to SHARE a song that already exists, '
+        + 'not to make a new one. Do not make one. Ask him which song he means, by title or artist.';
     } else if (action === 'resend') {
       // Sending him something he already has makes nothing, so it needs no words: the
       // take is named by the last prompt-back, or by the record itself.
@@ -4505,6 +4550,7 @@ function handleFrame(text) {
       if (/\b(?:share|send)\b|\b(?:make|write|create|do)\b[^.?!]{0,40}\b(?:for|to)\s+(?:my|his|her)\b/i.test(heard)) {
         shareIntentAt = Date.now();
       }
+      try { songRouteGate(heard); } catch (e) {}
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
       armSilenceWatch(heard);
