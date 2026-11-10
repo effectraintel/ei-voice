@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T21:50';
-const BUILD_NO = 154;
+const BUILD = '2026-11-10T21:46';
+const BUILD_NO = 155;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1702,6 +1702,81 @@ function songHearTurn(heard) {
   }
 }
 
+/* ---------- build 155: the route cannot wait on a call that never comes ----------
+   10 Nov 2026, 21:31. He asked for a song, gave the Hillbrow paragraph, chose blues, said yes to a picture.
+   The mouth said "I'll get that song made" and called nothing: no request record, no take, nothing in the
+   vault. Then it named the take from 20:58 as if it were the new one and said it was ready on his shelf.
+   A promise is not a plan. So the door now watches its own route: when the brief is complete and no make
+   has been asked for, it has the mouth asked once, and if the mouth still says nothing the door puts the
+   song into the studio itself with the same rail call the tool would have made. One make, never two. */
+let makeArmedSig = '', makeArmedAt = 0, makeFiredAt = 0, makePostedSig = '';
+
+function makeSig() {
+  return [songDraft.said, songDraft.sound, songDraft.feel, songDraft.who].join('|');
+}
+/* The route is closed when the subject stands and the sound is chosen. Two beats, not three: the picture
+   lives on the share sheet since build 153, so there is nothing left to ask that the making needs. */
+function routeClosed() {
+  try {
+    if (!songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000) return false;
+    if (!songDraft.said || songConcrete(songDraft.said) < 1) return false;
+    if (songDraft.askBeat) return false;
+    return !!(songDraft.sound || songDraft.feel);
+  } catch (e) { return false; }
+}
+
+function armMake() {
+  try {
+    if (!routeClosed()) return;
+    const sig = makeSig();
+    if (sig === makeArmedSig) return;
+    makeArmedSig = sig; makeArmedAt = Date.now();
+    logLine('song.make.armed', sig.slice(0, 140), { level: 'info', target: 'music' });
+    setTimeout(() => { makeIfStillWaiting(sig); }, 4500);
+  } catch (e) {}
+}
+
+async function makeIfStillWaiting(sig) {
+  if (makeArmedSig !== sig) return;          // the brief moved on
+  if (makeFiredAt > makeArmedAt) return;     // the mouth called the rail: nothing to rescue
+  if (makePostedSig === sig) return;         // already put in from here
+  if (!routeClosed()) return;
+  makePostedSig = sig;
+  const text = songDraft.said;
+  const styleLine = [songDraft.sound, songDraft.feel].filter(Boolean).join(', ').slice(0, 200);
+  try {
+    const s = doorSession();
+    if (!s || !s.token) return;
+    const payload = {
+      action: 'make',
+      text: text,
+      who: songWhoClean(songDraft.who || '', songDraft.sound, songDraft.feel),
+      session_id: s.token.slice(0, 24),
+    };
+    if (styleLine) { payload.feel = styleLine; payload.style = styleLine; }
+    logLine('song.make.door', 'no call came: the door put it into the studio itself',
+      { level: 'warn', target: 'music' });
+    const r = await withTimeout(gatePost('giftSongStart', payload), 20000,
+      'the music rail did not answer in time');
+    makeFiredAt = Date.now();
+    if (r.request_id) lastSongRequest = r.request_id;
+    if (styleLine && lastSongRequest && !r.needs_word) {
+      gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.sound || '',
+        feel_word: songDraft.feel || '' }).catch(() => {});
+    }
+    if (!r.needs_word) songDraftReset();
+    railNote('in the studio \u00b7 ' + String(text || '').slice(0, 40));
+    doorNote(r.needs_word
+      ? 'The door put the song in itself and the rail says he already has one like this. Say that in one short line.'
+      : 'The door has already put the song into the studio itself, so it is being made and it lands on his shelf. '
+        + 'Say one short true line saying so. Do not ask about a picture, do not ask anything else, and never say it is sent.',
+      true);
+  } catch (e) {
+    logLine('song.make.door.fail', String((e && e.message) || e).slice(0, 140),
+      { level: 'warn', target: 'music' });
+  }
+}
+
 /* ---------------- route shadow (build 131) ----------------
    The solver in .agents/scripts/solver.py picks a route from the rail contracts. This is
    the same decision in the door's own language, run in SHADOW: it works out what the
@@ -2174,7 +2249,9 @@ async function handleSongCall(call) {
       let askBeat = '';
       if (!hasSaid && songDraft.skipped.indexOf('subject') < 0) askBeat = 'subject';
       else if (!songDraft.sound && !songDraft.feel && songDraft.skipped.indexOf('sound') < 0) askBeat = 'sound';
-      else if (!songDraft.feel && songDraft.skipped.indexOf('feel') < 0) askBeat = 'feel';
+      // Build 155: no third question. The sound he chose carries the feel ("it could be blues" is both),
+      // and the picture is asked on the share sheet, so the route closes on the words and the sound.
+      // A question with nothing behind it is what stalled the making on 10 Nov at 21:32.
       if (asked >= 3) askBeat = '';        // the journey is over: three is the whole route
 
       let ask = '';
@@ -2224,6 +2301,8 @@ async function handleSongCall(call) {
         if (styleLine) { payload.feel = styleLine; payload.style = styleLine; }
         // "new" is his decision after being asked, so it overrides the similarity guard.
         if (action === 'new') payload.force = true;
+        // Build 155: the rail is being asked, so the door's own rescue stands down for this brief.
+        makeFiredAt = Date.now();
         railAsked = true;
         const r = await withTimeout(
           gatePost('giftSongStart', payload), 20000, 'the music rail did not answer in time');
@@ -2654,9 +2733,33 @@ function judgeClaim() {
   try {
     const t = String(said.engine || '');
     if (!t) return;
+    /* Build 155: a song that was never made is not on his shelf. At 21:33:17 on 10 Nov the mouth said "Your
+       song, 'Late Night with Edwin,' is ready on your shelf" ninety seconds after a make that never happened. */
+    const madeRecently = !!(makeFiredAt && Date.now() - makeFiredAt < 20 * 60 * 1000);
+    const readyClaim = /\b(?:your|the|that) song\b[^.!?]{0,90}\b(?:is|it'?s|is now)\b[^.!?]{0,40}\bready\b|\bis (?:now )?ready on your shelf\b|\b(?:landed|arrived|is) on your shelf\b/i;
+    if (readyClaim.test(t) && !madeRecently && !lastSongRequest) {
+      logLine('song.claim', t.slice(0, 160), { level: 'warn', target: 'no-take' });
+      doorCorrect('nothing has been made yet · your song is still to come',
+        'No take exists: nothing has been made and nothing is on his shelf. Correct yourself in one short line '
+        + 'and say what you are doing about it. Never name a song as ready that was not made in this conversation.', true);
+      return;
+    }
     // A locked picture brief stays locked (build 125). It used to be remembered for three seconds, so the
     // second ask nine seconds later went out and he described the cats and the horse twice (10 Nov, 08:41).
     const artQ = /\b(?:which|what) (?:picture|cover|image|drawing)\b|should a picture|what should it show|give me the details\b/i.test(t);
+    /* Build 155: while the song is still being made there is no picture question. The cover is asked on
+       the share sheet (his ruling at 21:13 on 10 Nov), and at 21:32:33 the stale question was the last thing
+       he heard before a making that never began. */
+    const makingNow = !!(songDraft.at && Date.now() - songDraft.at < 20 * 60 * 1000) && !madeRecently;
+    if (artQ && makingNow) {
+      hiddenHold = true;
+      hiddenHoldUntil = Date.now() + 1200;
+      logLine('claim.stale.art.making', t.slice(0, 140), { level: 'warn', target: 'stale' });
+      doorNote('There is no picture question now: the song is still being made, and the share sheet asks about '
+        + 'the picture when he shares it. Do not ask about a picture and do not offer one. Say one short line '
+        + 'that the song is being made and that it lands on his shelf.', true);
+      return;
+    }
     if (artQ && artLockedAt && Date.now() - artLockedAt < 20 * 60 * 1000
         && (shareStage === 'waiting' || shareStage === 'sheet' || shareStage === 'sent')) {
       hiddenHold = true;
@@ -5850,6 +5953,7 @@ function handleFrame(text) {
     lastTurnEndAt = Date.now();
     flushNotes();
     judgeClaim();
+    try { armMake(); } catch (e) {}
     if (sessionOpenedAt && Date.now() - sessionOpenedAt > 9 * 60 * 1000 && !renewing) {
       railNote('session · renewing at the pause, nine minutes in');
       logLine('turn.engine', said.engine || '', { role: 'engine', note: 'then the link renewed' });
