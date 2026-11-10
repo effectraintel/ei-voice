@@ -145,8 +145,13 @@
   .card { flex:0 0 auto; min-width:200px; max-width:256px; background:#171412; border:1px solid #2e2a24;
           border-radius:10px; padding:9px; text-align:left; position:relative;
           display:flex; align-items:flex-start; gap:9px; }
+  /* Build 160 (Edwin, 10 Nov 2026 23:50): "make the white border slightly thinner with 50% and use our
+     theme goldfish colour not white." The frame was a dark hairline (#2b2721) that read as a hard pale
+     edge against the cream art, so every covered card looked boxed. It is now the theme's soft gold
+     (#c9a86a, the same gold the mark's ring and the share chip use) at half strength, and half the
+     thickness, so the picture sits IN the card rather than inside a box. */
   .card .thumb { flex:0 0 auto; width:80px; height:80px; border-radius:8px; overflow:hidden;
-                 background:#1d1915; border:1px solid #2b2721; }
+                 background:#1d1915; border:0.5px solid rgba(201,168,106,.5); }
   .card .thumb img { display:block; width:100%; height:100%; object-fit:cover; }
   .card .body { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
   .card .k { display:block; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:#7a7164; }
@@ -163,6 +168,11 @@
                 letter-spacing:.08em; border-radius:6px; padding:3px 7px; line-height:1; }
   .card .copy:active { background:#2b271f; color:#e8dfcc; }
   .card .copy.share { margin-left:auto; color:#c9a86a; border-color:#4a3f26; }
+  /* Build 160: every card can be put away on its own. The chip is the quietest of the three and it
+     arms on the first tap like the row's own clear does, because a shelf is a thing he scrolls with a
+     thumb and a clear that acts on one tap is a clear that fires by accident. */
+  .card .copy.clear { color:#7a7164; border-color:#2f2b24; padding:3px 6px; }
+  .card .copy.clear.armed { color:var(--gold); border-color:#4a3f26; }
   .card.thought { border-color:#4a3f26; }
   /* The receipt opens over the door, not on someone else's address (7 Nov 2026:
      Edwin - "it does view the certificate or receipt on the base44 url so we have
@@ -230,7 +240,7 @@
 </header>
 
 <main id="log"></main>
-<div id="shelfline"><span id="shelfcount">the shelf</span><button id="shelfrefresh" type="button">refresh</button><button id="shelfclear" type="button" hidden>clear</button></div>
+<div id="shelfline"><span id="shelfcount">the shelf</span><button id="shelfrefresh" type="button">refresh</button><button id="shelfclear" type="button" hidden>clear all</button></div>
 <div id="shelf" aria-live="polite"></div>
 
 <footer>
@@ -274,8 +284,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T23:45';
-const BUILD_NO = 159;
+const BUILD = '2026-11-11T00:15';
+const BUILD_NO = 160;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -4919,7 +4929,7 @@ let clearArmedAt = 0;
 function disarmClear() {
   clearArmedAt = 0;
   const b = document.getElementById('shelfclear');
-  if (b) { b.textContent = 'clear'; b.classList.remove('armed'); }
+  if (b) { b.textContent = 'clear all'; b.classList.remove('armed'); }
 }
 // Refresh on his tap. Same two sources the timers read (cards and payment requests), asked now instead of
 // on our clock, and it answers in words: how many things arrived, or that nothing did. It removes nothing
@@ -4954,7 +4964,7 @@ document.getElementById('shelfclear').addEventListener('click', (e) => {
   const b = document.getElementById('shelfclear');
   if (!clearArmedAt || Date.now() - clearArmedAt > 3000) {
     clearArmedAt = Date.now();
-    if (b) { b.textContent = 'tap again to clear'; b.classList.add('armed'); }
+    if (b) { b.textContent = 'tap again to clear all'; b.classList.add('armed'); }
     railNote('shelf · clear armed · a second tap within three seconds moves them to the garage');
     setTimeout(() => { if (clearArmedAt && Date.now() - clearArmedAt >= 2950) disarmClear(); }, 3100);
     return;
@@ -5416,6 +5426,53 @@ const SHELF_PH = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
   + '</svg>'
 );
 
+/* Build 160 (Edwin, 10 Nov 2026 23:50): "We also need to put a clear button on each one and change the
+   clear button on top to clear all." So the row's button now means the whole shelf, said plainly, and
+   every card carries its own. Clearing one card is the same act as clearing the row, one card wide: it
+   clears the VIEW of it and never the record, the songs and links go to the garage where one tap brings
+   them back, and an open request simply stops nagging until something new happens on it.
+   It arms on the first tap, exactly as the row does, because this is a shelf he scrolls with a thumb. */
+async function clearOneCard(card) {
+  if (!card) return;
+  const i = shelf.findIndex(x => cardKey(x) === cardKey(card));
+  if (i < 0) return;
+  const [gone] = shelf.splice(i, 1);
+  if (gone.kind !== 'song' && gone.kind !== 'store') {
+    rememberCleared([gone.code].filter(Boolean));
+  }
+  renderShelf();
+  railNote('shelf \u00b7 put away \u00b7 ' + (gone.title || 'one card'));
+  if (gone.kind === 'song' || gone.kind === 'store') {
+    const moved = await putInGarage([gone]);
+    await loadGarage(true);
+    if (!moved) railNote('the garage did not take it just now \u00b7 it may come back on the next read');
+  }
+}
+
+function clearChip(it) {
+  const b = document.createElement('button');
+  b.className = 'copy clear'; b.type = 'button'; b.textContent = 'clear';
+  b.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const now = Date.now();
+    const armed = Number(b.dataset.armed || 0);
+    if (!armed || now - armed > 3000) {
+      b.dataset.armed = String(now);
+      b.textContent = 'clear?'; b.classList.add('armed');
+      setTimeout(() => {
+        const at = Number(b.dataset.armed || 0);
+        if (at && Date.now() - at >= 2950) {
+          b.dataset.armed = ''; b.textContent = 'clear'; b.classList.remove('armed');
+        }
+      }, 3100);
+      return;
+    }
+    b.dataset.armed = '';
+    clearOneCard(it);
+  };
+  return b;
+}
+
 /* One picture and one stack of words, made in one place so the shelf and the garage cannot drift
    apart (build 159). Everything a card carries is appended to the body it returns. */
 function cardShell(it, label) {
@@ -5477,6 +5534,7 @@ function drawCards(el) {
       share.className = 'copy share'; share.type = 'button'; share.textContent = 'share';
       share.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openShareSheet(it); };
       acts.appendChild(share);
+      acts.appendChild(clearChip(it));
       body.appendChild(acts);
     } else {
       body.appendChild(t);
@@ -5490,6 +5548,7 @@ function drawCards(el) {
       share.className = 'copy share'; share.type = 'button'; share.textContent = 'share';
       share.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openShareSheet(it); };
       acts.appendChild(share);
+      acts.appendChild(clearChip(it));
       body.appendChild(acts);
     }
     el.appendChild(card);
