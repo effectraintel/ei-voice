@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T21:49';
-const BUILD_NO = 156;
+const BUILD = '2026-11-10T22:20';
+const BUILD_NO = 157;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -5028,7 +5028,11 @@ function openShareSheet(card, art) {
   // empty url until a link is wrapped), so the kind is what decides, not the fields.
   const isSong = !!(card && (card.song_id || /^(made|song|cover)$/i.test(String(card.kind || ''))
     || (card.title && !card.url && /\b(?:made|song|tune|take)\b/i.test(String(card.sub || '')))));
-  let coverWanted = !!(art && art.want);
+  // What the sheet is to do about a picture. '' means he has not answered, and nothing is answered for him.
+  // 'draw' pays for a new one, 'reuse' sends the picture the song already has, 'none' sends it bare.
+  let coverMode = (art && art.want) ? 'draw' : '';
+  let coverReuse = String((card && (card.img || card.cover_url)) || '');
+  let coverAgain = false;   // the rail said this already went, so the next tap must be a second decision
   const artLine = document.createElement('div');
   artLine.style.cssText = 'font-size:11px;color:#9b9182;margin:2px 0 10px;line-height:1.4';
   if (art && art.want && art.brief) artLine.textContent = 'cover: ' + art.brief;
@@ -5041,28 +5045,66 @@ function openShareSheet(card, art) {
     artText.value = (art && art.brief) || songArtPrompt(card);
     artText.setAttribute('autocapitalize', 'sentences');
     artText.style.cssText = to.style.cssText + 'resize:none;font-size:14px;line-height:1.45;margin-bottom:8px';
-    const pick = (label, want) => {
+    // Three answers, and none of them chosen for him: draw a new one, send it with the picture it already
+    // has, or send it bare. Build 157, Edwin 22:08: "the one I picked up from the shelf populated with the
+    // description of the cover art again" - the sheet was offering a second drawing of a picture that
+    // already existed, and a second drawing is a second charge (consent-before-spend).
+    let choices = [];
+    const markChoice = () => {
+      for (const c of choices) {
+        const on = c.mode === coverMode;
+        c.b.style.background = on ? '#b8873f' : 'none';
+        c.b.style.borderColor = on ? '#b8873f' : '#3a352d';
+        c.b.style.color = on ? '#171410' : '#9b9182';
+      }
+      artText.style.display = coverMode === 'draw' ? 'block' : 'none';
+    };
+    const pick = (label, mode) => {
       const b = document.createElement('button');
       b.type = 'button'; b.textContent = label;
-      b.style.cssText = 'flex:1;border-radius:8px;padding:9px 8px;font-size:11px;letter-spacing:.04em;'
+      b.style.cssText = 'border-radius:8px;padding:9px 8px;font-size:11px;letter-spacing:.04em;'
         + 'background:none;border:1px solid #3a352d;color:#9b9182';
       b.onclick = () => {
-        coverWanted = want;
-        for (const other of artChoice.children) {
-          other.style.background = 'none'; other.style.borderColor = '#3a352d'; other.style.color = '#9b9182';
-        }
-        b.style.background = '#b8873f'; b.style.borderColor = '#b8873f'; b.style.color = '#171410';
-        artText.style.display = want ? 'block' : 'none';
-        if (want) { try { artText.focus(); } catch (e) {} }
+        coverMode = mode;
+        markChoice();
+        if (mode === 'draw') { try { artText.focus(); } catch (e) {} }
       };
       artChoice.appendChild(b);
+      choices.push({ b: b, mode: mode });
       return b;
     };
-    const yes = pick('yes, draw a cover', true);
-    pick('no, just send', false);
-    // Nothing is chosen for him: a cover draws only from a tap he made, and a send with nothing chosen
-    // sends the song bare. A yes already given earlier in the flow is shown as the chosen one.
-    if (coverWanted) yes.onclick(); else artText.style.display = 'none';
+    const buildChoices = () => {
+      artChoice.innerHTML = '';
+      choices = [];
+      artChoice.style.flexWrap = 'wrap';
+      if (coverReuse) {
+        pick('send it with the picture it has', 'reuse');
+        pick('draw a new one', 'draw');
+        pick('no picture', 'none');
+      } else {
+        pick('yes, draw a cover', 'draw');
+        pick('no, just send', 'none');
+      }
+      markChoice();
+    };
+    buildChoices();
+    // Ask the record what picture this song already has, so the sheet offers it instead of writing a fresh
+    // description for a second one. A read: nothing is drawn and nothing is charged by this call.
+    if (!coverReuse) {
+      const lookRef = String(card.song_id || card.code || card.title || '');
+      if (lookRef) {
+        railPost('shelfShare', { action: 'art', ref: lookRef }).then((a) => {
+          if (!a || !a.ok || !a.cover_url || coverMode || coverReuse) return;
+          coverReuse = String(a.cover_url);
+          if (a.brief && !String(artText.value || '').trim()) artText.value = a.brief;
+          buildChoices();
+          artLine.textContent = 'this song already has a picture. send it with that, or draw a new one.';
+          railNote('sheet · this song already has a picture');
+        }).catch(() => {});
+      }
+    } else {
+      artLine.textContent = 'this song already has a picture. send it with that, or draw a new one.';
+    }
   }
   const status = document.createElement('div');
   status.style.cssText = 'font-size:11px;color:#9b9182;min-height:15px;margin:8px 0';
@@ -5085,16 +5127,26 @@ function openShareSheet(card, art) {
       // Build 149: the description in the box is the brief, whether or not he changed a word of it. A yes
       // pays for the drawing (consent-before-spend), and it is drawn before the message goes, so it travels
       // with the song rather than arriving after it.
-      const wanted = isSong ? coverWanted : !!(art && art.want);
-      const brief = wanted
+      const wanted = isSong
+        ? (coverMode === 'draw' ? true : (coverMode === 'reuse' ? 'reuse' : false))
+        : (art && art.want ? true : false);
+      const brief = wanted === true
         ? (isSong ? String(artText.value || '').trim() : (art.brief || ''))
         : '';
       if (wanted) status.textContent = 'drawing the cover, then sending\u2026';
       const r = await railPost('shelfShare', {
         action: 'send', card: cardPayload(card), to: addr, channel: 'email',
-        message: msg.value.trim(), cover: wanted, cover_brief: brief,
+        message: msg.value.trim(), cover: wanted, cover_brief: brief, again: coverAgain,
       });
-      if (wanted) { shareArt = { want: true, brief: brief, url: (r && r.cover_url) || '' }; }
+      if (wanted && r && r.cover_url) {
+        shareArt = { want: true, brief: brief, url: r.cover_url };
+        // The song keeps its picture: the card carries it, so the next open offers it rather than redrawing.
+        for (const it of shelf) {
+          if ((card.song_id && String(it.song_id || '') === String(card.song_id))
+            || (card.code && String(it.code || '') === String(card.code))) it.img = r.cover_url;
+        }
+        try { renderShelf(); } catch (e) {}
+      } else if (wanted && !coverReuse) { shareArt = { want: true, brief: brief, url: '' }; }
       if (r && r.ok && r.channel === 'email') {
         status.textContent = 'sent by email to ' + (r.to_masked || 'them')
           + (r.cover_url ? ', with the cover drawn in' : '') + '.';
@@ -5122,6 +5174,13 @@ function openShareSheet(card, art) {
         rememberShare({ title: card.title || '', to_masked: r.to_masked || '', message_id: r.message_id || '', cover: !!r.cover_url, at: Date.now(), channel: 'email' });
         railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || ''));
         setTimeout(() => el.remove(), 1400);
+      } else if (r && r.need === 'again') {
+        // One send is one email. It has been there already, so the second tap has to be a second decision.
+        coverAgain = true;
+        status.textContent = r.ask || 'that already went to them.';
+        send.textContent = 'send it again';
+        send.disabled = false;
+        railNote('sheet · already sent to ' + (r.last_masked || 'them') + ' · waiting for a second decision');
       } else if (r && r.ok && r.need === 'tap' && r.wa_link) {
         status.textContent = '';
         const a = document.createElement('a');
