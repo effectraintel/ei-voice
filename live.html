@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T20:58';
-const BUILD_NO = 151;
+const BUILD = '2026-11-10T21:06';
+const BUILD_NO = 152;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -850,6 +850,7 @@ function shutDoor() {
     if (sessionOpenedAt) {
       const mins = Math.max(1, Math.round((Date.now() - sessionOpenedAt) / 60000));
       logLine('session.span', mins + ' min open · ' + userTurns + ' of his turns', { level: 'info', target: 'usage' });
+      sessionOpenedAt = 0;               // one span per session, however many closes follow it
     }
   } catch (e) {}
   try { ws && ws.close(); } catch {}
