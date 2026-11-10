@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T16:22';
-const BUILD_NO = 143;
+const BUILD = '2026-11-10T16:26';
+const BUILD_NO = 144;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1858,14 +1858,23 @@ function songWho(raw) {
   // else is not a recipient - on 10 Nov "a picture of the name Effectra intelligence on it" was read as
   // "this song is for Effectra", so the sheet would have opened addressed to us.
   const explicit = said.match(/\b(?:for|to)\s+(?:my\s+|our\s+)?([A-Z][a-z]{2,})/);
-  if (explicit && !SONG_NEVER_PERSON.test(explicit[1])) return explicit[1];
+  if (explicit) {
+    const at = explicit.index + explicit[0].lastIndexOf(explicit[1]);
+    if (songNameOk(explicit[1], said, at)) return explicit[1];
+  }
   const pictureTalk = /\b(?:picture|photo|image|drawing|artwork|cover|logo|title|name)\b/i.test(said);
   if (pictureTalk) return '';        // a thing to draw, not a person to send to
-  const cap = said.split(/\s+/).slice(1)
-    .map(w => w.replace(/[^A-Za-z]/g, ''))
-    .filter(Boolean)
-    .find(w => /^[A-Z][a-z]{2,}$/.test(w) && !SONG_NEVER_PERSON.test(w));
-  return cap || '';
+  // Every capitalised word is looked at with its place in the sentence, so "The tree is big" leaves nothing
+  // and "Edwin said the tree is big" still finds Edwin. (build 144)
+  const re = /[A-Za-z][A-Za-z'\u2019]*/g;
+  let m;
+  while ((m = re.exec(said))) {
+    const w = m[0].replace(/['\u2019]s$/, '').replace(/[^A-Za-z]/g, '');
+    if (!/^[A-Z][a-z]{2,}$/.test(w)) continue;
+    if (!songNameOk(w, said, m.index)) continue;
+    return w;
+  }
+  return '';
 }
 
 // What is left of his words once the asking is taken out. "a song for a friend" leaves
@@ -1917,6 +1926,33 @@ function songConcrete(raw) {
 // A name we must never treat as a recipient: our own brand, said while describing a picture.
 const SONG_NEVER_PERSON = /^(?:effectra|intelligence|ei|static|atrium|base44|knownforme|known|enshrine|shrine|engine|boss|door|platform|music|song|south|africa|african|durban|ballito)$/i;
 
+/* Build 144: a capital letter is not a name, and grammar is not a person.
+   On 10 Nov 16:08 his subject began "The tree is big. The tree is big." and the door read the sentence's
+   second capitalised word as a recipient: the landing note was heading for "made for The". A capital is
+   evidence of a name only where grammar does not require one, so a sentence's first word is never taken,
+   and the words that only ever do grammatical work are never taken wherever they sit.
+   Deliberately absent: Will, May, June, Rose, Mark, Hope, Bill - real names that are also ordinary words.
+   A missed name costs one question; a phantom name costs the record. */
+const SONG_NOT_A_NAME = /^(?:the|a|an|and|but|or|nor|so|yet|for|with|from|into|onto|over|under|about|above|across|after|before|between|during|through|because|when|whenever|while|if|then|than|that|this|these|those|there|here|it|its|i|im|we|us|you|your|yours|he|she|him|her|hers|they|them|their|theirs|our|ours|my|mine|his|all|any|both|each|every|few|more|most|some|such|no|not|only|own|same|too|very|just|also|still|even|now|again|once|today|tomorrow|yesterday|tonight|morning|evening|night|day|one|two|three|what|whats|who|whom|whose|which|why|how|where|yes|okay|well|look|listen|make|made|song|songs|write|written|sing|saying|said|tell|told|let|lets|dont|donts|cant|didnt|isnt|wasnt|wont|ill|theres|heres|thats|whats|please|sorry|thanks|thank|hello|hey|good|great|nice|right|wrong|correct|true|still|maybe|perhaps|almost|really|quite|rather|enough|much|many|little|big|small|long|short|old|new)$/i;
+
+/* Where a word sits decides whether its capital means anything: the first word of what he said, or the word
+   after a full stop, question, colon, quote or bracket, is capitalised by grammar. A name is capitalised
+   where grammar does not ask for it. The one exception is a possessive at a sentence's start ("Nadia's
+   birthday"), because grammar never writes "the's". */
+function songNameOk(word, said, at) {
+  const w = String(word || '').trim();
+  if (!w) return false;
+  if (SONG_NEVER_PERSON.test(w)) return false;
+  if (SONG_NOT_A_NAME.test(w)) return false;
+  if (at === undefined || at === null || at < 0) return true;
+  const text = String(said || '');
+  const before = text.slice(0, at).replace(/\s+$/, '');
+  const possessive = /['\u2019]s\b/.test(text.slice(at + w.length, at + w.length + 3));
+  if (possessive) return true;
+  if (!before) return false;                                        // the first word of the sentence
+  return !/[.!?:;\n\r\u2014\u2013"\u201c\u2018(\[]$/.test(before); // or one that starts a new one
+}
+
 /* Build 142: a band is not a person. On 10 Nov 15:47 he answered the band beat with "laid back blues" and the
    request went in with who: "Laid" - the door had read the style back to him as a name, and the record held a
    phantom person. A who made only of the words of the style just given, or a style word on its own, is nobody,
@@ -1925,6 +1961,9 @@ const SONG_STYLE_WORDS = /^(?:laid|lazy|slack|chill|chilled|relaxed|slow|fast|so
 function songWhoClean(who, band, feel) {
   const w = String(who || '').trim().replace(/[.,;:!?]+$/, '');
   if (!w) return '';
+  // Build 144: a name that is only a grammatical word is not a name, wherever it came from - including a
+  // draft written before the reader learned the difference. "made for The" cannot reach his ear this way.
+  if (String(w).split(/\s+/).every(x => SONG_NOT_A_NAME.test(x) || SONG_NEVER_PERSON.test(x))) return '';
   const style = (String(band || '') + ' ' + String(feel || '')).toLowerCase().trim();
   const parts = w.toLowerCase().split(/\s+/).filter(Boolean);
   if (style && parts.length && parts.every(x => style.indexOf(x) >= 0)) return '';
@@ -1960,6 +1999,11 @@ function openJourneyBeat() {
 async function handleSongCall(call) {
   const args = call.args || {};
   let result = '';
+  // Build 144: which fault this is has to be known before it happens. railAsked = the rail was called;
+  // railOk = the rail answered. Without them the catch could only guess, and it guessed "the rail refused"
+  // on the morning the door never asked the rail at all.
+  let railAsked = false;
+  let railOk = false;
   // A tool call that never gets an answer leaves the model waiting for a reply that is
   // never coming, which is what "stuck, and it just repeats me" looks like from his side.
   // So every path below ends in exactly one toolResponse, including the failures.
@@ -1972,9 +2016,11 @@ async function handleSongCall(call) {
 
     const action = String(args.action || 'make').toLowerCase().trim();
     if (action === 'check') {
+      railAsked = true;
       const r = await withTimeout(
         gatePost('giftSongStart', { action: 'check', request_id: lastSongRequest || '' }), 12000,
         'the record did not answer in time');
+      railOk = true;
       result = r.line + ' (status: ' + r.status + (r.title ? ', title: ' + r.title : '') + ')';
       railNote('music rail · checked · ' + r.status);
       // The moment the rail says it is delivered, its card belongs on the shelf.
@@ -1998,12 +2044,14 @@ async function handleSongCall(call) {
       // Sending him something he already has makes nothing, so it needs no words: the
       // take is named by the last prompt-back, or by the record itself.
       const prior = String(args.prior || lastPriorId || '').trim();
+      railAsked = true;
       const r = await withTimeout(
         gatePost('giftSongStart', {
           action: 'resend',
           request_id: prior,
           session_id: s.token.slice(0, 24),
         }), 20000, 'the record did not answer in time');
+      railOk = true;
       result = r.line + (r.title ? ' (title: ' + r.title + ')' : '');
       railNote('music rail · sent again' + (r.title ? ' · ' + r.title : ''));
     } else {
@@ -2025,6 +2073,12 @@ async function handleSongCall(call) {
       // Nothing is stored as a lyric seed unless it names something. Otherwise an acknowledgement
       // overwrote the real words and the "song" was written from "oh, you're correct".
       const concrete = songConcrete(words);
+      /* Build 144: the question we asked, read BEFORE the answer is stored against it.
+         This line used to sit twelve lines further down, so the branch below reached for a const that did not
+         exist yet and threw a ReferenceError - exactly on a real subject sentence, never on a short one. That
+         is the fault that killed his make at 16:08 on 10 Nov: no rail call, a door that told him the rail had
+         refused, and a reason thrown away. Found by 144's own test of the failure path. */
+      const askedBeat = songDraft.askBeat || '';
       if (!concrete) {
         logLine('song.words.notsubject', words.slice(0, 120), { level: 'info', target: 'music' });
       } else if (said && said.split(' ').length >= 2) {
@@ -2058,7 +2112,6 @@ async function handleSongCall(call) {
       // Take off, then the route with him, one load-bearing beat at a time. Each beat is one short question,
       // each is skippable with "you choose", and there are three at most: after three the brief he gave is
       // the brief he gets, because refusing to make his song is a worse failure than making it thin.
-      const askedBeat = songDraft.askBeat || '';
       if (askedBeat && JOURNEY_SKIP.test(words)) {
         songDraft.skipped.push(askedBeat);
         logLine('song.journey.skip', askedBeat, { level: 'info', target: 'music' });
@@ -2128,8 +2181,10 @@ async function handleSongCall(call) {
         if (styleLine) { payload.feel = styleLine; payload.style = styleLine; }
         // "new" is his decision after being asked, so it overrides the similarity guard.
         if (action === 'new') payload.force = true;
+        railAsked = true;
         const r = await withTimeout(
           gatePost('giftSongStart', payload), 20000, 'the music rail did not answer in time');
+        railOk = true;
         if (r.needs_word && r.prior_id) lastPriorId = r.prior_id;
         if (r.request_id) lastSongRequest = r.request_id;
         if (styleLine && lastSongRequest && !r.needs_word) {
@@ -2172,9 +2227,30 @@ async function handleSongCall(call) {
       }
     }
   } catch (e) {
-    result = 'the music rail refused: ' + ((e && e.message) ? e.message : String(e))
-      + '. Tell him plainly that it did not take, and do not claim a song was made.';
-    railNote('music rail · refused');
+    const why = (e && e.message) ? e.message : String(e);
+    const stack = (e && e.stack) ? String(e.stack).replace(/\s+/g, ' ').slice(0, 700) : '';
+    /* Build 144: the real reason, and who failed.
+       10 Nov 16:08: he gave the tree line and the log held one line, "music rail · refused", for a window in
+       which the rail was never asked at all. The door told him a rail had turned him down - a claim about a
+       rail nobody called - and threw away the error that would have said why. The reason and its stack now go
+       to the record, and the sentence he hears names the thing that actually failed. */
+    logLine('song.fail', (railOk ? 'after the rail · ' : railAsked ? 'rail · ' : 'door · ') + why,
+      { level: 'error', target: 'music', detail: stack });
+    if (railOk) {
+      result = 'the music took the song, then the door failed (' + why + '). Tell him plainly that something '
+        + 'went wrong at the door after the song was asked for; do not say the rail refused it, and do not '
+        + 'claim it is on his shelf until it is.';
+      railNote('the door failed after the rail took it · ' + why.slice(0, 90));
+    } else if (railAsked) {
+      result = 'the music rail refused: ' + why + '. Tell him plainly that it did not take, and do not claim '
+        + 'a song was made.';
+      railNote('music rail · refused · ' + why.slice(0, 90));
+    } else {
+      result = 'nothing reached the music rail: the door itself stopped before it could ask (' + why + '). '
+        + 'Tell him plainly that nothing was made and that the door failed, not the music. Do not say the '
+        + 'rail refused it, and do not claim a song was made.';
+      railNote('no song made · the door failed · ' + why.slice(0, 90));
+    }
   } finally {
     try {
       ws.send(JSON.stringify({
