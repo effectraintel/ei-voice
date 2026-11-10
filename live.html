@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T15:33';
-const BUILD_NO = 139;
+const BUILD = '2026-11-10T15:44';
+const BUILD_NO = 140;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1916,6 +1916,26 @@ const SONG_NEVER_PERSON = /^(?:effectra|intelligence|ei|static|atrium|base44|kno
 function songDraftReset() {
   songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.band = '';
   songDraft.asks = 0; songDraft.at = 0; songDraft.askBeat = ''; songDraft.skipped = [];
+}
+
+/* Build 140: which beat of the route is still open, in the words the door asks it with, or '' when the
+   route is closed. One place, so a question spoken to a door that reopened is the same question the
+   journey put, and not a new one invented for the occasion. */
+function openJourneyBeat() {
+  try {
+    if (!songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000) return '';
+    if (songDraft.asks >= 3) return '';               // three beats is the whole route
+    const beat = songDraft.askBeat || '';
+    if (beat === 'subject') {
+      const role = /^(friend|mate|buddy|partner|someone|somebody|person|people|client)$/i.test(songDraft.who);
+      return songDraft.who
+        ? 'What should it say to ' + (role ? 'them' : songDraft.who) + '?'
+        : 'What should the song be about?';
+    }
+    if (beat === 'band') return 'Which band, or what kind of music? Say you choose and I will pick.';
+    if (beat === 'feel') return 'How should it feel: slow and warm, big and driving, something else? Say you choose and I will pick.';
+    return '';
+  } catch (e) { return ''; }
 }
 
 async function handleSongCall(call) {
@@ -4959,6 +4979,25 @@ function sayGreeting() {
       if (shareStage === 'sheet') setTimeout(() => { try { openShareSheet(); } catch (e) {} }, 600);
     }
   } catch (e) {}
+  /* ---- Build 140: a door that opens mid-journey finishes its own question ----
+     10 Nov 15:39: he had given the subject and then the band, the app went to the background as the door
+     asked how it should feel, and on the way back the fresh mouth said "I am here, Boss" and never asked
+     again. The route stalled on a question nobody had put, and he was left holding an answer to nothing.
+     The open beat is the only thing worth saying on this door, so it takes the place of the greeting. */
+  const beatLine = openJourneyBeat();
+  if (beatLine) {
+    lastGreetAt = Date.now();
+    resumeSpeak = ''; resumeNote = '';
+    resumeLine = '';
+    sessionOpenedAt = Date.now();
+    logLine('journey.resume', (songDraft.askBeat || 'beat') + ' · ' + beatLine.slice(0, 60),
+      { level: 'info', target: 'music' });
+    sendOpeningLine(beatLine, 'You are in the middle of making a song with him and nothing has been made '
+      + 'yet: the route is open at one question, and the app was in the background when it was asked. Ask '
+      + 'that one question again, in your own voice, in one short line. Do not greet him, do not start over, '
+      + 'do not ask a different question, and do not describe the song.');
+    return;
+  }
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
   // Reopening the door a minute later is the same conversation, not a new arrival: it gets no greeting.
@@ -4972,6 +5011,12 @@ function sayGreeting() {
   const line = speak || (fresh
     ? 'I am here. Ask me anything, out loud, and I will do it. If you want to know what I can do, say help.'
     : 'I am here, Boss.');
+  sendOpeningLine(line, note);
+}
+
+/* The one place an opening line is spoken: a greeting, a resumed share, or an open beat of the route.
+   Split out in build 140 so the door has no second way of saying the first thing. */
+function sendOpeningLine(line, note) {
   try {
     ws.send(JSON.stringify({
       clientContent: {
