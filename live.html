@@ -248,7 +248,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-10T11:45';
-const BUILD_NO = 130;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD_NO = 131;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1577,6 +1577,110 @@ function songHearTurn(heard) {
     songDraft.said = t;
     logLine('song.subject.heard', t.slice(0, 120), { level: 'info', target: 'music' });
   }
+}
+
+/* ---------------- route shadow (build 131) ----------------
+   The solver in .agents/scripts/solver.py picks a route from the rail contracts. This is
+   the same decision in the door's own language, run in SHADOW: it works out what the
+   contracts would choose, records that beside what the gate chose, and is never allowed to
+   change the turn. Its answer goes to logLine and nowhere else, and it assigns no state.
+
+   Why shadow first: a route that is wrong should cost a log line, not a song. Once the
+   shadow and the gate agree across real traces, the gate can step back and this can speak.
+   (blueprint step 5)                                                  */
+const SHADOW_VOCAB = [
+  ['make', /\b(make|making|create|creating|write|writing|compose|composing|generate|generating|produce|producing|record)\b/gi],
+  ['share', /\b(share|sharing|pass it to|give it to)\b/gi],
+  ['send', /\b(send|sending|email|mail it)\b/gi],
+  ['look_up', /\b(weather|forecast|temperature|how far|how old|how tall|who is|what is the|what'?s the|population|capital of|time in)\b/gi],
+  ['pay', /\b(pay|payment|invoice|charge|checkout|bill)\b/gi],
+  ['seal', /\b(seal|sealing|certify|notarise|notarize)\b/gi],
+  ['authenticate', /\b(unlock|sign in|log in|open the door)\b/gi]
+];
+// the closed set from intent-vocabulary.json: a pair not here is a gap, not a new noun
+const SHADOW_RAIL = {
+  'make+song': 'songRail', 'keep+song': 'songRail',
+  'share+song': 'shelfShare', 'share+shelf_item': 'shelfShare',
+  'send+message': 'mailCorridor',
+  'look_up+world_fact': 'eiWorldLookup',
+  'pay+payment': 'payRequest',
+  'authenticate+door': 'doorSession'
+};
+const SHADOW_UNROUTABLE = { 'seal+document': 'the sealing rail is unverified' };
+const SHADOW_OBJECT = { make: 'song', keep: 'song', share: 'song', send: 'message',
+  look_up: 'world_fact', pay: 'payment', seal: 'document', authenticate: 'door' };
+const SHADOW_ACK = /^(?:oh|ok|okay|right|correct|thank|thanks|your|yes|yeah|no|nope|nothing|sure|fine|great|good|that'?s|it|is|was|so|hmm|um|alright|you|you'?re|i|i'?m|and|but)[\s,.'!?]*$/i;
+const SHADOW_ASKING = /(words? wrong|got the words|haven'?t given|have not given|didn'?t give|already said|you'?re right|you are right|that'?s right|i said|listen to me)/i;
+
+// the shape: what he wants, never how to get it
+function shadowShape(words) {
+  const said = String(words || '').replace(/\s+/g, ' ').trim();
+  if (!said) return { words: said, unshaped: 'nothing was said' };
+  const bits = said.toLowerCase().match(/[a-z']+/g) || [];
+  if (bits.length && bits.every(w => SHADOW_ACK.test(w))) {
+    return { words: said, unshaped: 'an acknowledgement, not an instruction' };
+  }
+  if (SHADOW_ASKING.test(said)) {
+    return { words: said, unshaped: 'talk about the asking, not about the thing' };
+  }
+  let hits = [];
+  for (const [verb, rx] of SHADOW_VOCAB) {
+    rx.lastIndex = 0;
+    let m;
+    while ((m = rx.exec(said)) !== null) { hits.push({ s: m.index, e: m.index + m[0].length, verb }); }
+  }
+  hits.sort((a, b) => a.s - b.s);
+  const kept = [];
+  let lastEnd = -1;
+  for (const h of hits) {
+    if (h.s < lastEnd) continue;
+    const prev = kept[kept.length - 1];
+    if (prev && prev.verb === h.verb && h.s - prev.e < 24) continue;
+    kept.push(h); lastEnd = h.e;
+  }
+  if (!kept.length) return { words: said, unshaped: 'no verb from the vocabulary' };
+  const intents = [];
+  for (const h of kept) {
+    const before = said.slice(Math.max(0, h.s - 40), h.s);
+    const seg = said.slice(h.s, h.e + 24);
+    let mode = 'new';
+    if (/\b(not|don'?t|do not|never|instead of|without)\b/i.test(before)) mode = 'cancel';
+    else if (h.verb === 'make' && /\b(make it|do it|change it|try it|again|slower|faster|louder|softer|harder|instead)\b/i.test(seg)) mode = 'change';
+    let obj = SHADOW_OBJECT[h.verb];
+    if (h.verb === 'share' && /\b(link|card|this thing|that thing)\b/i.test(said)) obj = 'shelf_item';
+    intents.push({ verb: h.verb, object: obj, mode });
+  }
+  return { words: said, intents };
+}
+
+function shadowPick(words) {
+  const shape = shadowShape(words);
+  if (shape.unshaped) return { pick: '', why: 'unshaped: ' + shape.unshaped, intents: [] };
+  const rails = [];
+  let why = '';
+  for (const it of shape.intents) {
+    if (it.mode === 'cancel') { why = why || 'a cancelled ask'; continue; }
+    if (it.mode === 'change') { why = why || 'a refinement, nothing to refine yet'; continue; }
+    const key = it.verb + '+' + it.object;
+    if (SHADOW_UNROUTABLE[key]) { why = why || 'unroutable: ' + SHADOW_UNROUTABLE[key]; continue; }
+    if (!SHADOW_RAIL[key]) { why = why || 'no rail for ' + key; continue; }
+    rails.push(SHADOW_RAIL[key]);
+  }
+  const song = rails.filter(r => r === 'songRail' || r === 'shelfShare');
+  let pick = '';
+  if (song.length === 2 && rails[0] === 'songRail') pick = 'make_then_share';
+  else if (song.length === 1) pick = song[0] === 'songRail' ? 'make' : 'share';
+  return { pick, why: why || 'route from the contracts', rails, intents: shape.intents };
+}
+
+// called right after the gate, inside its own try/catch, and it changes nothing
+function shadowRouteNote(heard, gatePick) {
+  const v = shadowPick(heard);
+  const gate = String(gatePick || '');
+  logLine('song.route.shadow', JSON.stringify({
+    gate, solver: v.pick, agree: gate === v.pick, why: v.why,
+    intents: (v.intents || []).map(i => i.verb + '+' + i.object + ':' + i.mode)
+  }), { level: 'info', target: 'music' });
 }
 
 function songRouteGate(heard) {
@@ -4575,6 +4679,7 @@ function handleFrame(text) {
         shareIntentAt = Date.now();
       }
       try { songRouteGate(heard); } catch (e) {}
+      try { shadowRouteNote(heard, songRoute && songRoute.pick); } catch (e) {}
       try { songHearTurn(heard); } catch (e) {}
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
