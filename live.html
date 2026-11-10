@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T16:02';
-const BUILD_NO = 141;
+const BUILD = '2026-11-10T16:16';
+const BUILD_NO = 142;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1917,6 +1917,21 @@ function songConcrete(raw) {
 // A name we must never treat as a recipient: our own brand, said while describing a picture.
 const SONG_NEVER_PERSON = /^(?:effectra|intelligence|ei|static|atrium|base44|knownforme|known|enshrine|shrine|engine|boss|door|platform|music|song|south|africa|african|durban|ballito)$/i;
 
+/* Build 142: a band is not a person. On 10 Nov 15:47 he answered the band beat with "laid back blues" and the
+   request went in with who: "Laid" - the door had read the style back to him as a name, and the record held a
+   phantom person. A who made only of the words of the style just given, or a style word on its own, is nobody,
+   and is dropped rather than written down. */
+const SONG_STYLE_WORDS = /^(?:laid|lazy|slack|chill|chilled|relaxed|slow|fast|soft|loud|warm|cool|smooth|sleepy|mellow|sad|happy|bright|dark|hard|heavy|light|acoustic|electric|alternative|indie|blues|blue|rock|pop|jazz|soul|folk|metal|punk|country|reggae|funk|classical|gospel|house|techno|rap|swing|ballad|anthem|vibe|vibes|music|song|style|feel)$/i;
+function songWhoClean(who, band, feel) {
+  const w = String(who || '').trim().replace(/[.,;:!?]+$/, '');
+  if (!w) return '';
+  const style = (String(band || '') + ' ' + String(feel || '')).toLowerCase().trim();
+  const parts = w.toLowerCase().split(/\s+/).filter(Boolean);
+  if (style && parts.length && parts.every(x => style.indexOf(x) >= 0)) return '';
+  if (parts.length <= 2 && parts.every(x => SONG_STYLE_WORDS.test(x))) return '';
+  return w;
+}
+
 function songDraftReset() {
   songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.band = '';
   songDraft.asks = 0; songDraft.at = 0; songDraft.askBeat = ''; songDraft.skipped = [];
@@ -2012,7 +2027,14 @@ async function handleSongCall(call) {
       const concrete = songConcrete(words);
       if (!concrete) {
         logLine('song.words.notsubject', words.slice(0, 120), { level: 'info', target: 'music' });
-      } else if (said && said.split(' ').length >= 2) songDraft.said = words;
+      } else if (said && said.split(' ').length >= 2) {
+        // Build 142: an answer to a beat is not the subject. On 10 Nov he gave the couch line, then "laid back
+        // blues" as the band, and the tool call carried both lines in `words`, so the style was written into his
+        // words too and the record read "This afternoon ... Laid back blues." The subject he already gave
+        // stands, and the beat's own answer goes where the beat puts it.
+        if (askedBeat) songDraft.said = songDraft.said || words;
+        else songDraft.said = words;
+      }
       else if (said && !songDraft.said) songDraft.said = words;
 
       // A seed with no concrete word in it is not a subject, however many words it has. Checked here as
@@ -2096,7 +2118,7 @@ async function handleSongCall(call) {
         const payload = {
           action: 'make',
           text: songDraft.said || words || 'again',
-          who: songDraft.who || String(args.who || '').trim(),
+          who: songWhoClean(songDraft.who || String(args.who || '').trim(), songDraft.band, songDraft.feel),
           session_id: s.token.slice(0, 24),
         };
         // Build 138: the band and the feel he chose on the journey travel WITH the song. Two places,
@@ -2136,6 +2158,7 @@ async function handleSongCall(call) {
             sub: whoNamed ? 'for ' + whoNamed : '', url: '', code: '', song_id: '' };
           shareCardTarget = shareCard;
           railNote('made · it will land on his shelf');
+          madeSave();
           startMadeWatch();
           let songTold = '';
           try { songTold = localStorage.getItem(SONG_TOLD) || ''; } catch (e) {}
@@ -2910,6 +2933,29 @@ let shareStage = 'idle';                     // idle → art → waiting → she
    question, then the sheet, as soon as the rail says the audio is delivered. */
 let madeShare = null;      // { request_id, who, text, title, stage: 'making' | 'ready' }
 let madeWatch = 0, madeTries = 0;
+/* Build 142: a make outlives the page it was started on. On 10 Nov 15:47 he asked for a song, the app left the
+   room around 15:50, and the take landed at 15:53 with nobody in the room to say so: the watch lives in
+   memory, so a door that closes or is backgrounded stops watching and the landing is only ever a mail. The
+   request is written down while it is in flight, and the next door picks it up. */
+const MADE_KEY = 'ei.made.v1';
+function madeSave() {
+  try {
+    if (!madeShare || !madeShare.request_id) return;
+    localStorage.setItem(MADE_KEY, JSON.stringify({
+      request_id: madeShare.request_id, who: madeShare.who || '', said: madeShare.text || '',
+      title: madeShare.title || '', at: Date.now(),
+    }));
+  } catch (e) {}
+}
+function madeLoad() {
+  try {
+    const d = JSON.parse(localStorage.getItem(MADE_KEY) || 'null');
+    if (!d || !d.request_id) return null;
+    if (!d.at || Date.now() - d.at > 45 * 60 * 1000) { localStorage.removeItem(MADE_KEY); return null; }
+    return d;
+  } catch (e) { return null; }
+}
+function madeClear() { try { localStorage.removeItem(MADE_KEY); } catch (e) {} }
   // A song made for nobody in particular belongs on his shelf and nowhere else. A made song only goes on to
 // the share step if he asked for it to be sent, or if he named a person while a share was in the air
 // ("I want to create a song and share it to somebody" ... "make a new song from my words").
@@ -3702,7 +3748,8 @@ function startMadeWatch() {
           || /^(?:made|delivered)$/i.test(String(r.status || ''))
           || /deliver|sent|ready|complete/i.test(String(r.status || '')))) { await madeReady(r); return; }
     } catch (e) { /* a record that does not answer is not a song that failed */ }
-    if (madeTries < 10) madeWatch = setTimeout(tick, 20000);
+    // The rail took 5m31s on 10 Nov (asked 15:47:50, delivered 15:53:21) and the watch gave up long before it.
+    if (madeTries < 16) madeWatch = setTimeout(tick, madeTries <= 3 ? 8000 : 30000);
     else {
       // The take can already be in the vault while the record still says "asked" (10 Nov 13:29). One call
       // to the sweep and one re-read turns that miss into a landing, which is the difference between four
@@ -3731,6 +3778,7 @@ function startMadeWatch() {
           try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
         }
         logLine('made.wait.released', 'the step is let go rather than left holding the door', { level: 'warn', target: 'music' });
+        madeClear();
         doorNote('the song he asked for has not come back yet, so there is nothing to send and no sheet. Say '
           + 'that in one short line: it is still coming and he can ask again in a minute. Do not say it was '
           + 'found, and do not say it was lost.', true);
@@ -3744,6 +3792,7 @@ function startMadeWatch() {
 // picture (if he has not described one) or open the sheet for the address.
 async function madeReady(r) {
   if (!madeShare) return;
+  madeClear();                       // it has landed: there is nothing left to watch (build 142)
   const title = (r && r.title) || madeShare.title || '';
   let card = null;
   try {
@@ -5019,6 +5068,17 @@ function sayGreeting() {
       + 'do not ask a different question, and do not describe the song.');
     return;
   }
+  /* Build 142: a door that opens with a song still in the air keeps watching it. Nothing is said here; the
+     watch says the one true line when the take lands, which is what never happened at 15:53 on 10 Nov. */
+  try {
+    const pend = madeLoad();
+    if (pend && (!madeShare || !madeShare.request_id)) {
+      madeShare = { request_id: pend.request_id, who: pend.who || '', text: pend.said || '',
+        title: pend.title || '', stage: 'making' };
+      logLine('made.resume', pend.request_id + ' · still watching', { level: 'info', target: 'music' });
+      startMadeWatch();
+    }
+  } catch (e) {}
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
   // Reopening the door a minute later is the same conversation, not a new arrival: it gets no greeting.
