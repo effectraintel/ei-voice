@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-09T21:00';
-const BUILD_NO = 124;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T08:55';
+const BUILD_NO = 125;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1526,7 +1526,12 @@ const SONG_SCRIPT =
   '"send it again", "the same one" or "resend" means call song with resend; "a new one", "a different song" ' +
   'or "no, make a new one" means call song with new; "again", "another take" or "a different version" means ' +
   'call song with again. Only then say the line the tool returns, in one sentence. Never claim a song was ' +
-  'made or sent before the tool has told you so. ';
+  'made or sent before the tool has told you so. ' +
+  // 10 Nov 08:41: a song made "to share with somebody" ended in his own inbox, because the make path had
+  // no send step at all. It has one now, owned by the door, so the sentence the model was told is true.
+  'A song he makes here can be sent on to someone: the door asks once whether a picture goes with it and '
+  + 'opens the sheet for the address when the song lands. So never tell him a made song can only reach his '
+  + 'own inbox, and never say a sheet is open unless the door has opened one. ';
 
 let lastSongRequest = '';
 let lastPriorId = '';   // the take he already has, named by the last prompt-back
@@ -1592,7 +1597,15 @@ async function handleSongCall(call) {
       result = r.line + ' (status: ' + r.status + (r.title ? ', title: ' + r.title : '') + ')';
       railNote('music rail · checked · ' + r.status);
       // The moment the rail says it is delivered, its card belongs on the shelf.
-      if (/deliver|sent|ready|complete/i.test(String(r.status || ''))) refreshCards(true);
+      if (/deliver|sent|ready|complete/i.test(String(r.status || ''))) {
+        refreshCards(true);
+        // ...and if this was a song he is sending, the door finishes the hand-off it started, even when the
+        // watch has stopped waiting. Asking "is my song ready" must not leave him without the sheet. (125)
+        if (madeShare && madeShare.stage !== 'ready') {
+          if (r.title) madeShare.title = r.title;
+          madeReady(r).catch(() => {});
+        }
+      }
     } else if (action === 'resend') {
       // Sending him something he already has makes nothing, so it needs no words: the
       // take is named by the last prompt-back, or by the record itself.
@@ -1681,6 +1694,31 @@ async function handleSongCall(call) {
           // name of the song. It says what is happening and to what, instead.
           const subject = String(words || 'another take').slice(0, 60);
           looked = 'in the studio · ' + subject;
+          // Build 125: this song is also a thing to send. Hold it as the share card and open the picture
+          // step now, while it is being made, so the one question is asked once. Nothing is sent, and no
+          // sheet opens, until the rail says the audio is delivered.
+          const whoNamed = String(payload.who || '').trim();
+          // A song can be made for a place or an idea ("a song about Ballito") and that is not a gift. The
+          // hand-off is earned by his words: he said he wants it sent, or he said who it is for.
+          const saidForSomeone = /\b(?:for|to)\s+(?:my\s+)?(?:mother|mom|mum|father|dad|sister|brother|son|daughter|wife|husband|partner|friend|mate|gran|grandma|grandpa|aunt|aunty|uncle|cousin|niece|nephew|colleague)\b|\b(?:for|to)\s+[A-Z][a-z]{2,}/i
+            .test(String(payload.text || '') + ' ' + String(lastHeardText || ''));
+          const askedToSend = Date.now() - shareIntentAt < 15 * 60 * 1000;
+          if (saidForSomeone || askedToSend) {
+            madeShare = {
+              request_id: lastSongRequest || '', who: whoNamed, text: payload.text || '',
+              title: r.title || '', stage: 'making',
+            };
+            shareCard = { kind: 'made', title: r.title || 'the song he is making',
+              sub: whoNamed ? 'for ' + whoNamed : '', url: '', code: '', song_id: '' };
+            shareCardTarget = shareCard;
+            shareArt = { want: false, brief: '' }; shareArtTries = 0; artLockedAt = 0;
+            shareStage = 'art'; shareCoverAsked = true;
+            railNote('made · the share step follows · ' + (whoNamed || 'no name yet'));
+            startMadeWatch();
+          } else {
+            madeShare = null;
+            railNote('made · his inbox only');
+          }
           let songTold = '';
           try { songTold = localStorage.getItem(SONG_TOLD) || ''; } catch (e) {}
           // The band is his, and nothing about a voice channel reveals that. Said once, beside the
@@ -2049,13 +2087,20 @@ function judgeClaim() {
   try {
     const t = String(said.engine || '');
     if (!t) return;
-    if (Date.now() - artLockedAt < 3000
-        && /\b(?:which|what) (?:picture|cover|image|drawing)\b|should a picture|what should it show|give me the details\b/i.test(t)) {
+    // A locked picture brief stays locked (build 125). It used to be remembered for three seconds, so the
+    // second ask nine seconds later went out and he described the cats and the horse twice (10 Nov, 08:41).
+    const artQ = /\b(?:which|what) (?:picture|cover|image|drawing)\b|should a picture|what should it show|give me the details\b/i.test(t);
+    if (artQ && artLockedAt && Date.now() - artLockedAt < 20 * 60 * 1000
+        && (shareStage === 'waiting' || shareStage === 'sheet' || shareStage === 'sent')) {
       hiddenHold = true;
       hiddenHoldUntil = Date.now() + 1200;
       logLine('claim.stale.art', t.slice(0, 140), { level: 'warn', target: 'stale' });
-      doorNote('His picture brief is already locked and the sheet is open on his screen. Do not ask for it '
-        + 'again. Say one short line that the sheet is waiting for the address and his message.', true);
+      doorNote(shareStage === 'sheet'
+        ? 'His picture brief is already locked and the sheet is open on his screen. Do not ask for it again. '
+          + 'Say one short line that the sheet is waiting for the address and his message.'
+        : 'His picture brief is already locked and the song is still being made, so there is no sheet yet. Do '
+          + 'not ask about the picture again. Say one short line that it is noted and that the sheet opens when '
+          + 'the song lands.', true);
       return;
     }
     // "You can type the address and message right here on the sheet" when no sheet exists is the same class of
@@ -2067,8 +2112,12 @@ function judgeClaim() {
         hiddenHold = true;                      // the claim is not spoken at all
         hiddenHoldUntil = Date.now() + 1500;
         logLine('claim.sheet', t.slice(0, 160), { level: 'warn', target: 'no-sheet' });
-        doorNote('There is no sheet on his screen: the door has not opened one, and nothing is waiting to be '
-          + 'typed. Do not mention a sheet, an address box or a message box. Ask him what he wants next.',
+        doorNote((madeShare && madeShare.stage !== 'ready')
+          ? 'There is no sheet yet: the song he asked for is still being made, and the door opens the sheet '
+            + 'for the address when it lands. Do not mention a sheet, an address box or a message box. Say one '
+            + 'short line that it is on its way and the sheet follows.'
+          : 'There is no sheet on his screen: the door has not opened one, and nothing is waiting to be '
+            + 'typed. Do not mention a sheet, an address box or a message box. Ask him what he wants next.',
           true);
       }
       return;
@@ -2360,7 +2409,19 @@ let shareDraft = null;
 // same song three times. Nothing here is a guard bolted onto that; the order is the design, each step
 // closes before the next opens, and the send is the door's alone.
 let shareCard = null;                        // the song the door has locked, and the card it put down
-let shareStage = 'idle';                     // idle → art → sheet → sent. One step open at a time.
+let shareStage = 'idle';                     // idle → art → waiting → sheet → sent. One step open at a time.
+/* Build 125. A song made here is a song he may want to send, and the make path used to end in his own
+   inbox: nothing asked who it was for, the picture answer had no step to live in, and the sheet could
+   never open. (Edwin, 10 Nov 08:41: "I want to create a song and share it to somebody" then, when the
+   song had landed, "Can I put the email that you have to send it to?" - and there was no sheet to type
+   it on.) A made song now hands itself to the same share step an existing song uses: one picture
+   question, then the sheet, as soon as the rail says the audio is delivered. */
+let madeShare = null;      // { request_id, who, text, title, stage: 'making' | 'ready' }
+let madeWatch = 0, madeTries = 0;
+// A song made for nobody in particular belongs in his inbox and nowhere else. A made song only goes on to
+// the share step if he asked for it to be sent, or if he named a person while a share was in the air
+// ("I want to create a song and share it to somebody" ... "make a new song from my words").
+let shareIntentAt = 0;
 // The door's own ear for the song step. Intent arms it; the next thing he says is handed to the rail by the
 // door if the model has not done it, because a model that skips the tool will still answer as though it
 // called it.
@@ -2867,6 +2928,16 @@ function resolveChoice(heard) {
   });
 }
 
+// While a song is being made the door sits on the picture step for a minute or more, and he may well say
+// something else in that time ("how long will this take"). A question about the wait is not a picture
+// brief, so it is left to the model instead of being locked as one. (build 125)
+function artAnswerCandidate(heard) {
+  const w = String(heard || '');
+  if (wantsCoverArt(w)) return true;
+  if (/^(no|nope|nothing|skip|just the song|no cover|no picture)\b/i.test(w.trim())) return true;
+  return !/\b(how long|when will|how much longer|is it (?:done|ready)|are you|did it|what time|why)\b/i.test(w);
+}
+
 function wantsCoverArt(heard) {
   const w = String(heard || '');
   if (!/\b(picture|photo|cover|image|drawing|illustration|artwork|painting)\b/i.test(w)) return false;
@@ -2876,7 +2947,9 @@ function wantsCoverArt(heard) {
 
 function shareArtAnswer(heard) {
   const words = String(heard || '').trim();
-  const no = /^(no|nope|nothing|just the song|no cover|no picture|no drawing|don'?t|skip)/i.test(words);
+  // The word boundary here was a raw backspace byte in builds up to 124, so this test could never match:
+  // "no picture" was locked as a picture brief and drawn. Found by the build-125 harness, fixed here.
+  const no = /^(no|nope|nothing|just the song|no cover|no picture|no drawing|don'?t|skip)\b/i.test(words);
   if (no) {
     shareArt = { want: false, brief: '' };
     railNote('share · art · none');
@@ -2916,7 +2989,22 @@ function shareArtAnswer(heard) {
     saveDraft();
     railNote('share · art locked · ' + (shareArt.brief || 'from the song').slice(0, 60));
     logLine('share.art', shareArt.brief || '(from the song)', { level: 'info' });
-    artLockedAt = Date.now();
+  }
+  // Answered is answered, whether the answer was a picture or a plain no. It used to be stamped only on
+  // the yes path, so a "no cover" left the step looking unanswered and the question came back. (build 125)
+  artLockedAt = Date.now();
+  // A song still being made has no link yet, so a sheet now would be a form that cannot send. The brief
+  // is locked here and the sheet opens the moment the rail says the song is delivered. (build 125)
+  if (madeShare && madeShare.stage !== 'ready') {
+    madeShare.art = { want: shareArt.want, brief: shareArt.brief };
+    shareStage = 'waiting';
+    saveDraft();
+    railNote('share · picture locked · waiting for the song to land');
+    doorNote('his picture brief is locked and the door has it. The song is still being made, so there is no '
+      + 'sheet yet and nothing to send. Say one short line that the picture is noted and that the sheet for '
+      + 'the address opens as soon as the song lands. Do not ask about the picture again.', true);
+    startMadeWatch();
+    return;
   }
   // Step 3 opens: the popup, where he types the address himself and writes the message.
   shareStage = 'sheet';
@@ -2930,6 +3018,81 @@ function shareArtAnswer(heard) {
       + 'so he knows where to look, and do not ask for the address or the message in words.', true);
 }
 
+
+/* The rail makes the song in the background, so the door watches the record instead of asking him to come
+   back later. It checks every eight seconds for about a minute and a half, holds no turn open, and says
+   nothing while it waits. (build 125) */
+function startMadeWatch() {
+  if (madeWatch || !madeShare || madeShare.stage === 'ready') return;
+  madeTries = 0;
+  const tick = async () => {
+    madeWatch = 0;
+    if (!madeShare || madeShare.stage === 'ready') return;
+    madeTries++;
+    try {
+      const r = await withTimeout(
+        gatePost('giftSongStart', { action: 'check', request_id: madeShare.request_id || '' }), 15000,
+        'the record did not answer');
+      if (r && r.title) madeShare.title = r.title;
+      if (r && /deliver|sent|ready|complete/i.test(String(r.status || ''))) { await madeReady(r); return; }
+    } catch (e) { /* a record that does not answer is not a song that failed */ }
+    if (madeTries < 10) madeWatch = setTimeout(tick, 20000);
+    else {
+      railNote('the song is taking longer than the door waits');
+      logLine('made.wait.long', (madeShare && madeShare.title) || 'no title yet', { level: 'warn', target: 'music' });
+    }
+  };
+  madeWatch = setTimeout(tick, 8000);
+}
+
+// The song has landed. Find its own card on the rail so the sheet sends a real link, then either ask the
+// picture (if he has not described one) or open the sheet for the address.
+async function madeReady(r) {
+  if (!madeShare) return;
+  const title = (r && r.title) || madeShare.title || '';
+  let card = null;
+  try {
+    if (title) {
+      const w = await withTimeout(gatePost('songShare', { action: 'find', query: title }), 30000,
+        'the sharing rail did not answer');
+      if (w && w.ok && w.url) {
+        card = { kind: w.found === 'shelf' ? 'song' : (w.kind || 'store'), title: w.title || title,
+          sub: w.found === 'shelf' ? 'made here · a day of listening'
+            : [w.artist, w.album].filter(Boolean).join(' · '),
+          url: w.url, code: w.code || '', song_id: w.song_id || '' };
+        railNote('share · the made song · ' + (w.code || 'wrapped'));
+      } else if (w && w.ok && w.found === 'choice' && (w.candidates || []).length === 1) {
+        const c2 = await withTimeout(gatePost('songShare', { action: 'choose', candidate: w.candidates[0] }), 30000,
+          'the sharing rail did not answer');
+        if (c2 && c2.url) {
+          card = { kind: 'song', title: c2.title || title, sub: 'made here · a day of listening',
+            url: c2.url, code: c2.code || '', song_id: c2.song_id || '' };
+        }
+      }
+    }
+  } catch (e) { /* a link that will not wrap is not a song that did not land */ }
+  if (card) mergeCard(card);
+  shareCard = card || { kind: 'made', title: title || 'your song', sub: 'made here', url: '', code: '', song_id: '' };
+  shareCardTarget = shareCard;
+  madeShare.stage = 'ready';
+  saveDraft();
+  const lockedArt = madeShare.art || null;
+  if (!lockedArt) {
+    shareStage = 'art';
+    railNote('made · landed · asking the picture');
+    doorNote('"' + shareCard.title + '" has landed in his inbox and on his shelf. Say the title once, plainly, '
+      + 'then ask once whether a picture should go with it and what it should show. Do not offer to send it: '
+      + 'the sheet does that.', true);
+    return;
+  }
+  shareArt = { want: !!lockedArt.want, brief: lockedArt.brief || '' };
+  shareStage = 'sheet';
+  openSheetWhenQuiet(shareCard, shareArt, 0);
+  railNote('made · landed · sheet open for the address');
+  doorNote('"' + shareCard.title + '" has landed. The sheet is open on his screen now for the address and his '
+    + 'message, and the picture he described will be drawn when he sends. Say one short line so he knows where '
+    + 'to look. Do not ask for the address or the message in words.', true);
+}
 
 function shelfFind(words) {
   const q = shareTokens(words);
@@ -3747,6 +3910,8 @@ function openShareSheet(card, art) {
             shareCard = null; shareCardTarget = null; shareQuery = ''; shareChoices = [];
             shareArt = { want: false, brief: '' }; shareArtTries = 0;
             shareCoverAsked = false; shareAddrOk = false;
+            madeShare = null;
+            if (madeWatch) { clearTimeout(madeWatch); madeWatch = 0; }
             if (shareStage === 'sent') shareStage = 'idle';
             railNote('share · closed · ready for the next one');
           } catch (e) {}
@@ -4059,6 +4224,16 @@ function sayGreeting() {
       const d = loadDraft();
       if (d && d.stage && d.stage !== 'sent' && d.stage !== 'idle') {
         shareCard = d.card; shareCardTarget = d.card; shareStage = d.stage;
+        // 'waiting' means the song had not landed when he left the page, and that watch lives in memory
+        // only. The door asks about the picture again rather than holding a sheet that cannot send.
+        if (shareStage === 'waiting') shareStage = 'art';
+        // A made song's card has no link until the rail delivers it, and the watch that waits for it lives in
+        // memory. A reload therefore has nothing it can send, so the draft goes rather than a sheet that fails.
+        if (d.card && d.card.kind === 'made') {
+          shareCard = null; shareCardTarget = null; shareStage = 'idle';
+          try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+          logLine('share.resume.dropped', 'a made song with no link yet', { level: 'info', target: 'share' });
+        }
         shareArt = d.art || { want: false, brief: '' };
         logLine('share.resume', (d.card && d.card.title || 'a song') + ' · ' + d.stage,
           { level: 'info', target: 'share' });
@@ -4221,6 +4396,11 @@ function handleFrame(text) {
       userTurns++;
       silenceNudges = 0;
       lastHeardText = heard;
+      // "I want to create a song and share it to somebody" is the intent that makes a made song a gift.
+      // Remembered for fifteen minutes, and only as a hint: nothing is sent without his address typed.
+      if (/\b(?:share|send)\b|\b(?:make|write|create|do)\b[^.?!]{0,40}\b(?:for|to)\s+(?:my|his|her)\b/i.test(heard)) {
+        shareIntentAt = Date.now();
+      }
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
       armSilenceWatch(heard);
@@ -4236,7 +4416,7 @@ function handleFrame(text) {
       // Step 2 of the share: this utterance IS the answer about the picture. The door takes it, locks it,
       // and opens the sheet. The model is not asked, because a model asked twice answers twice.
       if (sharePending && resolvePending(heard)) { /* the name was being checked: that was the answer */ }
-      else if (shareStage === 'art') { shareArtAnswer(heard); }
+      else if (shareStage === 'art' && artAnswerCandidate(heard)) { shareArtAnswer(heard); }
       // The cover question may still be asked by the model rather than the door. If he answers it with a
       // picture in mind while a song is on the shelf, that is the art step whether or not the door opened
       // it: the answer is taken here rather than dropped on the floor.
