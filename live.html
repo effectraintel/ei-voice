@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T08:55';
-const BUILD_NO = 125;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T10:40';
+const BUILD_NO = 126;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2132,8 +2132,13 @@ function judgeClaim() {
     const shelfAsk = /\?|\b(?:would you like|do you want|shall (?:i|we)|want me to|let me know)\b/i;
     // One turn can hold a claim and a question ("...is on the shelf now waiting for you. Is that all?"),
     // so each sentence is judged on its own instead of the whole turn being excused by its question mark.
+    // "Nothing is on your shelf for it" is the opposite of a claim, and on 10 Nov this branch caught it,
+    // held a true sentence, told the mouth something false was being said, and returned before the rail
+    // guard below could see that the failure itself had no rail call behind it. One negation fix, and the
+    // existing guard does its job.
+    const shelfNegative = /\b(?:nothing|none|not|no one|nobody|isn'?t|wasn'?t|never|couldn'?t|could not|can'?t|cannot)\b/i;
     const shelfClaimSentence = (String(t).match(/[^.!?]+[.!?]*/g) || [String(t)])
-      .find(x => shelfWriteClaim.test(x) && !shelfAsk.test(x));
+      .find(x => shelfWriteClaim.test(x) && !shelfAsk.test(x) && !shelfNegative.test(x));
     if (shelfClaimSentence && !(shelfWriteAt && Date.now() - shelfWriteAt < 60000)) {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
@@ -2558,7 +2563,18 @@ function noteSongAnswer(heard) {
     awaitSong = Date.now();
   }
   if (!awaitSong || Date.now() - awaitSong > 90000) return;
-  if (shareStage !== 'idle' || shareQuery) { awaitSong = 0; return; }
+  if (shareStage !== 'idle' || shareQuery) {
+    // A stale step is not a reason to go deaf. If the door is holding 'waiting' or an unfinished picture
+    // step with no song behind it, it lets go and searches, rather than swallowing the turn. (10 Nov 08:19)
+    const nothingBehind = shareStage === 'waiting'
+      || (shareStage === 'art' && (!shareCard || shareCard.kind === 'made'));
+    if (nothingBehind && !madeShare && !shareQuery) {
+      shareStage = 'idle'; shareCard = null; shareCardTarget = null;
+      shareArt = { want: false, brief: '' }; shareArtTries = 0;
+      try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+      logLine('share.stale.cleared', 'a step with nothing behind it, let go', { level: 'warn', target: 'share' });
+    } else { awaitSong = 0; return; }
+  }
   // Thinking aloud is not a song. "I'm still thinking about it" and "hold on" have no business reaching the
   // rail, and a title that shares a word with them is exactly how a wrong search gets born. The door keeps the
   // ear open and says one short line, once; it does not turn a pause into a query.
@@ -3034,12 +3050,32 @@ function startMadeWatch() {
         gatePost('giftSongStart', { action: 'check', request_id: madeShare.request_id || '' }), 15000,
         'the record did not answer');
       if (r && r.title) madeShare.title = r.title;
-      if (r && /deliver|sent|ready|complete/i.test(String(r.status || ''))) { await madeReady(r); return; }
+      if (r && r.song_id) madeShare.song_id = r.song_id;
+      // "Landed" means a take exists in the vault. Reading the word "delivered" instead was the fault on
+      // 10 Nov: the record sat at "asked" for four minutes while the take was being made, the door called
+      // it not-ready ten times, gave up, and then ignored every share turn in the session.
+      if (r && (r.landed === true
+          || /^(?:made|delivered)$/i.test(String(r.status || ''))
+          || /deliver|sent|ready|complete/i.test(String(r.status || '')))) { await madeReady(r); return; }
     } catch (e) { /* a record that does not answer is not a song that failed */ }
     if (madeTries < 10) madeWatch = setTimeout(tick, 20000);
     else {
       railNote('the song is taking longer than the door waits');
       logLine('made.wait.long', (madeShare && madeShare.title) || 'no title yet', { level: 'warn', target: 'music' });
+      // Giving up must also let go. A door left holding 'waiting' silently drops every share turn after
+      // it, which is exactly what happened at 10 Nov 08:19: four turns, not one search, and a mouth
+      // inventing a failure. It releases the step and says what is true instead.
+      if (madeShare && madeShare.stage !== 'ready') {
+        madeShare = null;
+        if (shareStage === 'waiting' || shareStage === 'art') {
+          shareStage = 'idle'; shareCard = null; shareCardTarget = null;
+          try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+        }
+        logLine('made.wait.released', 'the step is let go rather than left holding the door', { level: 'warn', target: 'music' });
+        doorNote('the song he asked for has not come back yet, so there is nothing to send and no sheet. Say '
+          + 'that in one short line: it is still coming and he can ask again in a minute. Do not say it was '
+          + 'found, and do not say it was lost.', true);
+      }
     }
   };
   madeWatch = setTimeout(tick, 8000);
