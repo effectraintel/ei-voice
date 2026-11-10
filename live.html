@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T21:46';
-const BUILD_NO = 155;
+const BUILD = '2026-11-10T21:49';
+const BUILD_NO = 156;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -571,14 +571,14 @@ window.addEventListener('DOMContentLoaded', () => {
 async function keepCurrent() {
   try {
     const last = Number(sessionStorage.getItem('ei-build-check') || 0);
-    if (Date.now() - last < 60000) return;
+    if (Date.now() - last < 60000) { logPageLoad(); return; }
     sessionStorage.setItem('ei-build-check', String(Date.now()));
     // Edwin, 8 Nov 13:53: "I'm accessing from the live.html not with a build number." He should not have
     // to carry a version in the address. Two faults kept him on an old page: a held 30-minute door token
     // made this check skip itself entirely, and the reload went back to the bare path, straight into the
     // cached copy it was trying to escape. So: check unless a conversation is actually open, and land on a
     // fresh address when it takes the new build.
-    if (sessionUp || listening || busy) return;
+    if (sessionUp || listening || busy) { logPageLoad(); return; }
     // The check asks a three-byte file, not the whole door. Fetching live.html to read its own version
     // downloaded the page twice on every open and made the log look like two builds running at once.
     let latest = 0;
@@ -603,6 +603,7 @@ async function keepCurrent() {
     } else {
       logLine('build.probe', 'latest is ' + (latest || BUILD_NO) + ', this door is ' + BUILD_NO,
         { level: 'info' });
+      logPageLoad();
     }
   } catch { /* a check that cannot run must never stand in the way of the door */ }
 }
@@ -959,9 +960,21 @@ const DOC_TAG = Math.random().toString(16).slice(2, 6);
 // Born below LOG_SID on purpose. The first version sat above it and died in the temporal dead zone, inside
 // its own try/catch — an instrument that silently recorded nothing, which is the exact fault it existed to
 // catch. (8 Nov 13:52: the log could not tell me which build he was in.)
-try {
-  logLine('page.load', 'build ' + BUILD_NO + ' \u00b7 ' + String(navigator.userAgent || '').slice(0, 70));
-} catch (e) {}
+/* Build 156: one birth line per open, naming the build he actually ends up in.
+   10 Nov 2026, 21:48: the log showed "build 154" at 19:48:34 and "build 155" at 19:48:35. Nothing was wrong
+   with either: GitHub Pages served its ten-minute-old copy, the probe found 155, and the door took it. But
+   two births one second apart read like two doors running at once, and the first one was already out of date
+   when it was written. So the birth line waits for the probe: a page that hands over says one update line,
+   and the page that stays says one birth line. A page that dies before the probe still reports its birth. */
+let pageLoadLogged = false;
+function logPageLoad() {
+  if (pageLoadLogged) return;
+  pageLoadLogged = true;
+  try {
+    logLine('page.load', 'build ' + BUILD_NO + ' \u00b7 ' + String(navigator.userAgent || '').slice(0, 70));
+  } catch (e) {}
+}
+setTimeout(logPageLoad, 5000);
 try {
   window.addEventListener('error', (e) => {
     logLine('page.error', (e && (e.message || e.type) || 'error') + ' @' + (e && e.lineno || '?'),
