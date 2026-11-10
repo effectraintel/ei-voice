@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T19:35';
-const BUILD_NO = 149;
+const BUILD = '2026-11-10T20:40';
+const BUILD_NO = 150;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -5289,25 +5289,39 @@ function threadRestoreOnScreen(th) {
 /* A refusal: what is wrong, whose it is, and what actually lifts it. Only the kind goes on the screen in our
    own words; the server's sentence is kept once, in the log, for the record. */
 const REFUSALS = [
+  /* Build 150: the screen never names a supplier and never talks about cost.
+     Edwin, 10 Nov 20:20: "although the Google refusing the voice is an absolute truth, we cannot tell the whole
+     world that we run on Google and that we are having problems with voice refusal... we need the message to be
+     something more appropriate and less brand damaging." He is right, and it is the branding rule in his own
+     words: an externally shareable surface carries Effectra Intelligence and nothing else. A door that reads out
+     its supplier, its billing state and a supplier URL has published the inside of the business to whoever is
+     holding the phone.
+     So the screen says what a person needs and nothing more: the voice is unavailable, it was not their doing,
+     nothing they made was lost, and the shelf still works. Two shapes only, because the difference that matters
+     to him is whether waiting helps. What actually broke goes to the log and to the alert that reaches the owner
+     (doorVoiceWatch, every five minutes), which is where the supplier's name belongs. */
   { kind: 'cap',
     re: /spending cap|exceeded its monthly|spend limit|monthly spend|billing/i,
-    line: 'the door is fine: Google is refusing the voice. This project has reached its monthly spending cap, '
-      + 'and nothing you tap here can lift it. Clear it at https://ai.studio/spend, and it also lifts on 1 December.' },
+    waiting: true },
   { kind: 'quota',
     re: /quota|resource.?exhausted|rate limit|too many requests|\b429\b/i,
-    line: 'the door is fine: Google is refusing the voice for the moment, its allowance for now is used up. '
-      + 'Nothing to tap; it comes back on its own.' },
-  { kind: 'key',
-    re: /api key|unauthori[sz]ed|permission|forbidden|\b403\b|invalid.{0,12}key/i,
-    line: 'the door is fine: Google is refusing the voice because the key it speaks with is not being accepted. '
-      + 'That is mine to fix, not yours.' },
-  { kind: 'model',
-    re: /model.{0,40}(?:not found|no longer|unsupported|deprecated)|\b404\b/i,
-    line: 'the door is fine: the model this door speaks with is no longer being served. That is mine to fix, not yours.' },
+    waiting: true },
   { kind: 'balance',
     re: /insufficient|no credit|out of credit|balance/i,
-    line: 'the door is fine: the account behind this door has run out of credit. That is mine to fix, not yours.' },
+    waiting: true },
+  { kind: 'key',
+    re: /api key|unauthori[sz]ed|permission|forbidden|\b403\b|invalid.{0,12}key/i,
+    waiting: false },
+  { kind: 'model',
+    re: /model.{0,40}(?:not found|no longer|unsupported|deprecated)|\b404\b/i,
+    waiting: false },
 ];
+// The two lines a member may read. No supplier, no billing words, no link, nothing to be alarmed by and
+// nothing untrue: it does not say the fault is fixed, and it does not ask them to wait for a time.
+const VOICE_WAITING = 'the voice is unavailable just now. Nothing you did caused it, and nothing you said or made '
+  + 'was lost. It comes back on its own; your shelf keeps working.';
+const VOICE_OURS = 'the voice is unavailable just now. Nothing you did caused it, and nothing you said or made was '
+  + 'lost. This one is ours to fix, and your shelf keeps working.';
 function refusalOf(text) {
   const t = String(text || '');
   if (!t) return null;
@@ -5319,8 +5333,8 @@ let refused = null;      // {kind, line, at} while the voice is being refused
 function doorRefused(raw) {
   const r = refusalOf(raw);
   const kind = r ? r.kind : 'other';
-  const line = r ? r.line : 'the door is fine: the voice was refused, and the reason is not one this door can '
-    + 'name. The log has it.';
+  // What the member sees: the same two lines, whichever supplier refused and whatever it cost.
+  const line = (r && r.waiting) ? VOICE_WAITING : VOICE_OURS;
   const fresh = !refused || refused.kind !== kind || (Date.now() - refused.at) > 60000;
   refused = { kind: kind, line: line, at: Date.now() };
   if (fresh) logLine('door.refused', kind + ' \u00b7 ' + String(raw || '').slice(0, 240),
@@ -5336,7 +5350,7 @@ function doorRefused(raw) {
   try { stopClock(); } catch (e) {}
   try { closeMic(); } catch (e) {}
   try { foldForDoor(false); } catch (e) {}
-  setState('the voice is refused');
+  setState('the voice is unavailable');
   warn(line);
 }
 
