@@ -133,19 +133,36 @@
   #shelfline #shelfclear[hidden] { display:none; }
   #shelf.on { display:flex; }
   #shelf::-webkit-scrollbar { display:none; }
-  .card { flex:0 0 auto; min-width:150px; max-width:220px; background:#171412; border:1px solid #2e2a24;
-          border-radius:10px; padding:8px 10px; text-align:left; position:relative; }
+  /* Build 159 (Edwin, 10 Nov 2026 23:36): "look at how the artwork gets added to the shelf. This is
+     actually not a bad thing if there is artwork to show... It brightens up the shelf space and spaces
+     out the action labels/text so that it becomes more visible. We can keep this concept and if we don't
+     have artwork to display we simply fill it with a nice looking placeholder image. We can also reduce
+     the size of it to 1/8 of the current size."
+     So the picture stays, and now every card has one: the cover if the thing owns one, the door's own
+     quiet mark if it does not. It stops being a 230px band above the words and becomes an 80px square
+     beside them, an eighth of the old area, which gives the title, the line under it and the buttons
+     the room to be read rather than crowded. */
+  .card { flex:0 0 auto; min-width:200px; max-width:256px; background:#171412; border:1px solid #2e2a24;
+          border-radius:10px; padding:9px; text-align:left; position:relative;
+          display:flex; align-items:flex-start; gap:9px; }
+  .card .thumb { flex:0 0 auto; width:80px; height:80px; border-radius:8px; overflow:hidden;
+                 background:#1d1915; border:1px solid #2b2721; }
+  .card .thumb img { display:block; width:100%; height:100%; object-fit:cover; }
+  .card .body { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
   .card .k { display:block; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:#7a7164; }
-  .card .t { display:block; margin-top:3px; font-size:12.5px; line-height:1.35; color:#e8dfcc;
+  .card .t { display:block; margin-top:3px; font-size:12.5px; line-height:1.4; color:#e8dfcc;
              overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2;
              -webkit-box-orient:vertical; }
-  .card .d { display:block; margin-top:4px; font-size:10.5px; color:var(--gold); letter-spacing:.04em; }
-  .card a { text-decoration:none; color:inherit; }
-  .card .copy { margin-top:6px; background:none; border:1px solid #3a352d; color:#9b9182; font-size:10px;
-                letter-spacing:.08em; border-radius:6px; padding:2px 7px; }
+  .card .d { display:block; margin-top:5px; font-size:10.5px; line-height:1.3;
+             color:var(--gold); letter-spacing:.04em; }
+  .card a { text-decoration:none; color:inherit; display:block; min-width:0; }
+  /* The buttons get a line of their own with air above them, so a label is read before a chip is
+     pressed. margin-top:auto holds them to the bottom of the card whatever the words do. */
+  .card .acts { display:flex; align-items:center; gap:6px; margin-top:auto; padding-top:9px; }
+  .card .copy { background:none; border:1px solid #3a352d; color:#9b9182; font-size:10px;
+                letter-spacing:.08em; border-radius:6px; padding:3px 7px; line-height:1; }
   .card .copy:active { background:#2b271f; color:#e8dfcc; }
-  .card .copy.share { margin-left:auto; display:block; width:fit-content; color:#c9a86a; border-color:#4a3f26; }
-  .card .copy { display:block; width:fit-content; margin-left:auto; }
+  .card .copy.share { margin-left:auto; color:#c9a86a; border-color:#4a3f26; }
   .card.thought { border-color:#4a3f26; }
   /* The receipt opens over the door, not on someone else's address (7 Nov 2026:
      Edwin - "it does view the certificate or receipt on the base44 url so we have
@@ -193,12 +210,13 @@
     #shelfline { padding:4px 0 0; font-size:9.5px; }
     #shelf { padding:6px 0; }
     #shelf.on { padding-top:6px; }
-    .card { padding:6px 34px 6px 9px; min-width:0; max-width:min(80vw, 260px); }
+    .card { padding:7px; min-width:0; max-width:min(84vw, 256px); gap:8px; }
+    .card .thumb { width:66px; height:66px; }
     .card .t { -webkit-line-clamp:1; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
     .card .k { display:none; }
     .card .t { margin-top:0; font-size:12px; }
-    .card .copy { position:absolute; top:6px; right:6px; padding:2px 5px; font-size:9px; }
-    .card .copy.share { left:auto; right:9px; top:auto; bottom:6px; margin:0; }
+    .card .acts { padding-top:7px; }
+    .card .copy { padding:2px 6px; font-size:9px; }
     .lat { margin-top:3px; font-size:10.5px; }
     .turn { margin-bottom:8px; }
   }
@@ -256,8 +274,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T22:30';
-const BUILD_NO = 158;
+const BUILD = '2026-11-10T23:45';
+const BUILD_NO = 159;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -4800,17 +4818,17 @@ function renderGarage(el) {
     count.title = 'back to the shelf';
   }
   for (const it of garage) {
-    const card = document.createElement('div');
-    card.className = 'card';
-    const k = document.createElement('span'); k.className = 'k'; k.textContent = 'garage';
+    // Build 159: the same picture-and-words shape the shelf uses, so a thing put away does not change
+    // its clothes when it comes back. A song in the garage still owns its cover, so it wears it.
+    const { card, body } = cardShell(it, 'garage');
     const t = document.createElement('span'); t.className = 't'; t.textContent = it.title || 'a thing';
     const d = document.createElement('span'); d.className = 'd';
     d.textContent = (it.kind === 'song' ? 'a song you made' : 'a wrapped link') + (it.subtitle ? ' \u00b7 ' + it.subtitle : '');
-    card.appendChild(k); card.appendChild(t); card.appendChild(d);
-    const row = document.createElement('span'); row.className = 'd';
+    body.appendChild(t); body.appendChild(d);
+    const row = document.createElement('div'); row.className = 'acts';
     const back = document.createElement('button');
     back.type = 'button';
-    back.style.cssText = 'all:unset;cursor:pointer;color:var(--gold);padding-right:14px';
+    back.style.cssText = 'all:unset;cursor:pointer;color:var(--gold);padding-right:12px;font-size:10.5px';
     back.textContent = 'put back';
     back.onclick = () => garageAct('restore', it.ref);
     const gone = document.createElement('button');
@@ -4822,7 +4840,7 @@ function renderGarage(el) {
       garageAct('remove', it.ref);
     };
     row.appendChild(back); row.appendChild(gone);
-    card.appendChild(row);
+    body.appendChild(row);
     el.appendChild(card);
   }
 }
@@ -5352,12 +5370,12 @@ function renderShelf() {
   if (clearBtn) clearBtn.hidden = false;
   try { drawCards(el); } catch (e) {
     el.innerHTML = '';
-    const card = document.createElement('div');
-    card.className = 'card';
-    const k = document.createElement('span'); k.className = 'k'; k.textContent = 'shelf';
+    // Build 159: the failure card is built from the same shell as every other card, so a shelf that
+    // could not draw still has the shape of a shelf rather than two loose lines beside each other.
+    const { card, body } = cardShell(shelf[0], 'shelf');
     const t = document.createElement('span'); t.className = 't';
     t.textContent = shelf[0].title + ' (this card could not be drawn: ' + String((e && e.message) || e) + ')';
-    card.appendChild(k); card.appendChild(t); el.appendChild(card);
+    body.appendChild(t); el.appendChild(card);
   }
 }
 
@@ -5374,20 +5392,57 @@ function shelfArrived() {
   shelfFlash = setTimeout(() => { line.classList.remove('arrived'); line.style.color = ''; }, 1500);
 }
 
+/* Build 159. The picture every card is given when the thing itself has none. A cover is only ever
+   drawn when he says yes to one, so most cards carry no picture of their own and the shelf would go
+   flat and grey. This is the door's own mark rather than a bought one: a warm ground, a thin gold
+   ring and a four-point spark, drawn at the same 80px square a real cover sits in. Nothing is
+   generated and nothing is spent - it is four shapes of SVG written into the page. */
+const SHELF_PH = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">'
+  + '<defs>'
+  + '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+  + '<stop offset="0" stop-color="#2b241c"/><stop offset=".55" stop-color="#1e1a16"/>'
+  + '<stop offset="1" stop-color="#15120f"/></linearGradient>'
+  + '<radialGradient id="l" cx=".3" cy=".22" r=".9">'
+  + '<stop offset="0" stop-color="#c9a86a" stop-opacity=".22"/>'
+  + '<stop offset="1" stop-color="#c9a86a" stop-opacity="0"/></radialGradient>'
+  + '</defs>'
+  + '<rect width="80" height="80" fill="url(#g)"/>'
+  + '<rect width="80" height="80" fill="url(#l)"/>'
+  + '<circle cx="40" cy="40" r="19.5" fill="none" stroke="#c9a86a" stroke-opacity=".34" stroke-width=".9"/>'
+  + '<circle cx="40" cy="40" r="13.5" fill="none" stroke="#c9a86a" stroke-opacity=".15" stroke-width=".8"/>'
+  + '<path d="M40 30.6 L42.3 37.7 L49.4 40 L42.3 42.3 L40 49.4 L37.7 42.3 L30.6 40 L37.7 37.7 Z"'
+  + ' fill="#c9a86a" fill-opacity=".52"/>'
+  + '</svg>'
+);
+
+/* One picture and one stack of words, made in one place so the shelf and the garage cannot drift
+   apart (build 159). Everything a card carries is appended to the body it returns. */
+function cardShell(it, label) {
+  const card = document.createElement('div');
+  card.className = 'card' + (it && it.kind === 'thought' ? ' thought' : '');
+  const th = document.createElement('div');
+  th.className = 'thumb' + (it && it.img ? '' : ' ph');
+  const im = document.createElement('img');
+  im.alt = ''; im.loading = 'lazy'; im.src = (it && it.img) || SHELF_PH;
+  // A cover that will not load must not leave a hole in the shelf; it falls back to the mark.
+  if (it && it.img) im.onerror = () => { im.onerror = null; im.src = SHELF_PH; th.className = 'thumb ph'; };
+  th.appendChild(im);
+  card.appendChild(th);
+  const body = document.createElement('div');
+  body.className = 'body';
+  const k = document.createElement('span');
+  k.className = 'k'; k.textContent = label;
+  body.appendChild(k);
+  card.appendChild(body);
+  return { card, body };
+}
+
 function drawCards(el) {
   el.innerHTML = '';
-  shelf.forEach((it, i) => {
-    const card = document.createElement('div');
-    card.className = 'card' + (it.kind === 'thought' ? ' thought' : '');
-    const k = document.createElement('span'); k.className = 'k';
-    k.textContent = it.kind === 'thought' ? 'thinking about' : (it.kind || 'link');
-    card.appendChild(k);
-    if (it.img) {
-      const im = document.createElement('img');
-      im.src = it.img; im.alt = ''; im.loading = 'lazy';
-      im.style.cssText = 'display:block;width:100%;max-width:230px;height:auto;border-radius:8px;margin-bottom:7px';
-      card.appendChild(im);
-    }
+  shelf.forEach((it) => {
+    const k = it.kind === 'thought' ? 'thinking about' : (it.kind || 'link');
+    const { card, body } = cardShell(it, k);
     const t = document.createElement('span'); t.className = 't'; t.textContent = it.title;
     const d = document.createElement('span'); d.className = 'd';
     if (it.url) {
@@ -5396,16 +5451,17 @@ function drawCards(el) {
       if (it.sheet) {
         const b = document.createElement('button');
         b.type = 'button';
-        b.style.cssText = 'all:unset;display:block;cursor:pointer';
+        b.style.cssText = 'all:unset;display:block;cursor:pointer;min-width:0';
         b.onclick = () => openSheet(it.url, it.kind === 'paid' ? 'receipt ' + it.title.replace(/^Paid\s+/, '') : 'the record');
         b.appendChild(t); b.appendChild(d);
-        card.appendChild(b);
+        body.appendChild(b);
       } else {
         const a = document.createElement('a');
         a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
         a.appendChild(t); a.appendChild(d);
-        card.appendChild(a);
+        body.appendChild(a);
       }
+      const acts = document.createElement('div'); acts.className = 'acts';
       const copy = document.createElement('button');
       copy.className = 'copy'; copy.type = 'button'; copy.textContent = 'copy';
       copy.onclick = () => {
@@ -5414,24 +5470,27 @@ function drawCards(el) {
           () => { copy.textContent = 'select it'; },
         );
       };
-      card.appendChild(copy);
+      acts.appendChild(copy);
       // Anything on the shelf can be sent on (build 60). The chip opens the same questions the voice
       // asks, so a card he is looking at can be shared without saying a word.
       const share = document.createElement('button');
       share.className = 'copy share'; share.type = 'button'; share.textContent = 'share';
       share.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openShareSheet(it); };
-      card.appendChild(share);
+      acts.appendChild(share);
+      body.appendChild(acts);
     } else {
-      card.appendChild(t);
-      if (it.note) { d.textContent = it.note; card.appendChild(d); }
+      body.appendChild(t);
+      if (it.note) { d.textContent = it.note; body.appendChild(d); }
       // Build 154, Edwin 21:39: "Not coming through on the shelf..." The share chip was only drawn for a card
       // that had a url, and a song made here has no store link - so the one card that most needs the sheet, the
       // song he just made, had no way to open it. Every card can be shared now, and a song opens the sheet with
       // the cover question on it.
+      const acts = document.createElement('div'); acts.className = 'acts';
       const share = document.createElement('button');
       share.className = 'copy share'; share.type = 'button'; share.textContent = 'share';
       share.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openShareSheet(it); };
-      card.appendChild(share);
+      acts.appendChild(share);
+      body.appendChild(acts);
     }
     el.appendChild(card);
   });
