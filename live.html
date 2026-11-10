@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T17:55';
-const BUILD_NO = 148;
+const BUILD = '2026-11-10T19:35';
+const BUILD_NO = 149;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1513,6 +1513,8 @@ async function openDoor() {
         return;
       }
       if (reason) {
+        // Build 149: if the reason names itself, the screen gets the plain meaning, not the wire text.
+        if (refusalOf(reason)) { doorRefused(reason); return; }
         setState('the door closed');
         warn(reason);
       } else if (wasOpen) {
@@ -5199,6 +5201,145 @@ function primeAudioSession(ms = 260) {
 }
 
 let lastGreetAt = 0;
+
+/* ---- Build 149: the door remembers where it was, and says why the voice is refused ----
+
+   Two faults found in the live log at 19:13 on 10 November 2026.
+
+   One. Coming back to the door cost open, close, open. The gate was not the problem and neither was his
+   finger: every unlock today was signed in about five seconds. What was missing was the STATE. A fresh
+   session begins knowing nothing, so a man who had been mid-conversation a few minutes earlier was greeted
+   as a stranger, and the thread he was holding existed nowhere.
+
+   The fix is not a key left in the door. He ruled that out himself (10 Nov 19:25): "leaving the door open
+   is risky". A passkey signs per page load and that stays exactly as it is. What is kept is the state on
+   this device only: the last few turns, the question the door was waiting on, and anything still being made.
+   It never travels to a server of ours, and it expires by itself after twelve hours.
+
+   Two. Google refused the session with "Your project has exceeded its monthly spending cap. Please go to
+   AI Studio at https://ai.studio/spend to manage your projec" - a sentence truncated by the server, delivered
+   verbatim to the screen, followed by the door inviting him to tap a circle that could not possibly work.
+   A refusal is not a fault to retry. It is a fact to state, in words a person can act on. */
+const THREAD_KEY = 'ei.door.thread';
+const THREAD_MAX = 10;                 // exchanges kept, oldest dropped
+const THREAD_TTL = 12 * 3600e3;        // half a day: older than that is another day's conversation
+const THREAD_WARM = 3 * 3600e3;        // inside this, the door resumes rather than greets
+
+function threadLoad() {
+  try {
+    const th = JSON.parse(localStorage.getItem(THREAD_KEY) || 'null');
+    if (!th || !Array.isArray(th.turns) || !th.turns.length) return null;
+    if (!th.at || Date.now() - th.at > THREAD_TTL) return null;
+    return th;
+  } catch (e) { return null; }
+}
+function threadClear() { try { localStorage.removeItem(THREAD_KEY); } catch (e) {} }
+function threadAgo(at) {
+  const m = Math.round((Date.now() - (at || 0)) / 60000);
+  if (!m || m < 1) return 'a moment ago';
+  if (m < 60) return m + ' min ago';
+  const h = Math.round(m / 60);
+  return h + (h === 1 ? ' hour ago' : ' hours ago');
+}
+function threadRemember(who, text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return;
+  if (who === 'you' && isNoise(t)) return;        // a cough or a thinking noise is not context
+  try {
+    const th = threadLoad() || { turns: [] };
+    th.turns.push({ who: who === 'you' ? 'you' : 'engine', text: t.slice(0, 240), at: Date.now() });
+    if (th.turns.length > THREAD_MAX) th.turns = th.turns.slice(-THREAD_MAX);
+    th.at = Date.now();
+    th.ask = (songDraft && songDraft.at && Date.now() - songDraft.at < 20 * 60 * 1000) ? (openJourneyBeat() || '') : '';
+    let made = null;
+    try { made = madeLoad(); } catch (e) {}
+    th.made = (made && made.request_id)
+      ? { request_id: made.request_id, title: made.title || '', said: made.said || '', who: made.who || '' }
+      : null;
+    localStorage.setItem(THREAD_KEY, JSON.stringify(th));
+  } catch (e) { /* private mode: the thread simply cannot be kept, and the door says nothing false about it */ }
+}
+function threadRecap(th) {
+  return (th.turns || []).slice(-6)
+    .map((x) => (x.who === 'you' ? 'he said' : 'you answered') + ': "' + String(x.text).slice(0, 180) + '"')
+    .join('  |  ');
+}
+/* What was said is put back on the screen, muted and labelled as earlier, because a transcript restored with
+   no door open reads as the engine replaying an old conversation (seen 7 Nov). This one says when. */
+function threadRestoreOnScreen(th) {
+  try {
+    const keep = (th.turns || []).slice(-4);
+    if (!keep.length) return;
+    const mark = document.createElement('div');
+    mark.className = 'turn';
+    const s = document.createElement('div');
+    s.className = 'said';
+    s.style.color = '#7d7566';
+    s.textContent = '\u00b7 earlier on this door \u00b7 ' + threadAgo(th.at);
+    mark.appendChild(s);
+    logEl.appendChild(mark);
+    for (const x of keep) {
+      const row = addTurn(x.who, x.text);
+      try { row.querySelector('.said').style.opacity = '0.55'; } catch (e) {}
+    }
+    resetTurns();          // a restored bubble is history; nothing new is appended into it
+  } catch (e) {}
+}
+
+/* A refusal: what is wrong, whose it is, and what actually lifts it. Only the kind goes on the screen in our
+   own words; the server's sentence is kept once, in the log, for the record. */
+const REFUSALS = [
+  { kind: 'cap',
+    re: /spending cap|exceeded its monthly|spend limit|monthly spend|billing/i,
+    line: 'the door is fine: Google is refusing the voice. This project has reached its monthly spending cap, '
+      + 'and nothing you tap here can lift it. Clear it at https://ai.studio/spend, and it also lifts on 1 December.' },
+  { kind: 'quota',
+    re: /quota|resource.?exhausted|rate limit|too many requests|\b429\b/i,
+    line: 'the door is fine: Google is refusing the voice for the moment, its allowance for now is used up. '
+      + 'Nothing to tap; it comes back on its own.' },
+  { kind: 'key',
+    re: /api key|unauthori[sz]ed|permission|forbidden|\b403\b|invalid.{0,12}key/i,
+    line: 'the door is fine: Google is refusing the voice because the key it speaks with is not being accepted. '
+      + 'That is mine to fix, not yours.' },
+  { kind: 'model',
+    re: /model.{0,40}(?:not found|no longer|unsupported|deprecated)|\b404\b/i,
+    line: 'the door is fine: the model this door speaks with is no longer being served. That is mine to fix, not yours.' },
+  { kind: 'balance',
+    re: /insufficient|no credit|out of credit|balance/i,
+    line: 'the door is fine: the account behind this door has run out of credit. That is mine to fix, not yours.' },
+];
+function refusalOf(text) {
+  const t = String(text || '');
+  if (!t) return null;
+  for (const r of REFUSALS) if (r.re.test(t)) return r;
+  return null;
+}
+let refused = null;      // {kind, line, at} while the voice is being refused
+
+function doorRefused(raw) {
+  const r = refusalOf(raw);
+  const kind = r ? r.kind : 'other';
+  const line = r ? r.line : 'the door is fine: the voice was refused, and the reason is not one this door can '
+    + 'name. The log has it.';
+  const fresh = !refused || refused.kind !== kind || (Date.now() - refused.at) > 60000;
+  refused = { kind: kind, line: line, at: Date.now() };
+  if (fresh) logLine('door.refused', kind + ' \u00b7 ' + String(raw || '').slice(0, 240),
+    { level: 'error', target: 'session' });
+  // The socket is dropped by the door, not left half-open: a door that is not speaking must not look open.
+  try {
+    const w = ws; ws = null;
+    if (w) { w._renewing = false; try { w.close(); } catch (e) {} }
+  } catch (e) {}
+  sessionUp = false; listening = false; busy = false; connecting = false; greeting = false;
+  if (greetWatch) { clearTimeout(greetWatch); greetWatch = null; }
+  try { micBtn.classList.remove('live', 'arming'); } catch (e) {}
+  try { stopClock(); } catch (e) {}
+  try { closeMic(); } catch (e) {}
+  try { foldForDoor(false); } catch (e) {}
+  setState('the voice is refused');
+  warn(line);
+}
+
 function sayGreeting() {
   // What left, and that it left. A new session knows nothing on its own, so the record is handed to it — not
   // as something to announce, as the answer if he asks. (14:28: "when I spoke again, it had no idea it was sent")
@@ -5277,6 +5418,40 @@ function sayGreeting() {
         title: pend.title || '', stage: 'making' };
       logLine('made.resume', pend.request_id + ' · still watching', { level: 'info', target: 'music' });
       startMadeWatch();
+    }
+  } catch (e) {}
+  /* ---- Build 149: a door that comes back to a conversation it was already having ----
+     Everything above this line has already claimed the opening if it had a better claim: a share mid-flight,
+     an open question of the route, a take still being made. Nothing has, so the question is whether there is a
+     recent thread on this device. If there is, the new session is handed it before it speaks a word, so it
+     arrives already knowing where it was. A renewal is skipped: sessionResumption already carries the thread,
+     and handing it again would say it twice. */
+  try {
+    const th = (!renewing && !resumeHandle) ? threadLoad() : null;
+    if (th && th.turns.length) {
+      const warm = (Date.now() - th.at) <= THREAD_WARM;
+      threadRestoreOnScreen(th);
+      const where = 'He is back at a door he was already using, ' + threadAgo(th.at) + '. Where the '
+        + 'conversation was, for your context only: ' + threadRecap(th) + '. '
+        + (th.made && th.made.request_id
+          ? 'A song he asked for is still being made ("' + String(th.made.title || th.made.said || 'a song').slice(0, 60) + '"). '
+          : '')
+        + (th.ask ? 'The door had one question open: ' + th.ask + ' ' : '')
+        + 'Nothing was lost, and nothing needs asking again. Do not repeat any of this back to him and do not '
+        + 'offer anything he did not ask for.';
+      if (warm) {
+        lastGreetAt = Date.now();
+        resumeSpeak = ''; resumeNote = ''; resumeLine = '';
+        sessionOpenedAt = Date.now();
+        logLine('thread.resume', th.turns.length + ' turns · ' + threadAgo(th.at),
+          { level: 'info', target: 'thread' });
+        sendOpeningLine('Still here, Boss.', where + ' Do not greet him again and do not start over: carry on '
+          + 'from where it was, in one short line, and let him speak.');
+        return;
+      }
+      logLine('thread.recall', th.turns.length + ' turns · ' + threadAgo(th.at),
+        { level: 'info', target: 'thread' });
+      doorNote(where + ' That was hours ago, so greet him normally and let him lead.', false);
     }
   } catch (e) {}
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
@@ -5367,6 +5542,7 @@ function handleFrame(text) {
     // input opens when that line has finished, so nothing he had already started saying can
     // be caught in halves. (Build 39)
     sessionUp = true; busy = true; listening = false; greeting = true;
+    refused = null;                        // the voice is back: any earlier refusal is history
     // The session and the microphone must be awake together. A suspended context at
     // this instant is the "door opens but does not listen" failure exactly.
     if (micCtx && micCtx.state !== 'running') micCtx.resume().catch(() => {});
@@ -5401,7 +5577,12 @@ function handleFrame(text) {
     }
     return;
   }
-  if (msg.error) { warn(msg.error.message || 'the stream reported a problem'); return; }
+  if (msg.error) {
+    // Build 149: a refusal is a fact, not a fault. Naming it plainly beats reading Google's sentence out.
+    if (refusalOf(msg.error.message)) { doorRefused(msg.error.message); return; }
+    warn(msg.error.message || 'the stream reported a problem');
+    return;
+  }
 
   const sc = msg.serverContent;
   if (!sc) return;
@@ -5442,6 +5623,7 @@ function handleFrame(text) {
       try { descentHear(heard); } catch (e) {}
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
+      try { threadRemember('you', heard); } catch (e) {}
       armSilenceWatch(heard);
       replyAudible = false;                  // a new answer begins, so its first sound may be held
       // If he is asking whether something went, the record answers - not the model's guess and not
@@ -5559,6 +5741,8 @@ function handleFrame(text) {
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
       greeting: greeting ? '1' : '',
     });
+    // A greeting is not something the conversation said, so it is not kept as context.
+    if (!greeting) { try { threadRemember('engine', said.engine); } catch (e) {} }
     // A claim about the world with no lookup behind it. 9 Nov 2026, 20:38: he asked for the weather in
     // "Belito" and the door answered "According to AccuWeather, it's around 21 degrees Celsius in
     // Ballitoville right now, mostly sunny" with nothing in the log between the question and the answer.
