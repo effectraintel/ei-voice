@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T10:55';
-const BUILD_NO = 127;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T11:05';
+const BUILD_NO = 128;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1555,8 +1555,11 @@ const SONG_FEEL = /\b(rock|alternative|country|soul|jazz|blues|pop|folk|acoustic
 
 function songWho(raw) {
   const said = String(raw || '');
-  const named = said.match(SONG_PERSON);
-  if (named) return named[0].toLowerCase();
+  // A role counts only when it is being handed the song: "for my mother", "to my friend". Matching the role
+  // list anywhere in the sentence made a description into a recipient - "people just having an awesome
+  // time" became who: "people" on 10 Nov, so the sheet would have opened addressed to people. (build 128)
+  const shaped = said.match(/\b(?:for|to|send (?:it )?to|give (?:it )?to)\s+(?:my\s+|our\s+|a\s+|his\s+|her\s+|the\s+)?(friend|mate|buddy|girlfriend|boyfriend|wife|husband|partner|mom|mum|mother|dad|father|sister|brother|son|daughter|kid|child|family|someone|somebody|person|people|colleague|boss|client|gran|grandma|grandpa)\b/i);
+  if (shaped) return shaped[1].toLowerCase();
   // The shape that names a person: "for my sister", "to Nadia", "for Edwin". A capital letter anywhere
   // else is not a recipient - on 10 Nov "a picture of the name Effectra intelligence on it" was read as
   // "this song is for Effectra", so the sheet would have opened addressed to us.
