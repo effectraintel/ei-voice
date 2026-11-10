@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T13:21';
-const BUILD_NO = 134;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T13:40';
+const BUILD_NO = 135;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -398,9 +398,9 @@ const BRIEF = NO_CLAIM +
   'If he asks you to speak another language, say the door is set to English and that it can be changed, ' +
   'rather than switching by yourself. ' +
   'A share has exactly one owner for each step. Finding the song is yours: call share and believe its ' +
-  'answer. You ask the cover question once, in your own words, as soon as a song is locked in: whether a ' +
-  'picture should go with it and what it should show. After that the door owns the rest: it opens the sheet ' +
-  'where he types the address and writes his message himself, it draws what he described, and it sends. So ' +
+  'answer. You never ask about a cover, you never ask who a thing is for, and you never ask for an address: ' +
+  'sharing happens from the shelf, where he types the address, writes his own message and gets a cover ' +
+  'drawn from the song itself. So ' +
   'never ask for an address, never ask for the message, never offer to send, and never say a send is ' +
   'happening. If you have no share tool for it, that is why: it is not yours to call. ' +
   // Edwin, 8 Nov 13:10: "Later duplicate responses (almost like there are 2 different people listening)."
@@ -2341,6 +2341,21 @@ function judgeClaim() {
     // "It should arrive in your inbox in a few minutes" while the take is still being made (10 Nov 10:54:31).
     // He then went to his inbox and found nothing he had asked for. While a make is in flight the only true
     // sentence is that it lands on his shelf. (build 133)
+    const stillClaim = /\bstill being made\b|\bstill making\b|\bbeing made now\b|\bmaking it now\b|\bwhen it lands\b|\btake its time\b/i;
+    if (stillClaim.test(t) && madeShare && madeShare.stage === 'making') {
+      const saidAt = madeShare.saidStillAt || 0;
+      if (saidAt && Date.now() - saidAt < 180000) {
+        // He has already been told this, in these words, while nothing changed. Saying it again is noise.
+        hiddenHold = true;
+        hiddenHoldUntil = Date.now() + 1200;
+        logLine('claim.repeat', t.slice(0, 160), { level: 'warn', target: 'repeat' });
+        doorNote('He has already been told the song is still being made, and nothing has changed since. Do not '
+          + 'tell him again. Say nothing about the song at all: either answer something else he asked, or one '
+          + 'short line that you are still with him.', true);
+        return;
+      }
+      if (!saidAt || Date.now() - saidAt >= 180000) madeShare.saidStillAt = Date.now();
+    }
     const copyClaim = /\binbox\b|\barrive|\bon its way\b|\bfew minutes\b|\bbeing sent to you\b/i;
     if (copyClaim.test(t) && madeShare && madeShare.stage === 'making') {
       if (Date.now() - unbackedWarnedAt >= 15000) {
@@ -2348,6 +2363,7 @@ function judgeClaim() {
         hiddenHold = true;
         hiddenHoldUntil = Date.now() + 1500;
         logLine('claim.copy', t.slice(0, 160), { level: 'warn', target: 'copy' });
+        if (madeShare && !madeShare.saidStillAt) madeShare.saidStillAt = Date.now();
         doorNote('Nothing is in his inbox and nothing is on its way there. The take is still being made and '
           + 'it lands on his shelf. Say one short line that it is still being made and that it goes on his '
           + 'shelf when it lands. Do not mention an inbox, an arrival, minutes, or a sheet.', true);
@@ -2614,8 +2630,8 @@ async function handleShareCall(call) {
       };
       mergeCard(cardNow);
       shareSongLocked(cardNow);
-      result = shareResultLine(r) + ' It is locked in. Now ask him, in your own words and one short sentence, '
-        + 'whether a cover drawing should go with it and what it should show. Ask that once. Do not ask about the '
+      result = shareResultLine(r) + ' It is locked in and it is open on his shelf, where the share button is. '
+        + 'Say that in one line. Do not ask about a cover (one is drawn when he shares it), do not ask about the '
         + 'address, the message or the send, and do not search again.';
       looked = 'sharing · ' + (r.title || 'a song');
       shareChoices = [];
@@ -2946,8 +2962,8 @@ function noteSongAnswer(heard) {
           shareSongLocked(card);
           doorNote('the door has searched the rail and put "' + (r.title || 'a song') + '"'
             + (r.artist ? ' by ' + r.artist : '') + ' on his shelf with its listening link. Say the title once '
-            + 'and that it is on the shelf. Do not read the url and do not offer to send it. Then ask, once, '
-            + 'in your own words, whether a picture should go with it and in one short question.', true);
+            + 'and that it is on the shelf. Do not read the url, do not offer to send it, and do not ask about '
+            + 'a picture: a cover is drawn when he shares it from the shelf.', true);
           return;
         }
         let picks = collapseChoices(r.candidates);
@@ -2992,8 +3008,8 @@ function noteSongAnswer(heard) {
         // it is in the tool path, so the question the model asks is a question the door can take back.
         shareSongLocked(planned);
         doorNote('the door has already searched and put "' + (c.title || 'a song') + '" on his shelf with its '
-          + 'listening link. Say what it is and that it is on the shelf, in one line. Do not search again. '
-          + 'Then ask, once, in one short question, whether a picture should go with it and what it should show.', true);
+          + 'listening link. Say what it is and that it is on the shelf, in one line. Do not search again and '
+          + 'do not ask about a picture: a cover is drawn when he shares it from the shelf.', true);
       })
       .catch((e) => {
         logLine('share.door.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
@@ -3187,7 +3203,7 @@ function resolveChoice(heard) {
     railNote('share · ' + (c.found || 'wrapped') + ' · ' + (card.title || ''));
     doorNote('the door has put "' + (card.title || 'a song') + '"' + (c.artist ? ' by ' + c.artist : '')
       + ' on his shelf with its listening link. Say the title once and that it is on the shelf, then ask once, '
-      + 'in your own words, whether a picture should go with it and what it should show.', true);
+      + 'that a cover is drawn when he shares it from the shelf, so he has nothing to describe now.', true);
   }).catch((e) => {
     hiddenHold = false;
     logLine('share.choose.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
@@ -3317,6 +3333,21 @@ function startMadeWatch() {
     } catch (e) { /* a record that does not answer is not a song that failed */ }
     if (madeTries < 10) madeWatch = setTimeout(tick, 20000);
     else {
+      // The take can already be in the vault while the record still says "asked" (10 Nov 13:29). One call
+      // to the sweep and one re-read turns that miss into a landing, which is the difference between four
+      // minutes of "nothing landed" and a song on his shelf.
+      try {
+        const ad = await withTimeout(railPost('songAdopt', {}), 15000, 'the sweep did not answer');
+        if (ad && Array.isArray(ad.adopted) && ad.adopted.length && madeShare && madeShare.request_id) {
+          const chk = await withTimeout(gatePost('giftSongStart',
+            { action: 'check', request_id: madeShare.request_id }), 15000, 'the rail did not answer');
+          if (chk && (chk.landed === true || /made/i.test(String(chk.status || '')))) {
+            logLine('made.adopted', (chk.title || '') + ' · ' + (chk.song_id || ''), { level: 'info', target: 'music' });
+            await madeReady(chk);
+            return;
+          }
+        }
+      } catch (e) { /* the sweep is a courtesy, not a dependency */ }
       railNote('the song is taking longer than the door waits');
       logLine('made.wait.long', (madeShare && madeShare.title) || 'no title yet', { level: 'warn', target: 'music' });
       // Giving up must also let go. A door left holding 'waiting' silently drops every share turn after
