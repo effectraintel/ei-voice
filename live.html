@@ -247,8 +247,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T10:40';
-const BUILD_NO = 126;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T10:55';
+const BUILD_NO = 127;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1554,13 +1554,20 @@ const SONG_PERSON = /\b(friend|mate|buddy|girlfriend|boyfriend|wife|husband|part
 const SONG_FEEL = /\b(rock|alternative|country|soul|jazz|blues|pop|folk|acoustic|piano|guitar|ballad|club|dance|house|hip hop|rap|metal|indie|gospel|reggae|swing|lullaby|orchestral|cinematic|drum|bass)\b/i;
 
 function songWho(raw) {
-  const named = raw.match(SONG_PERSON);
+  const said = String(raw || '');
+  const named = said.match(SONG_PERSON);
   if (named) return named[0].toLowerCase();
-  // A name carries punctuation when it is spoken inside a sentence ("about Goran, always
-  // busy"), so the token is cleaned before it is judged.
-  const cap = raw.split(/\s+/).slice(1)
+  // The shape that names a person: "for my sister", "to Nadia", "for Edwin". A capital letter anywhere
+  // else is not a recipient - on 10 Nov "a picture of the name Effectra intelligence on it" was read as
+  // "this song is for Effectra", so the sheet would have opened addressed to us.
+  const explicit = said.match(/\b(?:for|to)\s+(?:my\s+|our\s+)?([A-Z][a-z]{2,})/);
+  if (explicit && !SONG_NEVER_PERSON.test(explicit[1])) return explicit[1];
+  const pictureTalk = /\b(?:picture|photo|image|drawing|artwork|cover|logo|title|name)\b/i.test(said);
+  if (pictureTalk) return '';        // a thing to draw, not a person to send to
+  const cap = said.split(/\s+/).slice(1)
     .map(w => w.replace(/[^A-Za-z]/g, ''))
-    .find(w => /^[A-Z][a-z]{2,}$/.test(w));
+    .filter(Boolean)
+    .find(w => /^[A-Z][a-z]{2,}$/.test(w) && !SONG_NEVER_PERSON.test(w));
   return cap || '';
 }
 
@@ -1573,6 +1580,45 @@ function songSaid(raw) {
     .replace(/[^a-z' ]/gi, ' ')
     .split(/\s+/).filter(w => w.length > 2).join(' ');
 }
+
+// Words that are about the asking, not about a song: greetings, acknowledgements, mic-test chatter, the
+// machinery, and our own names. On 10 Nov two of these were accepted as lyric seeds - "hey big truck I'm
+// just tasting a new song" (a mic test) and "oh, you're correct" (him agreeing that he had NOT given any
+// words) - and a song was made about making a song. A seed made only of these is not a subject.
+const SONG_META = new Set(['hey','hi','hello','oh','ah','um','er','eh','hmm','okay','ok','yes','yeah','yep',
+  'sure','thanks','thank','correct','right','wrong','exactly','true','indeed','sorry','fine','good','great',
+  'nice','perfect','cool','well','again','test','testing','tested','tasted','tasting','mic','microphone',
+  'hear','hearing','heard','listen','listening','sound','sounds','echo','echoing','words','word','going',
+  'happening','doing','mean','means','meant','said','say','saying','talk','talking','speak','speaking',
+  'get','got','getting','gonna','think','thinking','know','remember','forgot','understand','try','trying',
+  'stop','wait','hold','hang','one','moment','second','please','cant','cannot','dont','didnt','never','ever',
+  'haven','havent','hasnt','give','given','giving','gotta','tell','telling','told','excuse','pardon','repeat',
+  'repeating','stuck','broken','working','ready','done','finished',
+  // Function words, because a sentence's grammar is not its subject: "what is going on", "I have not
+  // given you the words" and "I want to make a song and then share it" all read as content to a counter
+  // that only skips the articles.
+  'what','whats','why','when','where','who','whom','whose','how','which','huh','then','now','also','too',
+  'but','or','if','while','have','has','had','having','not','no','never','are','is','was','were','be',
+  'been','being','do','does','did','doing','done','will','would','could','should','must','may','might',
+  'can','couldnt','wouldnt','shouldnt','only','even','still','yet','way','bit','lot','there','here',
+  'share','sharing','shared','send','sending','sent','email','mail','whatsapp','deliver','delivery',
+  'effectra','intelligence','ei','static','atrium','base44','knownforme','boss','engine','door','platform',
+  'song','songs','make','making','write','writing','sing','singing','tune','melody','lyric','lyrics','verse',
+  'chorus','beat','track','music','picture','cover','image','drawing','artwork']);
+
+// How many of his words actually name something. One is enough ("about the rain"), none is a refusal:
+// there is nothing to write a song about, however many words he used to say so.
+function songConcrete(raw) {
+  // Same normalisation as the seed itself, so "I want a song" leaves nothing (want and song are both
+  // filler) while "I miss Cape Town" leaves three real words.
+  // Lowercased first: songSaid keeps his capitalisation, and "Hey" and "Thank" walked past a set that
+  // only holds their lowercase spellings.
+  return songSaid(raw).toLowerCase().split(' ').filter(Boolean)
+    .filter(w => !SONG_META.has(w) && !SONG_NEVER_PERSON.test(w)).length;
+}
+
+// A name we must never treat as a recipient: our own brand, said while describing a picture.
+const SONG_NEVER_PERSON = /^(?:effectra|intelligence|ei|static|atrium|base44|knownforme|known|enshrine|shrine|engine|boss|door|platform|music|song|south|africa|african|durban|ballito)$/i;
 
 function songDraftReset() { songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.asks = 0; songDraft.at = 0; }
 
@@ -1632,10 +1678,23 @@ async function handleSongCall(call) {
       // Is this turn an answer to the question we asked? A bare name answers "who"; a
       // sentence answers "what should it say"; a genre word answers "how should it sound".
       const answersWhoOnly = !!who && !said;
-      if (said && said.split(' ').length >= 2) songDraft.said = words;
+      // Nothing is stored as a lyric seed unless it names something. Otherwise an acknowledgement
+      // overwrote the real words and the "song" was written from "oh, you're correct".
+      const concrete = songConcrete(words);
+      if (!concrete) {
+        logLine('song.words.notsubject', words.slice(0, 120), { level: 'info', target: 'music' });
+      } else if (said && said.split(' ').length >= 2) songDraft.said = words;
       else if (said && !songDraft.said) songDraft.said = words;
 
-      const hasSaid = !!songDraft.said && songSaid(songDraft.said).split(' ').length >= 2;
+      // A seed with no concrete word in it is not a subject, however many words it has. Checked here as
+      // well as where the draft is filled, because the mouth passes its own text on the make call and a
+      // read-back sentence must never become a lyric (10 Nov 08:29).
+      if (songDraft.said && !songConcrete(songDraft.said)) {
+        logLine('song.seed.thin', String(songDraft.said).slice(0, 120), { level: 'warn', target: 'music' });
+        songDraft.said = '';
+      }
+      const hasSaid = !!songDraft.said && songSaid(songDraft.said).split(' ').length >= 2
+        && songConcrete(songDraft.said) > 0;
       const asked = songDraft.asks;
 
       // One question a turn, in the order that matters, and never more than three. After
@@ -2991,8 +3050,14 @@ function shareArtAnswer(heard) {
     const clean = brief.replace(/\s+/g, ' ').trim();
     // Two words can be a whole picture ("a car"), so the test is a fragment, not a length: one word, or
     // a sentence that stops on the article it was about to fill in.
+    // "Oh, that's right. That's right." was locked as a picture brief on 10 Nov and would have been drawn.
+    // Anything made only of acknowledgements is not a description, so it counts as thin: asked once more,
+    // then the cover comes from the song's own scene rather than from nothing.
+    const ackOnly = clean.split(/\s+/).filter(Boolean).every(w =>
+      /^(?:oh|ah|so|um|er|yes|yeah|yep|ok|okay|sure|right|correct|exactly|true|that|thats|it|is|was|thanks|thank|you|good|fine|great|perfect|of|course|no|problem|really|absolutely|definitely|please|boss)[,.!?]*$/i.test(w));
     const thin = clean.split(' ').filter(Boolean).length < 2
-      || /(^|\s)(a|an|the|of|with|in|and|at|to)$/i.test(clean);
+      || /(^|\s)(a|an|the|of|with|in|and|at|to)$/i.test(clean)
+      || ackOnly;
     if (brief && thin && shareArtTries < 1) {
       shareArtTries++;
       railNote('share · art too thin · asking again');
