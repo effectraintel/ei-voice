@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T16:45';
-const BUILD_NO = 145;
+const BUILD = '2026-11-10T17:15';
+const BUILD_NO = 146;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1555,7 +1555,7 @@ function onMessage(ev) {
 const SONG_SCRIPT =
   // Build 141, Edwin 15:50 on 10 Nov: "We don't have an inbox. It is a shelf." The script had told the model a
   // song is "delivered to his inbox", so that is the word it reached for, and he went looking in his mail.
-  'This corridor is not read-only, whatever the house rules sound like: with the song tool you can make real music in his own account, and it goes on his shelf. We have no inbox: never say the word inbox, never say a thing will arrive in his mail, and never say a song is going anywhere before the door tells you it is on the shelf. ' +
+  'This corridor is not read-only, whatever the house rules sound like: with the song tool you can make real music in his own account, and it goes on his shelf. Say where a thing IS, never where it will be: "it is on your shelf", or "it is still being made and it lands on your shelf". Never predict a minute, never say a thing is going somewhere, and never speak of his mail at all. ' +
   // A reminder of what the shelf is, because the model reaches for mail whenever it is asked where something is.
   'The shelf is where everything the door makes and everything it finds goes: a song, a link, a picture. That is where he looks, and it is the only place he needs to look. ' +
   'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
@@ -1584,7 +1584,7 @@ const SONG_SCRIPT =
   'it, make it with what you have. Never ask who it is for. ' + PICTURE_RULE + ' ' +
   'A person is not a subject: "a song for a friend" tells you the who and nothing about the what. ' +
   'If he asks whether it is done, call song with check before ' +
-  'answering, and state only what check returns. When it is delivered, say the title once, plainly, and ' +
+  'answering, and state only what check returns. When it is on his shelf, say the title once, plainly, and ' +
   'let that be enough. ' +
   'If the song tool answers that he already has a similar song, do not make anything and do not apologise: ' +
   'ask him back exactly as the tool tells you, in one short question, and wait. Then take his answer: ' +
@@ -1615,11 +1615,16 @@ let lastPriorId = '';   // the take he already has, named by the last prompt-bac
    turn, in the order that matters: what it should say, who it is for, how it should sound.
    Nothing reaches the rail until the first is answered, whatever the model decides. */
 
-const songDraft = { who: '', said: '', feel: '', band: '', asks: 0, at: 0, askBeat: '', skipped: [] };
-/* Build 138: the route, one beat at a time. subject -> band -> feel, three questions at most, and any of
+const songDraft = { who: '', said: '', feel: '', sound: '', asks: 0, at: 0, askBeat: '', skipped: [] };
+/* Build 138: the route, one beat at a time. subject -> sound -> feel, three questions at most, and any of
    them is skipped by saying "you choose". askBeat is which one is open, so his answer is taken by the door
-   itself before the model is asked anything. */
-const JOURNEY_BEATS = ['subject', 'band', 'feel'];
+   itself before the model is asked anything.
+   Build 146, Edwin 10 Nov 17:0x: "We are creating so there is no band, but journey says journey · band?"
+   He is right, and the question was wrong in the same way. A band is a thing that already exists and can be
+   searched for; a song being made has no band, it has a sound we are about to choose. So the beat is the
+   sound, the question asks for the kind of music, and the log says sound. He may still answer with a band
+   ("something like Coldplay") and that is taken as the sound he wants. */
+const JOURNEY_BEATS = ['subject', 'sound', 'feel'];
 const JOURNEY_SKIP = /\b(?:you (?:choose|pick|decide)|your (?:call|choice|pick)|up to you|surprise me|anything you|whatever you|doesn'?t matter|don'?t mind|no idea|you know best)\b/i;
 const JOURNEY_NOMORE = /\b(?:just make|make it now|no more questions|stop asking|get on with it|enough questions)\b/i;
 // Which route he chose for a song: MAKE a new one, or SHARE one that already exists. The door states the
@@ -1647,10 +1652,10 @@ function songHearTurn(heard) {
       logLine('song.journey.skip', beat, { level: 'info', target: 'music' });
       return;
     }
-    if (beat === 'band' && words.length <= 14) {
-      songDraft.band = t.slice(0, 160);
+    if (beat === 'sound' && words.length <= 14) {
+      songDraft.sound = t.slice(0, 160);
       songDraft.askBeat = '';
-      logLine('song.journey.band', songDraft.band, { level: 'info', target: 'music' });
+      logLine('song.journey.sound', songDraft.sound, { level: 'info', target: 'music' });
       return;
     }
     if (beat === 'feel' && words.length <= 18) {
@@ -1988,7 +1993,7 @@ function songWhoClean(who, band, feel) {
 }
 
 function songDraftReset() {
-  songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.band = '';
+  songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.sound = '';
   songDraft.asks = 0; songDraft.at = 0; songDraft.askBeat = ''; songDraft.skipped = [];
 }
 
@@ -2006,7 +2011,7 @@ function openJourneyBeat() {
         ? 'What should it say to ' + (role ? 'them' : songDraft.who) + '?'
         : 'What should the song be about?';
     }
-    if (beat === 'band') return 'Which band, or what kind of music? Say you choose and I will pick.';
+    if (beat === 'sound') return 'What kind of music should it be? Say you choose and I will pick.';
     if (beat === 'feel') return 'How should it feel: slow and warm, big and driving, something else? Say you choose and I will pick.';
     return '';
   } catch (e) { return ''; }
@@ -2131,9 +2136,9 @@ async function handleSongCall(call) {
       if (askedBeat && JOURNEY_SKIP.test(words)) {
         songDraft.skipped.push(askedBeat);
         logLine('song.journey.skip', askedBeat, { level: 'info', target: 'music' });
-      } else if (askedBeat === 'band' && words) {
-        songDraft.band = words.slice(0, 160);
-        logLine('song.journey.band', songDraft.band, { level: 'info', target: 'music' });
+      } else if (askedBeat === 'sound' && words) {
+        songDraft.sound = words.slice(0, 160);
+        logLine('song.journey.sound', songDraft.sound, { level: 'info', target: 'music' });
       } else if (askedBeat === 'feel' && words) {
         songDraft.feel = words.slice(0, 160);
         logLine('song.journey.feel', songDraft.feel, { level: 'info', target: 'music' });
@@ -2146,7 +2151,7 @@ async function handleSongCall(call) {
 
       let askBeat = '';
       if (!hasSaid && songDraft.skipped.indexOf('subject') < 0) askBeat = 'subject';
-      else if (!songDraft.band && !songDraft.feel && songDraft.skipped.indexOf('band') < 0) askBeat = 'band';
+      else if (!songDraft.sound && !songDraft.feel && songDraft.skipped.indexOf('sound') < 0) askBeat = 'sound';
       else if (!songDraft.feel && songDraft.skipped.indexOf('feel') < 0) askBeat = 'feel';
       if (asked >= 3) askBeat = '';        // the journey is over: three is the whole route
 
@@ -2158,8 +2163,8 @@ async function handleSongCall(call) {
         ask = songDraft.who
           ? '"What should it say to ' + (role ? 'them' : songDraft.who) + '?"'
           : '"What should the song be about?"';
-      } else if (askBeat === 'band') {
-        ask = '"Which band, or what kind of music? Say you choose and I will pick."';
+      } else if (askBeat === 'sound') {
+        ask = '"What kind of music should it be? Say you choose and I will pick."';
       } else if (askBeat === 'feel') {
         ask = '"How should it feel: slow and warm, big and driving, something else? Say you choose and I will pick."';
       }
@@ -2187,13 +2192,13 @@ async function handleSongCall(call) {
         const payload = {
           action: 'make',
           text: songDraft.said || words || 'again',
-          who: songWhoClean(songDraft.who || String(args.who || '').trim(), songDraft.band, songDraft.feel),
+          who: songWhoClean(songDraft.who || String(args.who || '').trim(), songDraft.sound, songDraft.feel),
           session_id: s.token.slice(0, 24),
         };
-        // Build 138: the band and the feel he chose on the journey travel WITH the song. Two places,
+        // Build 138: the sound and the feel he chose on the journey travel WITH the song. Two places,
         // because the record is what the making actually reads: the payload may be ignored, so the door
         // also writes the style onto the request the moment it exists.
-        const styleLine = [songDraft.band, songDraft.feel].filter(Boolean).join(', ').slice(0, 200);
+        const styleLine = [songDraft.sound, songDraft.feel].filter(Boolean).join(', ').slice(0, 200);
         if (styleLine) { payload.feel = styleLine; payload.style = styleLine; }
         // "new" is his decision after being asked, so it overrides the similarity guard.
         if (action === 'new') payload.force = true;
@@ -2204,7 +2209,7 @@ async function handleSongCall(call) {
         if (r.needs_word && r.prior_id) lastPriorId = r.prior_id;
         if (r.request_id) lastSongRequest = r.request_id;
         if (styleLine && lastSongRequest && !r.needs_word) {
-          gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.band || '',
+          gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.sound || '',
             feel_word: songDraft.feel || '' }).catch(() => {});
         }
         if (!r.needs_word) songDraftReset();   // the brief became a song; the next one starts clean
@@ -2223,7 +2228,7 @@ async function handleSongCall(call) {
           const whoNamed = String(payload.who || '').trim();
           madeShare = {
             request_id: lastSongRequest || '', who: whoNamed, text: payload.text || '',
-            band: songDraft.band || '', feel: songDraft.feel || '',
+            band: songDraft.sound || '', feel: songDraft.feel || '',
             title: r.title || '', stage: 'making',
           };
           shareCard = { kind: 'made', title: r.title || 'the song he is making',
@@ -2675,7 +2680,7 @@ function judgeClaim() {
         doorCorrect(madeShare && madeShare.stage === 'making'
           ? 'still being made · it goes on your shelf when it lands'
           : 'it is on your shelf',
-          'There is no inbox anywhere in this house. Everything the door makes or finds goes on his shelf.');
+          'It is on his shelf. Everything the door makes or finds goes on his shelf, and that is where he looks.');
       }
       return;
     }
