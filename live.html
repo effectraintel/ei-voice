@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T20:40';
-const BUILD_NO = 150;
+const BUILD = '2026-11-10T20:58';
+const BUILD_NO = 151;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -844,6 +844,14 @@ async function renewLink(why) {
 }
 
 function shutDoor() {
+  // Build 151: the seed of a meter. Nothing here is a bill; it is how long the door spoke and how many times
+  // it answered, which is the only part of the spend we can count without asking the supplier anything.
+  try {
+    if (sessionOpenedAt) {
+      const mins = Math.max(1, Math.round((Date.now() - sessionOpenedAt) / 60000));
+      logLine('session.span', mins + ' min open · ' + userTurns + ' of his turns', { level: 'info', target: 'usage' });
+    }
+  } catch (e) {}
   try { ws && ws.close(); } catch {}
   ws = null; sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
   // A greeting still in flight must not open a door that has been shut.
@@ -5352,6 +5360,22 @@ function doorRefused(raw) {
   try { foldForDoor(false); } catch (e) {}
   setState('the voice is unavailable');
   warn(line);
+  // Build 151: the door tells us itself, this second. Google's own email about the cap arrived an hour after
+  // the door already knew (10 Nov: refused 19:13:45, email 20:16:46), and Edwin read that as what it is:
+  // "the alert came way after it was already an issue". A supplier's notice is not monitoring.
+  try {
+    fetch(FNBASE + 'doorHealthPing', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: kind,
+        why: String(raw || '').slice(0, 600),
+        build: String(BUILD_NO),
+        device: String((navigator && (navigator.platform || navigator.userAgent)) || '').slice(0, 60),
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (e) {}
 }
 
 function sayGreeting() {
