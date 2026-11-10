@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T21:40';
-const BUILD_NO = 153;
+const BUILD = '2026-11-10T21:50';
+const BUILD_NO = 154;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -4908,7 +4908,10 @@ function openShareSheet(card, art) {
      description that is pre-populated." So the sheet asks, and the description is already written from the
      song. A yes draws it as part of the send and it travels with the song; a no sends it bare and the sheet
      says nothing about covers at all. */
-  const isSong = !!(card && (card.song_id || /^(made|song)$/.test(String(card.kind || ''))));
+  // A song is anything the door made: it may have no store link and no song_id at all (a made card keeps an
+  // empty url until a link is wrapped), so the kind is what decides, not the fields.
+  const isSong = !!(card && (card.song_id || /^(made|song|cover)$/i.test(String(card.kind || ''))
+    || (card.title && !card.url && /\b(?:made|song|tune|take)\b/i.test(String(card.sub || '')))));
   let coverWanted = !!(art && art.want);
   const artLine = document.createElement('div');
   artLine.style.cssText = 'font-size:11px;color:#9b9182;margin:2px 0 10px;line-height:1.4';
@@ -5236,6 +5239,14 @@ function drawCards(el) {
     } else {
       card.appendChild(t);
       if (it.note) { d.textContent = it.note; card.appendChild(d); }
+      // Build 154, Edwin 21:39: "Not coming through on the shelf..." The share chip was only drawn for a card
+      // that had a url, and a song made here has no store link - so the one card that most needs the sheet, the
+      // song he just made, had no way to open it. Every card can be shared now, and a song opens the sheet with
+      // the cover question on it.
+      const share = document.createElement('button');
+      share.className = 'copy share'; share.type = 'button'; share.textContent = 'share';
+      share.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openShareSheet(it); };
+      card.appendChild(share);
     }
     el.appendChild(card);
   });
