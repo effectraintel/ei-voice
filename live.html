@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T17:15';
-const BUILD_NO = 146;
+const BUILD = '2026-11-10T17:35';
+const BUILD_NO = 147;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -267,8 +267,9 @@ const BUILD_NO = 146;
    was ever drawn. There is now one sentence, and everything that talks about the picture uses it. */
 const PICTURE_RULE = 'The picture is the last question of the making: the door asks it once, after the song '
   + 'has landed on his shelf and there is something to draw from, and nothing is drawn before he answers. '
-  + 'A no leaves it bare. Never ask about a picture while a song is still being made, and never say a cover '
-  + 'is drawn when he shares it: that reading was withdrawn on 10 Nov.';   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+  + 'A no leaves it bare. Never ask about a picture while a song is still being made, never announce it as '
+  + 'something to do later ("we can talk about the cover once it arrives"), and never say a cover is drawn '
+  + 'when he shares it: that reading was withdrawn on 10 Nov.';   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1560,8 +1561,18 @@ const SONG_SCRIPT =
   'The shelf is where everything the door makes and everything it finds goes: a song, a link, a picture. That is where he looks, and it is the only place he needs to look. ' +
   'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
   'make and hand it exactly what he said. Then say the line it returns, in your own voice, in one or two ' +
-  'sentences, and stop. Do not describe how it will sound, do not promise more than a few minutes, and ' +
-  'never imply it is already on his shelf unless the door tells you it has put it there. ' +
+  'sentences, and stop. Do not describe how it will sound and never imply it is already on his shelf ' +
+  'unless the door tells you it has put it there. ' +
+  // Build 147. Edwin, 10 Nov 17:05, from the log: "Hip hop it is, Boss. The song is being made now and
+  // should be in your inbox in a few minutes. We can talk about the cover art once it arrives." Two faults
+  // in one breath: the mail that does not exist, and a next step promised for later that nobody had agreed.
+  // The door cut the text and nothing could unsay the audio, so the lever left is the sentence itself: while
+  // a take is in flight there is exactly ONE thing that is true, and he is given it word for word.
+  'While a take is being made, the only sentence you may say about it is: "It is being made now, and it ' +
+  'lands on your shelf." Nothing else is true yet, so add nothing: no minutes, no waiting, no mail, no ' +
+  'cover, no next step. Never announce what will happen later - no "once it arrives", no "after that", no ' +
+  '"we can talk about ... when" - and if he asks what happens next, say the picture is asked after it lands ' +
+  'and nothing is drawn before he answers. ' +
   // 8 Nov 2026, 17:05: asked "it is in my inbox", the model said the door could not see that, while the
   // delivery record held the send. The record is the door's to hold, and answering from it is not a claim.
   'The door keeps the delivery record of everything it sends, so never tell him the door cannot see a '
@@ -2681,6 +2692,19 @@ function judgeClaim() {
           ? 'still being made · it goes on your shelf when it lands'
           : 'it is on your shelf',
           'It is on his shelf. Everything the door makes or finds goes on his shelf, and that is where he looks.');
+      }
+      return;
+    }
+    // Build 147: "we can talk about the cover art once it arrives" - a next step promised for later while
+    // nothing exists yet. The picture is asked once, after the song lands, and only if he says yes.
+    const futureClaim = /\b(?:once|when) (?:it|that|the song|the track) (?:arrives|lands|is ready|is done)\b|\bwe can (?:talk|sort|do|look)\b[^.!?]{0,60}\b(?:once|when|after|later)\b|\bafter that\b|\ba bit later\b/i;
+    if (futureClaim.test(t) && madeShare && madeShare.stage === 'making') {
+      if (Date.now() - unbackedWarnedAt >= 15000) {
+        unbackedWarnedAt = Date.now();
+        hiddenHold = true; hiddenHoldUntil = Date.now() + 1500;
+        logLine('claim.future', t.slice(0, 160), { level: 'warn', target: 'copy' });
+        doorCorrect('still being made · it lands on your shelf',
+          'Nothing is promised for later. It is being made now, and it lands on his shelf.');
       }
       return;
     }
