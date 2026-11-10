@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T15:20';
-const BUILD_NO = 138;
+const BUILD = '2026-11-10T15:33';
+const BUILD_NO = 139;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -285,6 +285,10 @@ const PICTURE_RULE = 'The picture is the last question of the making: the door a
       const key = 'busted:' + m[1];
       if (sessionStorage.getItem(key)) return;
       sessionStorage.setItem(key, '1');
+      // Build 139: the outgoing page must not leave a live door behind. On 10 Nov a stale page took the new
+      // build while its own door was open, and for a few seconds two doors listened to one man: he was
+      // answered twice, by two mouths, from two half-understood turns.
+      try { if (ws) { ws.close(); ws = null; } } catch (e) {}
       location.replace(location.pathname + '?v=' + encodeURIComponent(m[1]));
     })
     .catch(() => {});
@@ -1004,6 +1008,18 @@ try {
     }
   });
 } catch (e) {}
+
+/* Build 139: the lease is checked, not trusted. The storage event is not guaranteed to reach every document
+   on iOS, and on 10 Nov a stale page and the new one each held a live door for the same minute - three door
+   opens in the log, one phone. So every four seconds the door asks who holds the voice, and stands down if
+   it is not this document. The newest door still wins; the old one now leaves instead of talking over it. */
+setInterval(() => {
+  try {
+    if (!ws && !sessionUp) return;
+    const owner = localStorage.getItem(VOICE_KEY);
+    if (owner && owner !== MY_VOICE) standDown('another door holds the voice: ' + String(owner).split('.')[1]);
+  } catch (e) {}
+}, 4000);
 
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
   .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -2564,6 +2580,17 @@ function judgeClaim() {
     if (!claims.test(t)) return;
     const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000)
       || (Date.now() - railToldAt < 20000);
+    // Build 139: the truth, not a denial, when the song is already found and locked. On 10 Nov he was told
+    // "I couldn't find that song right now" while Back in Black sat on his shelf with its link made.
+    if (shareCard && shareCard.title && /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found/i.test(t)) {
+      if (Date.now() - unbackedWarnedAt >= 15000) {
+        unbackedWarnedAt = Date.now();
+        logLine('claim.found', t.slice(0, 160), { level: 'warn', target: 'rail-found' });
+        doorNote('You did find it: "' + shareCard.title + '" is on his shelf and its listening link is made. '
+          + 'Correct yourself in one short line and say it is there. Do not ask him which song he means.', true);
+      }
+      return;
+    }
     if (answered || doorSearching) return;
     if (Date.now() - unbackedWarnedAt < 15000) return;    // one correction, not a chorus
     unbackedWarnedAt = Date.now();
@@ -3382,6 +3409,10 @@ function shareSongLocked(card) {
   shareArtTries = 0;
   shareCoverAsked = false; shareAddrOk = false;
   saveDraft();
+  // Build 139: a song that is locked IS on his shelf, so a sentence saying so is true and must be allowed.
+  // Without this the guard held "Back in Black is on your shelf now" as a lie, told the model nothing had
+  // been written, and the door then told him it could not find the song it had just shelved.
+  shelfWriteAt = Date.now();
   railNote('share · song locked · ' + card.title);
   // No scripted line: the tool result already tells the model to ask about the picture in its own words.
   shareCoverAsked = true;                    // one question, one answer, never a loop of the same ask
@@ -3466,6 +3497,15 @@ function descentAnswer(heard) {
 
 function shareArtAnswer(heard) {
   const words = String(heard || '').trim();
+  // Build 139: a sentence about the song is not an answer about a picture, and must not spend the question.
+  // On 10 Nov he said "It's already on my shelf." about a song he had just shared, and the door locked those
+  // words as the art brief and paid to draw them, for a song that had not even landed. The step stays open
+  // and his words go to the model, which can see what he is actually talking about.
+  const aboutTheSong = /\b(?:on (?:my|the|your) shelf|already (?:on|there|made|landed|done)|share it|send it|email|address|where is it|not yet|nothing yet|is it done)\b/i.test(words);
+  if (aboutTheSong && !wantsCoverArt(words)) {
+    logLine('share.art.notbrief', words.slice(0, 120), { level: 'info', target: 'share' });
+    return;
+  }
   descentAskedAt = 0;                        // asked once, answered once
   // The word boundary here was a raw backspace byte in builds up to 124, so this test could never match:
   // "no picture" was locked as a picture brief and drawn. Found by the build-125 harness, fixed here.
@@ -3558,9 +3598,18 @@ function shareArtAnswer(heard) {
 let descentDrawing = 0;
 async function drawDescent() {
   if (!shareArt || !shareArt.want) return;
+  // Build 139: only a song that has landed gets a picture, and only its own record gets it. On 10 Nov a
+  // cover was drawn while the song was still being made, titled with a different song's name, and written
+  // onto the request of a song that did not exist yet. A picture attached to the wrong song is worse than
+  // no picture, and it is paid for either way.
+  if (!(madeShare && madeShare.stage === 'ready')) {
+    railNote('descent · held until the song lands');
+    return;
+  }
   const at = Date.now();
   descentDrawing = at;
-  const card = shareCard || shareCardTarget || {};
+  // The title comes from the song being made, never from whatever else is on the shelf. (build 139)
+  const card = { title: (shareCard && shareCard.kind === 'made' && shareCard.title) || '' };
   const reqId = (madeShare && madeShare.request_id) || lastSongRequest || '';
   const scene = (madeShare && madeShare.text) || '';
   railNote('descent · drawing' + (shareArt.brief ? ' · ' + String(shareArt.brief).slice(0, 40) : ' · from the song'));
@@ -3689,6 +3738,9 @@ async function madeReady(r) {
   const forWho = String(madeShare.who || '').trim();
   const landedReq = String(madeShare.request_id || '');
   shelfWriteAt = Date.now();                 // it is on his shelf: the claim guard may now allow the sentence
+  // Build 139: a yes given while the song was still being made pays for its picture HERE, the moment the song
+  // lands and on its own record. Before this the yes was held and then thrown away with the draft.
+  if (shareArt && shareArt.want) drawDescent();
   logLine('made.landed', landedTitle + (forWho ? ' · for ' + forWho : '') + ' · on the shelf to share',
     { level: 'info', target: 'music' });
   railNote('made · landed · on his shelf to share' + (forWho ? ' · for ' + forWho : ''));
@@ -5188,8 +5240,12 @@ function handleFrame(text) {
     // fact. (Grounding counts as looking: a real search leaves groundingMetadata on the turn.)
     try {
       const claim = String(said.engine || '');
-      const worldShape = /\b(according to|the forecast|the latest|right now|currently|at the moment|today's|this morning|this evening|tomorrow's)\b/i.test(claim)
-        || /\b\d+\s*(?:degrees|\u00b0|%|km\/h)\b/i.test(claim);
+      // Build 139: "right now" alone is not a claim about the world, and a sentence about a song, a shelf or a
+      // rail never is. On 10 Nov "I couldn't find that song right now" sent the door to Wikipedia in the
+      // middle of a share, and it came back talking about an album while he waited for the song.
+      const railTalk = /\b(?:song|track|tune|shelf|rail|share|found|album|artist|playlist|picture|cover)\b/i.test(claim);
+      const worldShape = !railTalk && (/\b(according to|the forecast|the latest|currently|at the moment|today's|this morning|this evening|tomorrow's)\b/i.test(claim)
+        || /\b\d+\s*(?:degrees|\u00b0|%|km\/h)\b/i.test(claim));
       // A door tool that answered this turn counts as looking: his own shelf, a payment, a song. Only an
       // answer with no lookup of any kind is a claim about the world that nobody checked.
       const lookedThisTurn = (Date.now() - worldLookedAt < 30000) || worldGrounding || !!looked;
