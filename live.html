@@ -257,7 +257,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-10T13:55';
-const BUILD_NO = 136;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD_NO = 137;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -398,9 +398,10 @@ const BRIEF = NO_CLAIM +
   'If he asks you to speak another language, say the door is set to English and that it can be changed, ' +
   'rather than switching by yourself. ' +
   'A share has exactly one owner for each step. Finding the song is yours: call share and believe its ' +
-  'answer. You never ask about a cover, you never ask who a thing is for, and you never ask for an address: ' +
-  'sharing happens from the shelf, where he types the address, writes his own message and gets a cover ' +
-  'drawn from the song itself. So ' +
+  'answer. You never ask who a thing is for and you never ask for an address: sharing happens from the ' +
+  'shelf, where he types the address and writes his own message. The picture is the one question the door ' +
+  'does ask, and only at the very end: once the song has landed and there is something to draw from, ask ' +
+  'once whether a picture should go with it, and what it should show. Nothing is drawn until he answers. So ' +
   'never ask for an address, never ask for the message, never offer to send, and never say a send is ' +
   'happening. If you have no share tool for it, that is why: it is not yours to call. ' +
   // Edwin, 8 Nov 13:10: "Later duplicate responses (almost like there are 2 different people listening)."
@@ -732,15 +733,35 @@ const MANNERS = '\n\nTwo rules about the working, added 8 November after he hear
   + 'is on his screen or a step remains. While the sheet is open, one short line about where to look and '
   + 'nothing about the song, the rail or the shelf.';
 
+/* Build 137, change 8: the words on screen. The live transcription arrives word by word with no
+   separator, so `said + add` drew a whole reply as one unbroken word. (Edwin, 10 Nov 14:39: "the text on
+   the screen is all the words as one no spaces".) The mode is decided on the first fragment of a turn: a
+   single letter means the stream is character-level and is appended raw, anything longer is a word and
+   gets a gap. Punctuation closes onto the word before it, so a hyphenated or apostrophised word never
+   splits, and a fragment that already carries whitespace is never given a second one. */
+let streamMode = { you: null, engine: null };
+
+function glueFragment(who, a, b) {
+  if (!a) {                                   // the first fragment of this turn decides the mode
+    streamMode[who] = (b.length === 1 && /[A-Za-z0-9]/.test(b)) ? 'char' : 'word';
+    return b;
+  }
+  if (!b) return a;
+  if (streamMode[who] === 'char') return a + b;
+  if (/\s$/.test(a) || /^\s/.test(b)) return a + b;
+  if (/^[,.;:!?)\]\u2019'\u2014-]/.test(b)) return a + b;
+  return a + ' ' + b;
+}
+
 function appendLive(who, text) {
   // A new engine bubble means his turn is over, so the next thing he says starts its own
   // block instead of extending the old one.
-  if (who === 'engine' && !turns.engine) { turns.you = null; said.you = ''; }
-  if (!turns[who]) { turns[who] = addTurn(who, ''); said[who] = ''; }
+  if (who === 'engine' && !turns.engine) { turns.you = null; said.you = ''; streamMode.you = null; }
+  if (!turns[who]) { turns[who] = addTurn(who, ''); said[who] = ''; streamMode[who] = null; }
   const add = String(text || '');
   // Two shapes arrive from the live API depending on the model and transport: deltas, and
   // the whole turn so far. Appending a cumulative repeat is what glued a reply to itself.
-  said[who] = (said[who] && add.startsWith(said[who])) ? add : (said[who] + add);
+  said[who] = (said[who] && add.startsWith(said[who])) ? add : glueFragment(who, said[who], add);
   if (who === 'engine') said[who] = collapseRepeat(said[who]);
   turns[who].querySelector('.said').textContent = said[who];
   logEl.scrollTop = logEl.scrollHeight;
@@ -1697,8 +1718,40 @@ function shadowRouteNote(heard, gatePick) {
   }), { level: 'info', target: 'music' });
 }
 
+/* Build 137, change 5: a correction outranks a route. At 11:38 on 10 Nov he said "Oh no, I actually want
+   to create a song": the solver read make, the gate read nothing, and the share branch searched the whole
+   sentence, found a real song called "Oh No" and put it on his shelf. So what he means is what he said
+   after the correction cue, and the turn that corrects may not search. */
+function correctionCue(t) {
+  const s = String(t || '');
+  const rx = /\b(?:actually|instead|no,?\s+i|i\s+(?:don'?t|do not)\s+want|let'?s\s+(?:rather|instead))\b/gi;
+  let at = -1, m;
+  while ((m = rx.exec(s)) !== null) at = m.index;
+  return at;
+}
+let routeCorrectedAt = 0;      // a correction turn is a route, never a title to search for
+
+/* Build 137, change 6: a route sentence is never a query. "I want to create a song" carries no title in
+   it, so nothing may be searched with those words. Everything in the sentence is the asking. */
+function isRouteSentence(t) {
+  const s = String(t || '').trim();
+  if (!s) return false;
+  // The asking is stripped out too, so "I want to share a song" leaves nothing behind and is a route,
+  // while "share Somebody To Love by Queen" leaves a title and is not.
+  const bare = s.replace(SONG_FILLER, ' ')
+    .replace(/\b(?:make|making|create|creating|write|writing|compose|sing|share|sharing|send|sending)\b/gi, ' ')
+    .replace(/[^A-Za-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (bare.length > 3) return false;
+  if (/\b(?:make|making|create|creating|write|writing|compose|sing)\b/i.test(s)
+      && /\b(?:song|tune|track)\b/i.test(s)) return true;
+  return /\b(?:share|sharing|send|sending)\b/i.test(s) && /\b(?:song|tune|track)\b/i.test(s);
+}
+
 function songRouteGate(heard) {
-  const t = String(heard || '').toLowerCase();
+  const raw = String(heard || '');
+  const cue = correctionCue(raw);
+  if (cue >= 0) routeCorrectedAt = Date.now();
+  const t = (cue >= 0 ? raw.slice(cue) : raw).toLowerCase();
   // A song is usually named as one ("share a song"), but he also names the track directly ("share I See
   // Fire with me"), so a share verb followed by a capitalised word counts as the same ask.
   if (!/\bsong\b|\btune\b|\btrack\b/.test(t)
@@ -2520,6 +2573,17 @@ async function handleShareCall(call) {
     // three wrong answers to a sentence nobody meant as a search. A phrase that is about wanting a song
     // names no song, so it is answered with the one question that does.
     query = stripRequestFrame(query);
+    // Build 137, change 6: a route is not a title. If the words are only the asking ("I want to create a
+    // song"), or they arrive in the breath of a correction, nothing is searched and he is asked which song.
+    if (isRouteSentence(query) || (Date.now() - routeCorrectedAt < 8000
+        && /\b(?:make|create|write|compose)\b/i.test(query))) {
+      result = 'Those words are him saying what he wants to do, not the name of a song. Search nothing, '
+        + 'name no song, and ask him once, in one short sentence, which song he means.';
+      looked = 'sharing · a route, not a title';
+      railNote('share · held · that was a route, not a title');
+      logLine('share.hold.route', String(query).slice(0, 120), { level: 'info', target: 'songShare' });
+      return;
+    }
     if (!query) {
       result = 'He has not named a song yet. Ask him which song, in one short question, and stop.';
       looked = 'sharing · which song';
@@ -3042,6 +3106,30 @@ function loadDraft() {
 
 let shareArt = { want: false, brief: '' };   // his description, locked, and never invented by the model
 let shareArtTries = 0;                       // one re-ask when the description arrives cut off
+let descentAskedAt = 0;                      // when the door asked the last question of the making
+
+/* Build 137, change 3: the brief survives a give-up. Releasing the step throws the page's memory away by
+   design, so a description he gave while the song was still being made was lost with it - that is exactly
+   how "a mountain. Standing tall in the middle of nowhere" vanished at 11:29 on 10 Nov. It is written down
+   the moment it is locked, against the request it belongs to, and read back when the song lands. */
+const ART_KEY = 'ei.art.brief';
+
+function saveArtBrief(requestId) {
+  try {
+    const id = requestId || (madeShare && madeShare.request_id) || lastSongRequest || '';
+    localStorage.setItem(ART_KEY, JSON.stringify({ request_id: id, want: !!shareArt.want,
+      brief: shareArt.brief || '', at: Date.now() }));
+  } catch (e) {}
+}
+
+function loadArtBrief(requestId) {
+  try {
+    const d = JSON.parse(localStorage.getItem(ART_KEY) || 'null');
+    if (!d || Date.now() - (d.at || 0) > 6 * 3600e3) return null;
+    if (requestId && d.request_id && d.request_id !== requestId) return null;
+    return d;
+  } catch (e) { return null; }
+}
 
 // The door used to make the voice speak canned lines by posting a fake user turn — "(Say exactly this, in
 // that tone, and nothing else: ...)". The model then answered its own instruction: two replies in the room,
@@ -3256,6 +3344,10 @@ function resolveChoice(heard) {
 // brief, so it is left to the model instead of being locked as one. (build 125)
 function artAnswerCandidate(heard) {
   const w = String(heard || '');
+  // Build 137, change 7: a route or a correction is not a picture brief. "I want to create a song" was
+  // locked as the art brief on 10 Nov, and the brief it produced would have been drawn.
+  if (isRouteSentence(w)) return false;
+  if (correctionCue(w) >= 0 && /\b(?:song|tune|track|make|create|share)\b/i.test(w)) return false;
   if (wantsCoverArt(w)) return true;
   if (/^(no|nope|nothing|skip|just the song|no cover|no picture)\b/i.test(w.trim())) return true;
   return !/\b(how long|when will|how much longer|is it (?:done|ready)|are you|did it|what time|why)\b/i.test(w);
@@ -3268,13 +3360,28 @@ function wantsCoverArt(heard) {
   return !/\b(song|track|tune|play|share)\b/i.test(w) || /\b(add|draw|make|with|go with|show)\b/i.test(w);
 }
 
+/* Build 137: the picture is the descent, so his answer arrives after the song has landed and the step is
+   already released. A plain "yes, a mountain in fog" carries no picture word, so the old guard never fired
+   and the answer went nowhere. This accepts an answer inside a short window after the question, and
+   refuses anything that is really a route, a correction or a question about the wait. */
+function descentAnswer(heard) {
+  if (!descentAskedAt || Date.now() - descentAskedAt > 180000) return false;
+  const w = String(heard || '').trim();
+  if (!w || w.split(/\s+/).length > 28) return false;
+  if (isRouteSentence(w) || correctionCue(w) >= 0) return false;
+  if (/\b(?:how long|when will|where is|did it|is it (?:done|ready)|what time|why)\b/i.test(w)) return false;
+  return true;
+}
+
 function shareArtAnswer(heard) {
   const words = String(heard || '').trim();
+  descentAskedAt = 0;                        // asked once, answered once
   // The word boundary here was a raw backspace byte in builds up to 124, so this test could never match:
   // "no picture" was locked as a picture brief and drawn. Found by the build-125 harness, fixed here.
   const no = /^(no|nope|nothing|just the song|no cover|no picture|no drawing|don'?t|skip)\b/i.test(words);
   if (no) {
     shareArt = { want: false, brief: '' };
+    saveArtBrief('');                        // a no is an answer too, and must survive the release
     railNote('share · art · none');
   } else {
     // The lead-in is fence, not picture: everything before the thing he wants shown is stripped, so the
@@ -3316,6 +3423,7 @@ function shareArtAnswer(heard) {
     }
     shareArt = { want: true, brief: thin ? '' : clean };   // empty brief = the song's own scene
     saveDraft();
+    saveArtBrief('');                        // written down now, so a give-up cannot lose it
     railNote('share · art locked · ' + (shareArt.brief || 'from the song').slice(0, 60));
     logLine('share.art', shareArt.brief || '(from the song)', { level: 'info' });
   }
@@ -3446,6 +3554,7 @@ async function madeReady(r) {
   // turns that come after it.
   const landedTitle = shareCard.title || 'the song';
   const forWho = String(madeShare.who || '').trim();
+  const landedReq = String(madeShare.request_id || '');
   shelfWriteAt = Date.now();                 // it is on his shelf: the claim guard may now allow the sentence
   logLine('made.landed', landedTitle + (forWho ? ' · for ' + forWho : '') + ' · on the shelf to share',
     { level: 'info', target: 'music' });
@@ -3453,10 +3562,25 @@ async function madeReady(r) {
   madeShare = null;
   shareStage = 'idle';
   try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  // Build 137, change 2: the picture is the descent, and this is the moment it can be asked. The subject,
+  // the band, the feel and the words all exist now, so a cover can be drawn from the song instead of
+  // guessed. It is asked once, nothing is drawn before he answers, and his answer is what pays for it
+  // (consent-before-spend). If he already described one while it was being made, it is held and is not
+  // asked again.
+  const heldArt = loadArtBrief(landedReq);
+  const artHeld = !!(heldArt && (heldArt.want || heldArt.brief));
+  if (artHeld) shareArt = { want: !!heldArt.want, brief: heldArt.brief || '' };
+  descentAskedAt = artHeld ? 0 : Date.now();
+  logLine('made.descent', artHeld ? 'held from the making: ' + (heldArt.brief || 'his yes')
+    : 'asking, once', { level: 'info', target: 'music' });
   doorNote('"' + landedTitle + '" has landed and it is on his shelf' + (forWho ? ', made for ' + forWho : '')
     + '. Say one short line: the title once, plainly, that it is on his shelf, and that he can share it from '
-    + 'there whenever he wants. Do not ask for an address, an email, a message or a picture, do not say it has '
-    + 'been sent or will arrive, and do not mention a sheet.', true);
+    + 'there whenever he wants. ' + (artHeld
+      ? 'His picture is already noted, so do not ask about it again: say it goes with the song when he shares it.'
+      : 'Then ask the last question of the making, once, in your own words: would he like a picture to go with '
+        + 'it, and what should it show. Draw nothing until he answers, and if he says no, leave it bare.')
+    + ' Do not ask for an address or an email, do not say it has been sent or will arrive, and do not mention '
+    + 'a sheet.', true);
 }
 
 function shelfFind(words) {
@@ -4823,7 +4947,7 @@ function handleFrame(text) {
       // The cover question may still be asked by the model rather than the door. If he answers it with a
       // picture in mind while a song is on the shelf, that is the art step whether or not the door opened
       // it: the answer is taken here rather than dropped on the floor.
-      else if (shareCard && !sharePending && wantsCoverArt(heard)) {
+      else if (shareCard && !sharePending && (wantsCoverArt(heard) || descentAnswer(heard))) {
         shareStage = 'art';
         railNote('share · art · taken from his answer with the step not open');
         shareArtAnswer(heard);
