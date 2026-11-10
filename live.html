@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T15:44';
-const BUILD_NO = 140;
+const BUILD = '2026-11-10T16:02';
+const BUILD_NO = 141;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1553,11 +1553,15 @@ function onMessage(ev) {
 // What the door says about making music, and what it must never say. Kept apart from
 // the house rules so it can be read, tested and changed on its own.
 const SONG_SCRIPT =
-  'This corridor is not read-only, whatever the house rules sound like: with the song tool you can make real music in his own account and have it delivered to his inbox. ' +
+  // Build 141, Edwin 15:50 on 10 Nov: "We don't have an inbox. It is a shelf." The script had told the model a
+  // song is "delivered to his inbox", so that is the word it reached for, and he went looking in his mail.
+  'This corridor is not read-only, whatever the house rules sound like: with the song tool you can make real music in his own account, and it goes on his shelf. We have no inbox: never say the word inbox, never say a thing will arrive in his mail, and never say a song is going anywhere before the door tells you it is on the shelf. ' +
+  // A reminder of what the shelf is, because the model reaches for mail whenever it is asked where something is.
+  'The shelf is where everything the door makes and everything it finds goes: a song, a link, a picture. That is where he looks, and it is the only place he needs to look. ' +
   'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
   'make and hand it exactly what he said. Then say the line it returns, in your own voice, in one or two ' +
   'sentences, and stop. Do not describe how it will sound, do not promise more than a few minutes, and ' +
-  'never imply it is already in his inbox unless the door tells you it has sent it. ' +
+  'never imply it is already on his shelf unless the door tells you it has put it there. ' +
   // 8 Nov 2026, 17:05: asked "it is in my inbox", the model said the door could not see that, while the
   // delivery record held the send. The record is the door's to hold, and answering from it is not a claim.
   'The door keeps the delivery record of everything it sends, so never tell him the door cannot see a '
@@ -2530,13 +2534,30 @@ function judgeClaim() {
         logLine('claim.repeat', t.slice(0, 160), { level: 'warn', target: 'repeat' });
         // Saying "still being made" twice is not twice the information, and asking the mouth for a second
         // line is what produced the third one. The repeat is simply not spoken.
-        doorCorrect('still being made · it is already on its way to your shelf',
+        doorCorrect('still being made · nothing new to say',
           'He has already been told. Nothing has changed.');
         return;
       }
       if (!saidAt || Date.now() - saidAt >= 180000) madeShare.saidStillAt = Date.now();
     }
-    const copyClaim = /\binbox\b|\barrive|\bon its way\b|\bfew minutes\b|\bbeing sent to you\b/i;
+    /* Build 141. There is no inbox. On 10 Nov 15:47 the model said "it should be in your inbox in a few
+       minutes", the guard cut it mid-sentence, and the correction it displayed said "not to your inbox" -
+       which is where Edwin read the word and corrected us: "We don't have an inbox. It is a shelf." So the
+       word is now caught wherever it is said, at any stage, not only while a song is being made, and the
+       correction names the shelf without naming the thing it is not. */
+    if (/\binbox\b/i.test(t)) {
+      if (Date.now() - unbackedWarnedAt >= 12000) {
+        unbackedWarnedAt = Date.now();
+        hiddenHold = true; hiddenHoldUntil = Date.now() + 1200;
+        logLine('claim.inbox', t.slice(0, 160), { level: 'warn', target: 'copy' });
+        doorCorrect(madeShare && madeShare.stage === 'making'
+          ? 'still being made · it goes on your shelf when it lands'
+          : 'it is on your shelf',
+          'There is no inbox anywhere in this house. Everything the door makes or finds goes on his shelf.');
+      }
+      return;
+    }
+    const copyClaim = /\barrive|\bon (?:its|the) way\b|\bfew minutes\b|\bbeing sent to you\b|\b(?:is|be|will be|should be) (?:already )?on your shelf\b/i;
     if (copyClaim.test(t) && madeShare && madeShare.stage === 'making') {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
@@ -2544,8 +2565,8 @@ function judgeClaim() {
         hiddenHoldUntil = Date.now() + 1500;
         logLine('claim.copy', t.slice(0, 160), { level: 'warn', target: 'copy' });
         if (madeShare && !madeShare.saidStillAt) madeShare.saidStillAt = Date.now();
-        doorCorrect('still being made · it goes on your shelf, not to your inbox',
-          'Nothing is in his inbox and nothing is on its way there.');
+        doorCorrect('still being made · it goes on your shelf when it lands',
+          'Nothing is on his shelf yet, and nothing has been sent to him.');
       }
       return;
     }
@@ -2882,14 +2903,14 @@ let shareDraft = null;
 let shareCard = null;                        // the song the door has locked, and the card it put down
 let shareStage = 'idle';                     // idle → art → waiting → sheet → sent. One step open at a time.
 /* Build 125. A song made here is a song he may want to send, and the make path used to end in his own
-   inbox: nothing asked who it was for, the picture answer had no step to live in, and the sheet could
+   shelf: nothing asked who it was for, the picture answer had no step to live in, and the sheet could
    never open. (Edwin, 10 Nov 08:41: "I want to create a song and share it to somebody" then, when the
    song had landed, "Can I put the email that you have to send it to?" - and there was no sheet to type
    it on.) A made song now hands itself to the same share step an existing song uses: one picture
    question, then the sheet, as soon as the rail says the audio is delivered. */
 let madeShare = null;      // { request_id, who, text, title, stage: 'making' | 'ready' }
 let madeWatch = 0, madeTries = 0;
-// A song made for nobody in particular belongs in his inbox and nowhere else. A made song only goes on to
+  // A song made for nobody in particular belongs on his shelf and nowhere else. A made song only goes on to
 // the share step if he asked for it to be sent, or if he named a person while a share was in the air
 // ("I want to create a song and share it to somebody" ... "make a new song from my words").
 let shareIntentAt = 0;
