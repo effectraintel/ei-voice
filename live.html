@@ -248,7 +248,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-10T11:45';
-const BUILD_NO = 131;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD_NO = 132;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -1511,12 +1511,14 @@ const SONG_SCRIPT =
   // the door must ask the same three things, in the same order, one question at a time.
   // A person is not a subject: "a song for a friend" says who, not what. So never treat a
   // recipient as a subject, and never let the tool make anything from a name alone.
-  'A song is made to a brief, so ask before you make. THREE things, one short question at a time, ' +
-  'and never more than one question in a turn: (1) what should it say, in his own words - this is the ' +
-  'one that matters; (2) who is it for, if he has not said; (3) what kind of song - rock, country, soul, ' +
-  'something to dance to - and "you choose" is a good enough answer. A person is not a subject: ' +
-  '"a song for a friend" tells you the who and nothing about the what, so ask what it should say to them. ' +
-  'When he has answered, say the brief back in one line before making it, then call song with make. ' +
+  // 10 Nov 12:45, his own words: "Stop asking but make sure they know it is there for sharing."
+  // A made thing lands on his shelf and is shared from there, so the door asks about neither the person
+  // nor the style nor the picture nor the address. One question survives, because no record can answer it.
+  'Ask nothing before you make, except the one thing no record can answer: if he has given you nothing to ' +
+  'make it from, ask what it should be about, in one short question, and stop. Never ask who it is for, ' +
+  'never ask what kind of song, never ask whether a picture should go with it, never ask for an address or ' +
+  'an email. If he says the person or the style himself, take it and use it. A person is not a subject: ' +
+  '"a song for a friend" tells you the who and nothing about the what. When you have his words, make it. ' +
   'If he changes his mind, take the new answer. If he says make it now, make it with what you have. ' +
   'If he asks whether it is done, call song with check before ' +
   'answering, and state only what check returns. When it is delivered, say the title once, plainly, and ' +
@@ -1529,9 +1531,11 @@ const SONG_SCRIPT =
   'made or sent before the tool has told you so. ' +
   // 10 Nov 08:41: a song made "to share with somebody" ended in his own inbox, because the make path had
   // no send step at all. It has one now, owned by the door, so the sentence the model was told is true.
-  'A song he makes here can be sent on to someone: the door asks once whether a picture goes with it and '
-  + 'opens the sheet for the address when the song lands. So never tell him a made song can only reach his '
-  + 'own inbox, and never say a sheet is open unless the door has opened one. ';
+  'A thing he makes here lands on his shelf, and the shelf is where things move from: one share button, the '
+  + 'same for a song, a search result, a payment request or a link. So when a thing is made, say one short '
+  + 'line naming what it is, who he made it for if he said, and that it is on his shelf to share whenever he '
+  + 'wants. Never say it has been sent, will arrive or is on its way, and never mention a sheet, an address '
+  + 'box or a message box: nothing has been sent and no sheet opens. ';
 
 let lastSongRequest = '';
 let lastPriorId = '';   // the take he already has, named by the last prompt-back
@@ -1876,6 +1880,9 @@ async function handleSongCall(call) {
       // One question a turn, in the order that matters, and never more than three. After
       // three the brief he has given is the brief he gets: refusing to make his song is a
       // worse failure than making it from a thin brief.
+      // 10 Nov 12:45: the who and the what-kind questions are gone. He names a person or a band if he
+      // wants one, and the style is the making's business, not an interrogation. The subject stays,
+      // because a song about nothing is not a song and no record holds the answer.
       let ask = '';
       if (!hasSaid && asked < 3) {
         // "for a friend" is a role, not a person: asking "what should it say to friend"
@@ -1884,10 +1891,6 @@ async function handleSongCall(call) {
         ask = songDraft.who
           ? '"What should it say to ' + (role ? 'them' : songDraft.who) + '?"'
           : '"What should the song be about?"';
-      } else if (!songDraft.who && asked < 3) {
-        ask = '"Who is it for?"';
-      } else if (!songDraft.feel && asked < 3) {
-        ask = '"What kind of song - rock, country, soul, something to dance to? Or say you choose."';
       }
 
       if (ask) {
@@ -1929,31 +1932,19 @@ async function handleSongCall(call) {
           // name of the song. It says what is happening and to what, instead.
           const subject = String(words || 'another take').slice(0, 60);
           looked = 'in the studio · ' + subject;
-          // Build 125: this song is also a thing to send. Hold it as the share card and open the picture
-          // step now, while it is being made, so the one question is asked once. Nothing is sent, and no
-          // sheet opens, until the rail says the audio is delivered.
+          // 10 Nov 12:45 (his instruction): a make no longer opens a picture step or a sheet. Every take
+          // is followed to the shelf, so the door can say the one true thing when it lands, whether or not
+          // he named anybody. The share button on the shelf carries the who, the where and the picture.
           const whoNamed = String(payload.who || '').trim();
-          // A song can be made for a place or an idea ("a song about Ballito") and that is not a gift. The
-          // hand-off is earned by his words: he said he wants it sent, or he said who it is for.
-          const saidForSomeone = /\b(?:for|to)\s+(?:my\s+)?(?:mother|mom|mum|father|dad|sister|brother|son|daughter|wife|husband|partner|friend|mate|gran|grandma|grandpa|aunt|aunty|uncle|cousin|niece|nephew|colleague)\b|\b(?:for|to)\s+[A-Z][a-z]{2,}/i
-            .test(String(payload.text || '') + ' ' + String(lastHeardText || ''));
-          const askedToSend = Date.now() - shareIntentAt < 15 * 60 * 1000;
-          if (saidForSomeone || askedToSend) {
-            madeShare = {
-              request_id: lastSongRequest || '', who: whoNamed, text: payload.text || '',
-              title: r.title || '', stage: 'making',
-            };
-            shareCard = { kind: 'made', title: r.title || 'the song he is making',
-              sub: whoNamed ? 'for ' + whoNamed : '', url: '', code: '', song_id: '' };
-            shareCardTarget = shareCard;
-            shareArt = { want: false, brief: '' }; shareArtTries = 0; artLockedAt = 0;
-            shareStage = 'art'; shareCoverAsked = true;
-            railNote('made · the share step follows · ' + (whoNamed || 'no name yet'));
-            startMadeWatch();
-          } else {
-            madeShare = null;
-            railNote('made · his inbox only');
-          }
+          madeShare = {
+            request_id: lastSongRequest || '', who: whoNamed, text: payload.text || '',
+            title: r.title || '', stage: 'making',
+          };
+          shareCard = { kind: 'made', title: r.title || 'the song he is making',
+            sub: whoNamed ? 'for ' + whoNamed : '', url: '', code: '', song_id: '' };
+          shareCardTarget = shareCard;
+          railNote('made · it will land on his shelf');
+          startMadeWatch();
           let songTold = '';
           try { songTold = localStorage.getItem(SONG_TOLD) || ''; } catch (e) {}
           // The band is his, and nothing about a voice channel reveals that. Said once, beside the
@@ -2348,9 +2339,9 @@ function judgeClaim() {
         hiddenHoldUntil = Date.now() + 1500;
         logLine('claim.sheet', t.slice(0, 160), { level: 'warn', target: 'no-sheet' });
         doorNote((madeShare && madeShare.stage !== 'ready')
-          ? 'There is no sheet yet: the song he asked for is still being made, and the door opens the sheet '
-            + 'for the address when it lands. Do not mention a sheet, an address box or a message box. Say one '
-            + 'short line that it is on its way and the sheet follows.'
+          ? 'There is no sheet any more: nothing is typed here, and a made thing is shared from his shelf. '
+            + 'Do not mention a sheet, an address box or a message box. Say one short line that it is still '
+            + 'being made and that it goes on his shelf when it lands.'
           : 'There is no sheet on his screen: the door has not opened one, and nothing is waiting to be '
             + 'typed. Do not mention a sheet, an address box or a message box. Ask him what he wants next.',
           true);
@@ -3353,22 +3344,23 @@ async function madeReady(r) {
   shareCardTarget = shareCard;
   madeShare.stage = 'ready';
   saveDraft();
-  const lockedArt = madeShare.art || null;
-  if (!lockedArt) {
-    shareStage = 'art';
-    railNote('made · landed · asking the picture');
-    doorNote('"' + shareCard.title + '" has landed in his inbox and on his shelf. Say the title once, plainly, '
-      + 'then ask once whether a picture should go with it and what it should show. Do not offer to send it: '
-      + 'the sheet does that.', true);
-    return;
-  }
-  shareArt = { want: !!lockedArt.want, brief: lockedArt.brief || '' };
-  shareStage = 'sheet';
-  openSheetWhenQuiet(shareCard, shareArt, 0);
-  railNote('made · landed · sheet open for the address');
-  doorNote('"' + shareCard.title + '" has landed. The sheet is open on his screen now for the address and his '
-    + 'message, and the picture he described will be drawn when he sends. Say one short line so he knows where '
-    + 'to look. Do not ask for the address or the message in words.', true);
+  // 10 Nov 12:45 (his instruction): "Stop asking but make sure they know it is there for sharing."
+  // The take is on his shelf, so the shelf sentence is checkable and is licensed here, and the flow is
+  // released rather than held: there is no sheet to wait for, and a door left holding a step drops the
+  // turns that come after it.
+  const landedTitle = shareCard.title || 'the song';
+  const forWho = String(madeShare.who || '').trim();
+  shelfWriteAt = Date.now();                 // it is on his shelf: the claim guard may now allow the sentence
+  logLine('made.landed', landedTitle + (forWho ? ' · for ' + forWho : '') + ' · on the shelf to share',
+    { level: 'info', target: 'music' });
+  railNote('made · landed · on his shelf to share' + (forWho ? ' · for ' + forWho : ''));
+  madeShare = null;
+  shareStage = 'idle';
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  doorNote('"' + landedTitle + '" has landed and it is on his shelf' + (forWho ? ', made for ' + forWho : '')
+    + '. Say one short line: the title once, plainly, that it is on his shelf, and that he can share it from '
+    + 'there whenever he wants. Do not ask for an address, an email, a message or a picture, do not say it has '
+    + 'been sent or will arrive, and do not mention a sheet.', true);
 }
 
 function shelfFind(words) {
