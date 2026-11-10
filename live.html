@@ -256,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T21:06';
-const BUILD_NO = 152;
+const BUILD = '2026-11-10T21:40';
+const BUILD_NO = 153;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -4019,6 +4019,12 @@ async function madeReady(r) {
   // released rather than held: there is no sheet to wait for, and a door left holding a step drops the
   // turns that come after it.
   const landedTitle = shareCard.title || 'the song';
+  // Build 149: the cover description on the share sheet is written from the song itself, so the song's own
+  // words and the sound he chose are kept with the card when it lands. Nothing is drawn here.
+  const landedScene = String((madeShare && madeShare.text) || '').slice(0, 180);
+  const landedStyle = [String((madeShare && madeShare.band) || ''), String((madeShare && madeShare.feel) || '')]
+    .filter(Boolean).join(', ').slice(0, 90);
+  if (shareCard) { shareCard.scene = landedScene; shareCard.style = landedStyle; }
   // A name is never the style read back to him: "laid back blues" is not a person called Laid. (build 142,
   // carried through here so the door note cannot say "made for Laid" even on a draft written before it.)
   const forWho = songWhoClean(String(madeShare.who || '').trim(), madeShare.band || '', madeShare.feel || '');
@@ -4079,6 +4085,21 @@ function shelfFind(words) {
     if (hit > bestHit) { bestHit = hit; best = c; }
   }
   return bestHit ? best : null;
+}
+
+/* Build 149. Edwin, 10 Nov 21:13: "a text box for the description that is pre-populated with the prompt for
+   an image based on the song lyrics that was generated. Then they can accept or decline." The description is
+   written from what the door already holds - the title, the words the song was made from, and the sound and
+   feel he chose - and every word of it is his to change before anything is drawn. */
+function songArtPrompt(card) {
+  const title = String((card && card.title) || '').trim();
+  const scene = String((card && card.scene) || '').trim().replace(/[.?!]+$/, '');
+  const style = String((card && card.style) || '').trim();
+  const bits = ['A single cover image for a song' + (title ? ' called "' + title + '"' : '')];
+  if (scene) bits.push('about ' + scene);
+  if (style) bits.push('with the feel of ' + style);
+  bits.push('one strong central image, warm low light, no words or letters in the picture');
+  return bits.join(', ') + '.';
 }
 
 function cardPayload(c) {
@@ -4882,9 +4903,48 @@ function openShareSheet(card, art) {
   msg.rows = 3; msg.placeholder = 'say something (leave it empty to send without a message)';
   msg.style.fontSize = '16px';
   msg.style.cssText = to.style.cssText + 'resize:none';
+  /* Build 149, Edwin 21:13: "When I share it from the shelf, it says there is no cover, but I never got an
+     opportunity to choose anything... ask them if they want to generate a cover art, and a text box for the
+     description that is pre-populated." So the sheet asks, and the description is already written from the
+     song. A yes draws it as part of the send and it travels with the song; a no sends it bare and the sheet
+     says nothing about covers at all. */
+  const isSong = !!(card && (card.song_id || /^(made|song)$/.test(String(card.kind || ''))));
+  let coverWanted = !!(art && art.want);
   const artLine = document.createElement('div');
-  artLine.textContent = art && art.want ? 'cover: ' + art.brief : 'no cover';
   artLine.style.cssText = 'font-size:11px;color:#9b9182;margin:2px 0 10px;line-height:1.4';
+  if (art && art.want && art.brief) artLine.textContent = 'cover: ' + art.brief;
+  const artText = document.createElement('textarea');
+  const artChoice = document.createElement('div');
+  if (isSong) {
+    artLine.textContent = 'add a cover? the description is already written from the song - change any of it.';
+    artChoice.style.cssText = 'display:flex;gap:8px;margin:0 0 8px';
+    artText.rows = 3;
+    artText.value = (art && art.brief) || songArtPrompt(card);
+    artText.setAttribute('autocapitalize', 'sentences');
+    artText.style.cssText = to.style.cssText + 'resize:none;font-size:14px;line-height:1.45;margin-bottom:8px';
+    const pick = (label, want) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = label;
+      b.style.cssText = 'flex:1;border-radius:8px;padding:9px 8px;font-size:11px;letter-spacing:.04em;'
+        + 'background:none;border:1px solid #3a352d;color:#9b9182';
+      b.onclick = () => {
+        coverWanted = want;
+        for (const other of artChoice.children) {
+          other.style.background = 'none'; other.style.borderColor = '#3a352d'; other.style.color = '#9b9182';
+        }
+        b.style.background = '#b8873f'; b.style.borderColor = '#b8873f'; b.style.color = '#171410';
+        artText.style.display = want ? 'block' : 'none';
+        if (want) { try { artText.focus(); } catch (e) {} }
+      };
+      artChoice.appendChild(b);
+      return b;
+    };
+    const yes = pick('yes, draw a cover', true);
+    pick('no, just send', false);
+    // Nothing is chosen for him: a cover draws only from a tap he made, and a send with nothing chosen
+    // sends the song bare. A yes already given earlier in the flow is shown as the chosen one.
+    if (coverWanted) yes.onclick(); else artText.style.display = 'none';
+  }
   const status = document.createElement('div');
   status.style.cssText = 'font-size:11px;color:#9b9182;min-height:15px;margin:8px 0';
   const row = document.createElement('div');
@@ -4903,13 +4963,22 @@ function openShareSheet(card, art) {
     if (!addr) { status.textContent = 'who is it for?'; to.focus(); return; }
     send.disabled = true; status.textContent = 'sending\u2026';
     try {
-      const wanted = !!(art && art.want);
+      // Build 149: the description in the box is the brief, whether or not he changed a word of it. A yes
+      // pays for the drawing (consent-before-spend), and it is drawn before the message goes, so it travels
+      // with the song rather than arriving after it.
+      const wanted = isSong ? coverWanted : !!(art && art.want);
+      const brief = wanted
+        ? (isSong ? String(artText.value || '').trim() : (art.brief || ''))
+        : '';
+      if (wanted) status.textContent = 'drawing the cover, then sending\u2026';
       const r = await railPost('shelfShare', {
         action: 'send', card: cardPayload(card), to: addr, channel: 'email',
-        message: msg.value.trim(), cover: wanted, cover_brief: wanted ? (art.brief || '') : '',
+        message: msg.value.trim(), cover: wanted, cover_brief: brief,
       });
+      if (wanted) { shareArt = { want: true, brief: brief, url: (r && r.cover_url) || '' }; }
       if (r && r.ok && r.channel === 'email') {
-        status.textContent = 'sent by email to ' + (r.to_masked || 'them') + '.';
+        status.textContent = 'sent by email to ' + (r.to_masked || 'them')
+          + (r.cover_url ? ', with the cover drawn in' : '') + '.';
         shareStage = 'sent';            // the share is closed; nothing may send it again
         saveDraft();
         // and the door forgets the song it just sent, or the next "share a song" is answered with the last one
@@ -4953,7 +5022,9 @@ function openShareSheet(card, art) {
     }
   };
   row.appendChild(close); row.appendChild(send);
-  box.appendChild(h); box.appendChild(artLine); box.appendChild(to); box.appendChild(msg); box.appendChild(status); box.appendChild(row);
+  box.appendChild(h); box.appendChild(artLine);
+  if (isSong) { box.appendChild(artChoice); box.appendChild(artText); }
+  box.appendChild(to); box.appendChild(msg); box.appendChild(status); box.appendChild(row);
   // Whatever he taps, he ends up typing somewhere useful. The target of the tap decides which field.
   el.addEventListener('click', (e) => {
     const t = e.target;
