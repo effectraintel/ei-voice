@@ -146,13 +146,19 @@
           border-radius:10px; padding:9px; text-align:left; position:relative;
           display:flex; align-items:flex-start; gap:9px; }
   /* Build 160 (Edwin, 10 Nov 2026 23:50): "make the white border slightly thinner with 50% and use our
-     theme goldfish colour not white." The frame was a dark hairline (#2b2721) that read as a hard pale
-     edge against the cream art, so every covered card looked boxed. It is now the theme's soft gold
-     (#c9a86a, the same gold the mark's ring and the share chip use) at half strength, and half the
-     thickness, so the picture sits IN the card rather than inside a box. */
+     theme goldfish colour not white." Then, at 23:56, seeing it: "the white border should be replaced
+     with the same border theme as the placeholder images."
+     So the frame is no longer its own invention: it is the mark's own frame, borrowed. The mark draws two
+     rings in #c9a86a - the outer at .34 opacity, 0.9 wide, set 1.5 units in from the edge of its 80 unit
+     box. Both card kinds now wear exactly that: a 0.9px ring at .34, with a 1.5px dark rim inside it, so
+     the art no longer touches the tile edge and the pale edge that read as white is gone. The mark keeps
+     padding:0, because it already draws its rings inside its own box. */
   .card .thumb { flex:0 0 auto; width:80px; height:80px; border-radius:8px; overflow:hidden;
-                 background:#1d1915; border:0.5px solid rgba(201,168,106,.5); }
-  .card .thumb img { display:block; width:100%; height:100%; object-fit:cover; }
+                 background:#1d1915; box-sizing:border-box; padding:1.5px;
+                 border:0.9px solid rgba(201,168,106,.34); }
+  .card .thumb img { display:block; width:100%; height:100%; object-fit:cover; border-radius:6px; }
+  .card .thumb.ph { padding:0; }
+  .card .thumb.ph img { border-radius:0; }
   .card .body { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
   .card .k { display:block; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:#7a7164; }
   .card .t { display:block; margin-top:3px; font-size:12.5px; line-height:1.4; color:#e8dfcc;
@@ -284,8 +290,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-11T00:15';
-const BUILD_NO = 160;
+const BUILD = '2026-11-11T00:32';
+const BUILD_NO = 161;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
