@@ -109,6 +109,15 @@
     color:#7a7164; font:inherit; font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; cursor:pointer; }
   #shelfline #shelfclear:active { color:var(--gold); }
   #shelfline #shelfclear.armed { color:var(--gold); }
+  /* Refresh (Edwin, 10 Nov 2026 13:21): "Add a refresh option on the shelf next to clear... so the user
+     can refresh and not wait on our timer only." The shelf already polls (cards every 60s, payment
+     requests every 15s), and a poll is invisible: he had to sit and wait for someone else's clock. This
+     is the same act, on his tap, and it reads back what happened rather than doing it silently. */
+  #shelfline #shelfrefresh { flex:0 0 auto; background:none; border:0; padding:2px 10px 2px 0;
+    font:inherit; color:var(--dim); letter-spacing:.18em; text-transform:uppercase; cursor:pointer; }
+  #shelfline #shelfrefresh:active { color:var(--gold); }
+  #shelfline #shelfrefresh.busy { color:var(--gold); opacity:.75; }
+  #shelfline #shelfrefresh[hidden] { display:none; }
   #shelfline[hidden] { display:none; }
   /* Build 40. He could not tell when something landed, because the whole shelf woke up
      only once it had something on it. The row is now always present, and an arrival is
@@ -203,7 +212,7 @@
 </header>
 
 <main id="log"></main>
-<div id="shelfline"><span id="shelfcount">the shelf</span><button id="shelfclear" type="button" hidden>clear</button></div>
+<div id="shelfline"><span id="shelfcount">the shelf</span><button id="shelfrefresh" type="button">refresh</button><button id="shelfclear" type="button" hidden>clear</button></div>
 <div id="shelf" aria-live="polite"></div>
 
 <footer>
@@ -247,8 +256,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-10T13:05';
-const BUILD_NO = 133;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+const BUILD = '2026-11-10T13:21';
+const BUILD_NO = 134;   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -4061,6 +4070,34 @@ function disarmClear() {
   const b = document.getElementById('shelfclear');
   if (b) { b.textContent = 'clear'; b.classList.remove('armed'); }
 }
+// Refresh on his tap. Same two sources the timers read (cards and payment requests), asked now instead of
+// on our clock, and it answers in words: how many things arrived, or that nothing did. It removes nothing
+// and it never lies about what it found. (Edwin, 10 Nov 2026 13:21)
+let refreshBusyAt = 0;
+const refreshBtn = document.getElementById('shelfrefresh');
+if (refreshBtn) refreshBtn.addEventListener('click', async (e) => {
+  e.preventDefault(); e.stopPropagation();
+  if (Date.now() - refreshBusyAt < 1500) return;
+  refreshBusyAt = Date.now();
+  const before = shelf.length;
+  refreshBtn.textContent = 'refreshing';
+  refreshBtn.classList.add('busy');
+  try {
+    await Promise.all([refreshCards(true), shelfSync()]);
+    renderShelf();
+  } catch (err) { /* a refresh that fails says nothing new, which is the truth */ }
+  const gained = shelf.length - before;
+  refreshBtn.textContent = 'refresh';
+  refreshBtn.classList.remove('busy');
+  if (gained > 0) {
+    const line = document.getElementById('shelfline');
+    if (line) { line.classList.add('arrived'); setTimeout(() => line.classList.remove('arrived'), 1500); }
+    railNote('shelf · refreshed · ' + gained + (gained === 1 ? ' thing' : ' things') + ' new');
+  } else {
+    railNote('shelf · refreshed · nothing new');
+  }
+});
+
 document.getElementById('shelfclear').addEventListener('click', (e) => {
   e.preventDefault(); e.stopPropagation();
   const b = document.getElementById('shelfclear');
