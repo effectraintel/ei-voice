@@ -302,7 +302,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-11T00:06';
-const BUILD_NO = 164;
+const BUILD_NO = 165;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1082,7 +1082,7 @@ try {
    The storage lease above is real but parochial: it reaches other tabs in this browser, on this
    device, and nothing else. Two phones share no storage, so neither could see the other and both
    spoke into the model at once. The room is now a row (VoiceRoom): the mint hands this page a
-   voice_id, this page renews the hold every 45 seconds while it speaks, and it stands down the
+   voice_id, this page renews the hold every 20 seconds while it speaks, and it stands down the
    moment the record says the room was closed or taken. A phone that dies holds nothing: the hold
    lapses after three minutes on its own. */
 let roomVoiceId = '';
@@ -1098,6 +1098,30 @@ function startRoomBeat() {
   stopRoomBeat();
   if (!roomVoiceId) return;
   roomBeatTimer = setInterval(roomBeat, ROOM_BEAT_MS);
+}
+
+function forgetSession() {
+  try { sessionStorage.removeItem(DOOR_KEY); } catch (e) {}
+}
+
+/* THE DOOR CLOSES THE WHOLE PAGE (build 165). 11 Nov 10:45: the Android was closed from My
+   Authorised Devices. The banner said so and the voice stopped, but the page stayed open around
+   it and the shelf could still be tapped, songs could still be opened. A closed pass is not a
+   muted microphone. So when the session itself is gone - closed from the portal, or its minutes
+   run out - the phone goes back to the front door and asks for him again, with the reason written
+   on the door. The room and the shelf sit behind that door, where they belong. */
+function backToFrontDoor(why) {
+  try { if (ws) { try { ws.close(); } catch (e) {} ws = null; } } catch (e) {}
+  sessionUp = false; listening = false; busy = false; connecting = false;
+  try { doorGen++; } catch (e) {}
+  try { micBtn.classList.remove('hot', 'live', 'arming', 'quiet'); } catch (e) {}
+  try { closeMic(); stopClock(); } catch (e) {}
+  roomVoiceId = '';
+  stopRoomBeat();
+  forgetSession();
+  try { showGate(why || 'open the door again'); } catch (e) {}
+  try { setState(why || 'open the door again'); } catch (e) {}
+  logLine('door.returned', why || 'the pass is gone; back to the front door', { level: 'warn', target: 'session' });
 }
 
 function roomLapse(why) {
@@ -1124,7 +1148,10 @@ async function roomBeat() {
     if (d && d.ok && d.held) roomHeldUntil = d.hold_until || roomHeldUntil;
   } catch (e) {
     const msg = String((e && e.message) || '');
-    if (/closed|expired|not issued|not a key/i.test(msg)) { roomLapse('the room was closed from My Authorised Devices'); return; }
+    if (/closed|expired|not issued|not a key/i.test(msg)) {
+      backToFrontDoor(String(msg).replace(/^the door refused \(\d+\)$/, '') || 'this pass was closed; open the door again');
+      return;
+    }
     // A missed beat is not a lost room: the hold survives three minutes without a word.
   }
 }
@@ -1157,6 +1184,18 @@ document.addEventListener('visibilitychange', () => {
   try { roomBeat(); } catch (e) {}
   setTimeout(() => { try { keepCurrent(); } catch (e) {} }, 1200);
 });
+
+/* A pass can run out while the page sits there doing nothing. Half a minute is often enough to
+   notice, and never often enough to be a nuisance. If the page is inside and its session is gone,
+   the front door is where it belongs. */
+setInterval(() => {
+  try {
+    if (sessionUp || listening || busy) return;
+    if (!gateEl.classList.contains('open')) return;
+    const s = doorSession();
+    if (!s) backToFrontDoor('your pass ran out; open the door again');
+  } catch (e) { /* a check that cannot run must never close a working page */ }
+}, 30000);
 
 /* Build 139: the lease is checked, not trusted. The storage event is not guaranteed to reach every document
    on iOS, and on 10 Nov a stale page and the new one each held a live door for the same minute - three door
