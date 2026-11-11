@@ -302,7 +302,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-11T00:06';
-const BUILD_NO = 163;
+const BUILD_NO = 164;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1088,7 +1088,7 @@ try {
 let roomVoiceId = '';
 let roomHeldUntil = '';
 let roomBeatTimer = null;
-const ROOM_BEAT_MS = 45000;
+const ROOM_BEAT_MS = 20000;
 
 function stopRoomBeat() {
   if (roomBeatTimer) { clearInterval(roomBeatTimer); roomBeatTimer = null; }
@@ -1145,6 +1145,18 @@ function releaseRoom() {
 }
 
 window.addEventListener('pagehide', () => { releaseRoom(); });
+
+/* RESUMING IS ASKING AGAIN (build 164). 11 Nov, 10:26: the Android had been backgrounded since
+   before the room existed, was brought forward, and kept speaking after its session was closed
+   from My Authorised Devices - because that copy of the page predated the heartbeat and nothing
+   ever told it. A page that comes back into view is a page that must ask the room two questions:
+   is my session still mine, and is this build still the newest one. The build check is the same
+   quiet hand-over as on load: no reload while a conversation is open. */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  try { roomBeat(); } catch (e) {}
+  setTimeout(() => { try { keepCurrent(); } catch (e) {} }, 1200);
+});
 
 /* Build 139: the lease is checked, not trusted. The storage event is not guaranteed to reach every document
    on iOS, and on 10 Nov a stale page and the new one each held a live door for the same minute - three door
