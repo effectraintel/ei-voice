@@ -302,7 +302,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-11T00:06';
-const BUILD_NO = 162;
+const BUILD_NO = 163;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -901,6 +901,7 @@ function shutDoor() {
   } catch (e) {}
   try { ws && ws.close(); } catch {}
   ws = null; sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
+  releaseRoom();
   // A greeting still in flight must not open a door that has been shut.
   greeting = false; if (greetWatch) { clearTimeout(greetWatch); greetWatch = null; }
   micBtn.classList.remove('live', 'arming');
@@ -1076,6 +1077,74 @@ try {
     }
   });
 } catch (e) {}
+
+/* THE ROOM HAS ONE HOLDER, AND THE HOLDER IS A RECORD. 11 Nov 2026, with two phones enrolled.
+   The storage lease above is real but parochial: it reaches other tabs in this browser, on this
+   device, and nothing else. Two phones share no storage, so neither could see the other and both
+   spoke into the model at once. The room is now a row (VoiceRoom): the mint hands this page a
+   voice_id, this page renews the hold every 45 seconds while it speaks, and it stands down the
+   moment the record says the room was closed or taken. A phone that dies holds nothing: the hold
+   lapses after three minutes on its own. */
+let roomVoiceId = '';
+let roomHeldUntil = '';
+let roomBeatTimer = null;
+const ROOM_BEAT_MS = 45000;
+
+function stopRoomBeat() {
+  if (roomBeatTimer) { clearInterval(roomBeatTimer); roomBeatTimer = null; }
+}
+
+function startRoomBeat() {
+  stopRoomBeat();
+  if (!roomVoiceId) return;
+  roomBeatTimer = setInterval(roomBeat, ROOM_BEAT_MS);
+}
+
+function roomLapse(why) {
+  try { if (ws) { try { ws.close(); } catch (e) {} ws = null; } } catch (e) {}
+  sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
+  try { micBtn.classList.remove('hot', 'live', 'arming', 'quiet'); } catch (e) {}
+  try { closeMic(); stopClock(); } catch (e) {}
+  try { setState(why); hint('tap the circle to open it again'); } catch (e) {}
+  logLine('room.lapsed', why, { level: 'warn', target: 'session' });
+  roomVoiceId = '';
+  stopRoomBeat();
+}
+
+async function roomBeat() {
+  const s = doorSession();
+  if (!s || !roomVoiceId) return;
+  try {
+    const d = await gatePost('voiceHold', { action: 'hold', session_token: s.token, voice_id: roomVoiceId });
+    if (d && d.ok && d.held === false) {
+      const who = (d.held_by && d.held_by.device_label) || 'another phone';
+      roomLapse('the room moved to ' + who);
+      return;
+    }
+    if (d && d.ok && d.held) roomHeldUntil = d.hold_until || roomHeldUntil;
+  } catch (e) {
+    const msg = String((e && e.message) || '');
+    if (/closed|expired|not issued|not a key/i.test(msg)) { roomLapse('the room was closed from My Authorised Devices'); return; }
+    // A missed beat is not a lost room: the hold survives three minutes without a word.
+  }
+}
+
+function releaseRoom() {
+  const s = doorSession();
+  if (!s || !roomVoiceId) return;
+  try {
+    fetch(FNBASE + 'voiceHold', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({ action: 'release', session_token: s.token, voice_id: roomVoiceId }),
+    }).catch(() => {});
+  } catch (e) {}
+  roomVoiceId = '';
+  stopRoomBeat();
+}
+
+window.addEventListener('pagehide', () => { releaseRoom(); });
 
 /* Build 139: the lease is checked, not trusted. The storage event is not guaranteed to reach every document
    on iOS, and on 10 Nov a stale page and the new one each held a live door for the same minute - three door
@@ -1449,6 +1518,22 @@ async function openDoor() {
       body: JSON.stringify({ doc: DOC_TAG, session_token: session.token }),
     });
     const d = await r.json();
+    // Somebody else already has the room. Say whose it is and how to take it, rather than
+    // starting a second voice that nobody asked for. (11 Nov 2026, two phones.)
+    if (d && d.busy) {
+      busy = false; connecting = false;
+      micBtn.classList.remove('arming');
+      try { closeMic(); } catch (e) {}
+      stopClock();
+      const who = (d.held_by && d.held_by.device_label) || 'another phone';
+      const sinceRaw = d.held_by && d.held_by.started_at;
+      const since = sinceRaw ? new Date(sinceRaw).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      setState('the room is open on ' + who + (since ? ' since ' + since : ''));
+      hint('close it in My Authorised Devices, then tap here again');
+      try { warn(String(d.error || '')); } catch (e) {}
+      logLine('room.busy', 'refused: ' + who + ' holds the room', { level: 'warn', target: 'session' });
+      return;
+    }
     if (!d.ok) {
       if (/session|locked|fingerprint/i.test(String(d.error || ''))) {
         sessionStorage.removeItem(DOOR_KEY);
@@ -1475,6 +1560,10 @@ async function openDoor() {
     if (gen !== doorGen) { closeMic(); stopClock(); busy = false; connecting = false; return; }
 
     sessionVoice = voice; sessionModel = String(d.model || '');
+    // This page now holds the room, and says so every 45 seconds while it speaks.
+    roomVoiceId = String(d.voice_id || '');
+    roomHeldUntil = String(d.hold_until || '');
+    startRoomBeat();
     // One phone, one mouth. A second socket is a second voice, and that is what he heard at 14:00:51.
     if (ws) {
       try {
