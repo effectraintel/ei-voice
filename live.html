@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T09:10';
-const BUILD_NO = 173;
+const BUILD = '2026-11-12T15:05';
+const BUILD_NO = 174;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -4030,6 +4030,15 @@ function scheduleNoteFlush(delay) {
   noteTimer = setTimeout(() => {
     if (!noteQueue.length) return;
     const held = noteQueuedAt ? Date.now() - noteQueuedAt : 0;
+    /* Build 174: a note may NOT starve. On 12 Nov the landing's picture question sat in this queue from
+       14:57:27 and was never sent: turnInFlight had stuck true, so this rescheduled every 400ms for ever
+       and the last question of the making was never asked. Sound in the air is the only real reason to
+       wait; a turn that has been "open" for more than eight seconds is stale, and the note goes. */
+    if (!speaking && (turnInFlight || awaitingFirstAudio) && held > 8000) {
+      logLine('note.stale.turn', 'a turn stayed open ' + Math.round(held / 1000) + 's · the note goes anyway',
+        { level: 'warn', target: 'note' });
+      turnInFlight = false; awaitingFirstAudio = false;
+    }
     // busy means a turn is open, sound is in the air, or the reply has not started yet — all three cut a
     // sentence if a note lands in them. Only silence counts as free.
     const busy = turnInFlight || speaking || awaitingFirstAudio;
@@ -4316,13 +4325,49 @@ let descentDrawing = 0;
    is taken and the picture drawn even if the mouth never asked. */
 let artOpen = null;   // {at, request_id, title}: the art question is waiting for his answer
 
+/* Build 174: the answer window opens when the MOUTH asks, not when the song lands. The mouth is free to ask
+   about the picture while the song is being made (it did on 12 Nov), and an answer given then used to be
+   dropped because artOpen was only set at the landing. It opens on evidence, not on hope: the model's own
+   last sentence has to mention a picture and carry a question mark, so an ordinary turn is never mistaken
+   for a picture brief and nothing is ever drawn from words he did not mean as one. What it opens is only
+   the window: the drawing still happens at the landing, against this song's own record (madeReady). */
+function armArtWindow() {
+  if (artOpen) return;
+  if (!madeShare || (madeShare.stage !== 'making' && madeShare.stage !== 'waiting')) return;
+  const told = String((typeof said !== 'undefined' && said && said.engine) || '');
+  if (!/\b(?:picture|cover|artwork|image)\b/i.test(told) || !/\?/.test(told)) return;
+  artOpen = { at: Date.now(), request_id: madeShare.request_id || '', title: madeShare.title || '' };
+  logLine('made.art.window', 'the mouth asked about the picture · his answer is kept and paid at landing',
+    { level: 'info', target: 'coverDraw' });
+}
+
 /* His answer to the descent, heard by the door rather than trusted to the mouth. A no draws nothing; a yes,
    or a description on its own, is the brief. A question back at the door is not an answer, so it is left
    open. */
 function descentHear(heard) {
   const t = String(heard || '').trim();
-  if (!t || !artOpen) return;
+  if (!t) return;
+  /* Build 174. On 12 Nov at 14:53 the mouth asked "do you want to draw a picture for the cover?" while the
+     song was still being made, he answered "yes, just crowd dancing", and the door threw it away in this
+     line because the answer window only opened at the landing. Nothing logged it either, so the loss was
+     invisible until he looked at his shelf. The window now opens when the mouth asks (see armArtWindow),
+     and an answer about a picture with no question open is at least written down. */
+  if (!artOpen) {
+    if (/\b(?:picture|cover|artwork|image)\b/i.test(t)
+        && /^(?:yes|yeah|yep|sure|please|ok|okay|no|nope|nah)\b/i.test(t)) {
+      logLine('made.art.window.missed', t.slice(0, 90), { level: 'warn', target: 'coverDraw' });
+    }
+    return;
+  }
   if (Date.now() - artOpen.at > 15 * 60 * 1000) { artOpen = null; return; }
+  /* Build 174: while the song is still being made the window is open on the mouth's question alone, so an
+     answer is only taken when it looks like an answer - a yes or a no at the front, or a picture named.
+     "make it louder" is an ordinary turn, and it stays open for the answer that follows instead of buying
+     a drawing he did not ask for (consent-before-spend). */
+  const stillMaking = !!(madeShare && (madeShare.stage === 'making' || madeShare.stage === 'waiting'));
+  const looksAnswer = /^(?:yes|yeah|yep|sure|please|ok|okay|go on|go ahead|do it|make it|draw it|absolutely|definitely|no|nope|nah|not now|skip|leave it|nothing)\b/i.test(t)
+    || /\b(?:picture|cover|artwork|image)\b/i.test(t);
+  if (stillMaking && !looksAnswer) return;
   const no = /^(?:no|nope|nah|not now|skip|leave it|nothing|no picture|no art|no cover|without)\b/i.test(t)
     || /\bno (?:picture|art|cover|thanks|thank you)\b/i.test(t)
     || /\b(?:don'?t|do not|dont) (?:want|need|bother)\b[^.!?]{0,30}\b(?:picture|art|cover)\b/i.test(t);
@@ -4528,6 +4573,24 @@ async function madeReady(r) {
         brief: (heldArt && heldArt.brief) || '', url: (heldArt && heldArt.url) || '' }
     : { want: false, brief: '', url: '' };
   if (!artHeld) artOpen = { at: Date.now(), request_id: landedReq, title: landedTitle };
+  /* Build 174: the question is checked, not assumed. On 12 Nov the note that told the mouth to ask it never
+     left the door's own queue, so the door believed the picture question had been asked and it never was.
+     Twenty seconds after the landing, if the window is still open and the mouth has not mentioned a picture
+     at all, it asks once more - once, and nothing is drawn until he answers. */
+  if (!artHeld) {
+    setTimeout(() => {
+      try {
+        if (!artOpen || artOpen.request_id !== landedReq) return;   // he answered, or another song opened it
+        const toldNow = String((typeof said !== 'undefined' && said && said.engine) || '');
+        if (/\b(?:picture|cover|artwork|image)\b/i.test(toldNow) && /\?/.test(toldNow)) return;
+        logLine('made.descent.retry', 'the picture question was not asked · asking once more',
+          { level: 'warn', target: 'coverDraw' });
+        doorNote('Ask the last question of the making now, in one short line: would he like a picture to go '
+          + 'with "' + landedTitle + '", and what should it show. Nothing has been drawn and nothing has '
+          + 'been sent.', true);
+      } catch (e) {}
+    }, 20000);
+  }
   if (coverInAsk) logLine('made.cover.ask.at.landing', 'drawn at landing, at his ask',
     { level: 'info', target: 'coverDraw' });
   // Build 139: a yes given while the song was still being made pays for its picture HERE, the moment the song
@@ -6492,6 +6555,7 @@ function handleFrame(text) {
     flushNotes();
     judgeClaim();
     try { armMake(); } catch (e) {}
+    try { armArtWindow(); } catch (e) {}
     if (sessionOpenedAt && Date.now() - sessionOpenedAt > 9 * 60 * 1000 && !renewing) {
       railNote('session · renewing at the pause, nine minutes in');
       logLine('turn.engine', said.engine || '', { role: 'engine', note: 'then the link renewed' });
