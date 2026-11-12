@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T00:42';
-const BUILD_NO = 178;
+const BUILD = '2026-11-13T01:12';
+const BUILD_NO = 179;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1842,7 +1842,11 @@ let lastPriorId = '';   // the take he already has, named by the last prompt-bac
    turn, in the order that matters: what it should say, who it is for, how it should sound.
    Nothing reaches the rail until the first is answered, whatever the model decides. */
 
-const songDraft = { who: '', said: '', feel: '', sound: '', asks: 0, at: 0, askBeat: '', skipped: [] };
+const songDraft = { who: '', said: '', feel: '', sound: '', asks: 0, at: 0, askBeat: '', skipped: [],
+  /* Build 179: when the subject landed on this chain. The words ring is asked for the draft's own
+     time (rule R-003: a yes given to different words cannot carry over) and refuses without it, so
+     the door has to know the moment its own words were formed. */
+  subjectAt: 0 };
 /* Build 138: the route, one beat at a time. subject -> sound -> feel, three questions at most, and any of
    them is skipped by saying "you choose". askBeat is which one is open, so his answer is taken by the door
    itself before the model is asked anything.
@@ -1973,7 +1977,8 @@ function chainAskNext(r) {
   // The words ring is his own words, already in the draft; the make ring is the studio's.
   if (next === 'words') {
     const said = songDraft.said || '';
-    if (said) chainClose('words', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' })
+    if (said) chainClose('words', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '',
+      _draft_at: draftAtIso() })
       .then((r2) => { if (r2 && r2.closed) { try { armMake(); } catch (e) {} } })
       .catch(() => {});
     return;
@@ -1988,7 +1993,7 @@ function chainBeat(beat) {
     if (!said) return;
     chainOpen(said)
       .then(() => chainClose('hear', said, { said: said }))
-      .then((r) => chainAskNext(r))
+      .then((r) => { songDraft.subjectAt = Date.now(); return chainAskNext(r); })
       .catch(() => {});
     return;
   }
@@ -1999,7 +2004,8 @@ function chainBeat(beat) {
     return;
   }
   if (beat === 'words') {
-    chainClose('words', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' })
+    chainClose('words', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '',
+      _draft_at: draftAtIso() })
       .then((r) => chainAskNext(r))
       .catch(() => {});
   }
@@ -2128,6 +2134,10 @@ async function makeIfStillWaiting(sig) {
       who: songWhoClean(songDraft.who || '', songDraft.sound, songDraft.feel),
       session_id: s.token.slice(0, 24),
     };
+    /* Build 179: the ask is written on the chain it walks on, so the making can close its own make ring
+       when a take lands. The door cannot close that ring itself: the corridor strips receipts on purpose
+       and a render link without one is a claim, not a result. chainSettle closes it on the vault's hash. */
+    if (CHAIN_ON && chainRun.open && chainRun.ref) payload.chain_ref = chainRun.ref;
     if (styleLine) { payload.feel = styleLine; payload.style = styleLine; }
     logLine('song.make.door', 'no call came: the door put it into the studio itself',
       { level: 'warn', target: 'music' });
@@ -2568,6 +2578,13 @@ function songWhoClean(who, band, feel) {
 function songDraftReset() {
   songDraft.who = ''; songDraft.said = ''; songDraft.feel = ''; songDraft.sound = '';
   songDraft.asks = 0; songDraft.at = 0; songDraft.askBeat = ''; songDraft.skipped = [];
+  songDraft.subjectAt = 0;
+}
+
+/* The draft's own time, in the shape the chain's rules read. Build 179. */
+function draftAtIso() {
+  const t = songDraft.subjectAt || songDraft.at || Date.now();
+  try { return new Date(t).toISOString(); } catch (e) { return new Date().toISOString(); }
 }
 
 /* Build 140: which beat of the route is still open, in the words the door asks it with, or '' when the
@@ -2776,6 +2793,7 @@ async function handleSongCall(call) {
           who: songWhoClean(songDraft.who || String(args.who || '').trim(), songDraft.sound, songDraft.feel),
           session_id: s.token.slice(0, 24),
         };
+        if (CHAIN_ON && chainRun.open && chainRun.ref) payload.chain_ref = chainRun.ref;
         // Build 138: the sound and the feel he chose on the journey travel WITH the song. Two places,
         // because the record is what the making actually reads: the payload may be ignored, so the door
         // also writes the style onto the request the moment it exists.
