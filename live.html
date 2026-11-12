@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T08:35';
-const BUILD_NO = 172;
+const BUILD = '2026-11-12T09:02';
+const BUILD_NO = 171;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -2145,9 +2145,9 @@ function askSongFork() {
   songRoute = { pick: '', at: Date.now() };
   lastSongWords = '';
   logLine('song.fork.ask', 'from the music stores, or a new one', { level: 'info', target: 'music' });
-  doorNote('Ask exactly one question and nothing else, in these words or close to them: "Do you want to '
-    + 'share a song from the music stores, or create a new song?" Nothing is searched and nothing is made '
-    + 'until he answers. Do not guess which one he means and do not offer a third option.', true);
+  doorNote('Ask exactly one question and nothing else: "Do you want to share a song from the music stores, '
+    + 'or create a new song?" It is a choice between two places, and nothing has been searched or made until '
+    + 'he picks one. Nothing about titles or artists yet: whether a song exists at all is the question.', true);
 }
 
 // The answer to the fork. Returns true when it took the turn (so the route gate does not guess again).
@@ -3037,6 +3037,20 @@ function stripRequestFrame(q) {
 // The record is the only thing allowed to report on the record. A sentence that claims a search, an error, or
 // an empty shelf with no rail call behind it is corrected at once — not just written down for later.
 let unbackedWarnedAt = 0, railToldAt = 0;
+/* Build 171: ONE test for "is this claim backed by the card on his shelf", because three separate guards
+   were each deciding it their own way and two of them said the shelf was empty. 12 Nov, 08:43: "Cruel
+   Summer by Bananarama is on your shelf now" was true, the wrap had just written code u6B7qmU, and the
+   copy guard — which watches a DIFFERENT song still being made — corrected it. The record is the card. */
+function shelfBacksClaim(t) {
+  try {
+    const flat = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const cardTitle = flat(shareCard && shareCard.title);
+    if (!cardTitle || cardTitle.length < 3) return false;
+    if (!(shareCard.url || shareCard.code || shareCard.link)) return false;
+    return flat(t).includes(cardTitle);
+  } catch (e) { return false; }
+}
+
 function judgeClaim() {
   try {
     const t = String(said.engine || '');
@@ -3050,12 +3064,7 @@ function judgeClaim() {
        it asks whether a TAKE exists and a song shared from the stores has no take. The mouth then apologised
        for a song that was sitting in front of him. The record is the card: if the title he named is the card
        on his shelf, the claim is backed and there is nothing to correct. */
-    const flat = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
-    const cardTitle = flat(shareCard && shareCard.title);
-    const backedByShelf = !!(cardTitle && cardTitle.length > 2
-      && (shareCard.url || shareCard.code || shareCard.link)
-      && flat(t).includes(cardTitle));
-    if (readyClaim.test(t) && !madeRecently && !lastSongRequest && !backedByShelf) {
+    if (readyClaim.test(t) && !madeRecently && !lastSongRequest && !shelfBacksClaim(t)) {
       logLine('song.claim', t.slice(0, 160), { level: 'warn', target: 'no-take' });
       doorCorrect('nothing has been made yet · your song is still to come',
         'No take exists: nothing has been made and nothing is on his shelf. Correct yourself in one short line '
@@ -3144,7 +3153,7 @@ function judgeClaim() {
       return;
     }
     const copyClaim = /\barrive|\bon (?:its|the) way\b|\bfew minutes\b|\bbeing sent to you\b|\b(?:is|be|will be|should be) (?:already )?on your shelf\b/i;
-    if (copyClaim.test(t) && madeShare && madeShare.stage === 'making') {
+    if (copyClaim.test(t) && madeShare && madeShare.stage === 'making' && !shelfBacksClaim(t)) {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
         hiddenHold = true;
@@ -4899,8 +4908,6 @@ async function handlePayCall(call) {
 
 function payCard(it) {
   const amt = 'R' + Number(it.amount || 0).toFixed(2);
-  // Build 171: a request takes its place on the shelf by when it was made, like everything else.
-  const madeAt = it.created_date || '';
   if (String(it.status) === 'paid') {
     return {
       kind: 'paid',
@@ -4914,11 +4921,11 @@ function payCard(it) {
       sub: it.receipt_no ? 'tap for the receipt'
         : (it.source === 'credits' ? 'settled from credits \u00b7 no card' : 'paid \u00b7 no receipt on this record'),
       sheet: !!it.receipt_no || it.source === 'credits',
-      note: it.item, when: madeAt,
+      note: it.item,
     };
   }
   if (String(it.status) === 'open') {
-    return { kind: 'pay', code: it.code, title: 'Open and pay ' + amt + ' \u00b7 ' + it.code, url: it.checkout_url, note: it.item, when: madeAt };
+    return { kind: 'pay', code: it.code, title: 'Open and pay ' + amt + ' \u00b7 ' + it.code, url: it.checkout_url, note: it.item };
   }
   // Anything else is a closed door: refused at the provider, expired, cancelled. It stays on
   // the shelf so he can see what happened, but it must never offer the checkout again.
@@ -4928,7 +4935,7 @@ function payCard(it) {
     title: 'Not paid ' + amt + ' \u00b7 ' + it.code,
     url: FNBASE + 'payRequestShelf?code=' + encodeURIComponent(it.code),
     sub: String(it.status) + ' \u00b7 nothing was taken',
-    sheet: true, note: it.item, when: madeAt,
+    sheet: true, note: it.item,
   };
 }
 
@@ -5057,49 +5064,14 @@ function armSilenceWatch(heard) {
   }, 2500);
 }
 
-/* What time a card carries, in milliseconds (Edwin, 12 Nov 2026 08:22: "the shelf sorting is not
-   correct. it doesn't show the latest created items first"). Two traps in the stamps the server sends:
-   a ShelfLink arrives with six fractional digits and no zone, and Date.parse reads a zoneless stamp as
-   LOCAL time, which would drop a link wrapped at 07:57 two hours into the past. So the fraction is cut to
-   three digits and a stamp with no zone is read as UTC, because that is what the platform keeps. A card
-   with no stamp at all was made here a moment ago (a cover, a send), so it is not "old": it is null, and
-   it stays at the front. */
-function cardTime(c) {
-  let t = String((c && c.when) || '');
-  if (!t) return null;
-  t = t.replace(/(\.\d{3})\d+/, '$1');
-  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(t)) t += 'Z';
-  const ms = Date.parse(t);
-  return isFinite(ms) ? ms : null;
-}
-
-/* The shelf is one row in time, not a song list with links bolted under it. Newest first, whatever kind
-   each card is, and stable. A card with no stamp at all goes LAST, not first: 08:33 proved why - the two
-   payment cards carried no stamp, so they claimed the front and sat over the songs. A card that cannot say
-   when it was made has no business claiming to be the newest thing on the shelf. What is made here is
-   stamped when it is made (see shelfAdd), so it still arrives on top honestly. */
-function shelfSort() {
-  const loose = [], timed = [];
-  shelf.forEach((c, i) => { const t = cardTime(c); (t === null ? loose : timed).push({ c, i, t }); });
-  timed.sort((a, b) => (b.t - a.t) || (a.i - b.i));
-  const next = timed.map(x => x.c).concat(loose.map(x => x.c));
-  if (next.every((c, i) => c === shelf[i])) return;
-  shelf.length = 0;
-  for (const c of next) shelf.push(c);
-  renderShelf();
-}
-
 function mergeCard(c) {
   if (!c || !c.title) return;
-  // A cover or a send is made by this page, seconds ago, so it is dated now. Everything else comes from a
-  // reader that must supply its own stamp.
-  if (!c.when && (c.kind === 'cover' || c.kind === 'send')) c = { ...c, when: new Date().toISOString() };
   const k = cardKey(c);
   if (shelfHidden.has(k) || isPutAway(k)) return;   // he put it away; only something new lands on a cleared shelf
   const i = shelf.findIndex(x => cardKey(x) === k);
   // Same song, same link: the card is updated where it sits, never stacked. A fresh play
   // token is minted on every read, so matching on the url would make a new card every minute.
-  if (i >= 0) { shelf[i] = { ...shelf[i], ...c, at: shelf[i].at }; shelfSort(); renderShelf(); return; }
+  if (i >= 0) { shelf[i] = { ...shelf[i], ...c, at: shelf[i].at }; renderShelf(); return; }
   shelfAdd(c);
 }
 // ---- the garage: where cleared things sit until he asks for them (build 57) ----
@@ -5218,11 +5190,7 @@ async function refreshCards(force) {
     }
     if (!d || !d.ok || !Array.isArray(d.cards)) return;
     // Oldest first, because shelfAdd puts each one at the front: the newest song ends up on top.
-    // Oldest first, because shelfAdd puts each one at the front: the newest ends up on top. Sorted by
-    // our own reading of each stamp rather than by the order the reader happened to send them in, and the
-    // whole row is then put in time order - which is what repairs a shelf built by arrival, not by time.
-    for (const c of d.cards.slice().sort((a, b) => (cardTime(a) ?? 0) - (cardTime(b) ?? 0))) mergeCard(c);
-    shelfSort();
+    for (const c of d.cards.slice().reverse()) mergeCard(c);
     return d;
   } catch (e) { /* a shelf that cannot be read is quiet, not an error */ }
 }
@@ -5254,7 +5222,6 @@ async function shelfSync() {
       const age = it.created_date ? Date.now() - Date.parse(it.created_date) : Infinity;
       if (it.status === 'open' && age < 30 * 60 * 1000) watchRequest(it.code, 6);
     }
-    shelfSort();
   } catch (e) { /* a quiet shelf is not an error */ }
 }
 // The door hands over all three rails when it opens, not just the money one.
@@ -5607,8 +5574,6 @@ function openShareSheet(card, art) {
 
 function shelfAdd(item) {
   if (!item || !item.title) return;
-  // Made here, a moment ago, so it says so rather than arriving undated and sinking to the bottom.
-  if (!item.when) item = { ...item, when: new Date().toISOString() };
   const key = (item.url || item.title).slice(0, 300);
   // A request is one card, whatever its state: the same code must never sit on the
   // shelf twice as an old open card beside its receipt. (7 Nov, seen on a phone.)
