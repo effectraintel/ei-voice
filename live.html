@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T07:58';
-const BUILD_NO = 166;
+const BUILD = '2026-11-12T08:02';
+const BUILD_NO = 167;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -3567,7 +3567,12 @@ function noteSongAnswer(heard) {
       shareArt = { want: false, brief: '' }; shareArtTries = 0;
       try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
       logLine('share.stale.cleared', 'a step with nothing behind it, let go', { level: 'warn', target: 'share' });
-    } else { awaitSong = 0; return; }
+    } else {
+      // A real step is open, so the title is not searched. Say so: a silent swallow is exactly how
+      // 12 Nov 07:44 became invisible in the log, where four titles left no trace at all.
+      logLine('share.held', 'a step is open (' + shareStage + '), so "' + String(said).slice(0, 60) + '" was not searched', { level: 'warn', target: 'share' });
+      awaitSong = 0; return;
+    }
   }
   // Thinking aloud is not a song. "I'm still thinking about it" and "hold on" have no business reaching the
   // rail, and a title that shares a word with them is exactly how a wrong search gets born. The door keeps the
