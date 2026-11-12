@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T08:40';
-const BUILD_NO = 169;
+const BUILD = '2026-11-12T08:58';
+const BUILD_NO = 170;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -2125,6 +2125,14 @@ function isRouteSentence(t) {
    holding an answer to. The door keeps the draft, not the model: the asking is recorded here, where the asking
    is decided, so a return mid-journey finishes the question instead of arriving as a stranger. */
 function openSongBeat() {
+  /* 12 Nov 2026, 08:04: the descent ask from the song before was still inside its three-minute window when
+     he answered "what should the song say", so his lyric line was taken as the picture brief, held, and drawn
+     as a picture of someone studying when the song landed nine minutes later. A new song starts with no
+     picture question open and no brief held: the picture belongs to the song being made, and it is asked
+     again, at its own descent. */
+  descentAskedAt = 0;
+  shareArt = { want: false, brief: '' };
+  shareArtTries = 0;
   const stale = !songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000;
   if (songDraft.said && !stale) return;      // he has already given the words: nothing is open
   if (stale) { songDraftReset(); songDraft.at = Date.now(); }
@@ -4162,6 +4170,21 @@ function descentAnswer(heard) {
 
 function shareArtAnswer(heard) {
   const words = String(heard || '').trim();
+  /* A withdrawal is not a brief. At 08:04:22 he said "And you'd say, 'Good luck.' with the exam, my friend.
+     No, wait, wait." — that was his answer about the song's words, it ended in a withdrawal, and the door
+     locked all of it as a picture, then paid to draw it. The test reads the tail, where a withdrawal lands,
+     so a scene that happens to contain the word "stop" is still a scene. */
+  if (/(?:\b(?:no,?\s+wait|wait,?\s+wait|hold on|hang on|not that|forget (?:it|that)|cancel(?: that| it)?)\b[^.!?]*[.!?]?\s*|\bstop(?:\s+(?:it|that|please))*\s*[.!?]*\s*)$/i.test(words.slice(-60))) {
+    shareArt = { want: false, brief: '' };
+    shareArtTries = 0;
+    try { saveArtBrief(''); } catch (e) {}
+    if (madeShare) madeShare.art = null;
+    railNote('share · art withdrawn');
+    logLine('share.art.withdrawn', words.slice(0, 140), { level: 'warn', target: 'share' });
+    doorNote('he withdrew it mid-sentence, so nothing is drawn and nothing is locked. Say one short line that '
+      + 'you stopped, and carry on with what he was actually telling you.', true);
+    return;
+  }
   // Build 139: a sentence about the song is not an answer about a picture, and must not spend the question.
   // On 10 Nov he said "It's already on my shelf." about a song he had just shared, and the door locked those
   // words as the art brief and paid to draw them, for a song that had not even landed. The step stays open
