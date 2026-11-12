@@ -302,7 +302,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-12T08:58';
-const BUILD_NO = 170;
+const BUILD_NO = 171;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -4899,6 +4899,8 @@ async function handlePayCall(call) {
 
 function payCard(it) {
   const amt = 'R' + Number(it.amount || 0).toFixed(2);
+  // Build 171: a request takes its place on the shelf by when it was made, like everything else.
+  const madeAt = it.created_date || '';
   if (String(it.status) === 'paid') {
     return {
       kind: 'paid',
@@ -4912,11 +4914,11 @@ function payCard(it) {
       sub: it.receipt_no ? 'tap for the receipt'
         : (it.source === 'credits' ? 'settled from credits \u00b7 no card' : 'paid \u00b7 no receipt on this record'),
       sheet: !!it.receipt_no || it.source === 'credits',
-      note: it.item,
+      note: it.item, when: madeAt,
     };
   }
   if (String(it.status) === 'open') {
-    return { kind: 'pay', code: it.code, title: 'Open and pay ' + amt + ' \u00b7 ' + it.code, url: it.checkout_url, note: it.item };
+    return { kind: 'pay', code: it.code, title: 'Open and pay ' + amt + ' \u00b7 ' + it.code, url: it.checkout_url, note: it.item, when: madeAt };
   }
   // Anything else is a closed door: refused at the provider, expired, cancelled. It stays on
   // the shelf so he can see what happened, but it must never offer the checkout again.
@@ -4926,7 +4928,7 @@ function payCard(it) {
     title: 'Not paid ' + amt + ' \u00b7 ' + it.code,
     url: FNBASE + 'payRequestShelf?code=' + encodeURIComponent(it.code),
     sub: String(it.status) + ' \u00b7 nothing was taken',
-    sheet: true, note: it.item,
+    sheet: true, note: it.item, when: madeAt,
   };
 }
 
@@ -5055,6 +5057,36 @@ function armSilenceWatch(heard) {
   }, 2500);
 }
 
+/* What time a card carries, in milliseconds (Edwin, 12 Nov 2026 08:22: "the shelf sorting is not
+   correct. it doesn't show the latest created items first"). Two traps in the stamps the server sends:
+   a ShelfLink arrives with six fractional digits and no zone, and Date.parse reads a zoneless stamp as
+   LOCAL time, which would drop a link wrapped at 07:57 two hours into the past. So the fraction is cut to
+   three digits and a stamp with no zone is read as UTC, because that is what the platform keeps. A card
+   with no stamp at all was made here a moment ago (a cover, a send), so it is not "old": it is null, and
+   it stays at the front. */
+function cardTime(c) {
+  let t = String((c && c.when) || '');
+  if (!t) return null;
+  t = t.replace(/(\.\d{3})\d+/, '$1');
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(t)) t += 'Z';
+  const ms = Date.parse(t);
+  return isFinite(ms) ? ms : null;
+}
+
+/* The shelf is one row in time, not a song list with links bolted under it. Newest first, whatever kind
+   each card is, and stable: a card that carries no stamp keeps the place it had, in front of the stamped
+   ones, because it is the one he just made. */
+function shelfSort() {
+  const loose = [], timed = [];
+  shelf.forEach((c, i) => { const t = cardTime(c); (t === null ? loose : timed).push({ c, i, t }); });
+  timed.sort((a, b) => (b.t - a.t) || (a.i - b.i));
+  const next = loose.map(x => x.c).concat(timed.map(x => x.c));
+  if (next.every((c, i) => c === shelf[i])) return;
+  shelf.length = 0;
+  for (const c of next) shelf.push(c);
+  renderShelf();
+}
+
 function mergeCard(c) {
   if (!c || !c.title) return;
   const k = cardKey(c);
@@ -5181,7 +5213,11 @@ async function refreshCards(force) {
     }
     if (!d || !d.ok || !Array.isArray(d.cards)) return;
     // Oldest first, because shelfAdd puts each one at the front: the newest song ends up on top.
-    for (const c of d.cards.slice().reverse()) mergeCard(c);
+    // Oldest first, because shelfAdd puts each one at the front: the newest ends up on top. Sorted by
+    // our own reading of each stamp rather than by the order the reader happened to send them in, and the
+    // whole row is then put in time order - which is what repairs a shelf built by arrival, not by time.
+    for (const c of d.cards.slice().sort((a, b) => (cardTime(a) ?? 0) - (cardTime(b) ?? 0))) mergeCard(c);
+    shelfSort();
     return d;
   } catch (e) { /* a shelf that cannot be read is quiet, not an error */ }
 }
@@ -5213,6 +5249,7 @@ async function shelfSync() {
       const age = it.created_date ? Date.now() - Date.parse(it.created_date) : Infinity;
       if (it.status === 'open' && age < 30 * 60 * 1000) watchRequest(it.code, 6);
     }
+    shelfSort();
   } catch (e) { /* a quiet shelf is not an error */ }
 }
 // The door hands over all three rails when it opens, not just the money one.
