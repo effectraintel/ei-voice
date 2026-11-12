@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T08:20';
-const BUILD_NO = 168;
+const BUILD = '2026-11-12T08:40';
+const BUILD_NO = 169;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -3037,7 +3037,17 @@ function judgeClaim() {
        song, 'Late Night with Edwin,' is ready on your shelf" ninety seconds after a make that never happened. */
     const madeRecently = !!(makeFiredAt && Date.now() - makeFiredAt < 20 * 60 * 1000);
     const readyClaim = /\b(?:your|the|that) song\b[^.!?]{0,90}\b(?:is|it'?s|is now)\b[^.!?]{0,40}\bready\b|\bis (?:now )?ready on your shelf\b|\b(?:landed|arrived|is) on your shelf\b/i;
-    if (readyClaim.test(t) && !madeRecently && !lastSongRequest) {
+    /* 12 Nov 2026, 07:57: "Walking On Sunshine" was wrapped and on his shelf — shelfCards answered "9 cards"
+       one second later — the mouth said so truthfully, and this guard told it the shelf was empty, because
+       it asks whether a TAKE exists and a song shared from the stores has no take. The mouth then apologised
+       for a song that was sitting in front of him. The record is the card: if the title he named is the card
+       on his shelf, the claim is backed and there is nothing to correct. */
+    const flat = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const cardTitle = flat(shareCard && shareCard.title);
+    const backedByShelf = !!(cardTitle && cardTitle.length > 2
+      && (shareCard.url || shareCard.code || shareCard.link)
+      && flat(t).includes(cardTitle));
+    if (readyClaim.test(t) && !madeRecently && !lastSongRequest && !backedByShelf) {
       logLine('song.claim', t.slice(0, 160), { level: 'warn', target: 'no-take' });
       doorCorrect('nothing has been made yet · your song is still to come',
         'No take exists: nothing has been made and nothing is on his shelf. Correct yourself in one short line '
@@ -3631,6 +3641,9 @@ function resolvePending(heard) {
 function noteSongAnswer(heard) {
   const said = String(heard || '').trim();
   if (!said) return;
+  // The fork owns the turn while it is open (build 169): at 07:56:49 the fork note and this arm note both
+  // arrived, and the mouth answered "which song would you like to share?" instead of asking the fork.
+  if (songFork && Date.now() - songFork < 90000) return;
   if (SHARE_INTENT.test(said)) {
     // "share a song" alone is intent. "share a song by Ed Sheeran called I See Fire" is intent and the song,
     // and treating it as intent only is how he ended up with a fabricated "I couldn't find anything".
@@ -3647,7 +3660,6 @@ function noteSongAnswer(heard) {
     // fall through: armed and answered in the same breath
     awaitSong = Date.now();
   }
-  if (songFork && Date.now() - songFork < 90000) return;   // the fork owns this turn (build 168)
   if (!awaitSong || Date.now() - awaitSong > 90000) return;
   if (shareStage !== 'idle' || shareQuery) {
     // A stale step is not a reason to go deaf. If the door is holding 'waiting' or an unfinished picture
@@ -4096,10 +4108,17 @@ function resolveChoice(heard) {
     railAnsweredAt = Date.now();
     shareSongLocked(card);
     railNote('share · ' + (c.found || 'wrapped') + ' · ' + (card.title || ''));
+    // A store song already has its own artwork, and its picture and its sending happen on the shelf, not at
+    // the door. Asking "should a picture go with it" here is the descent of a MAKING journey applied to a
+    // song nobody made — and on 12 Nov 07:57 that question was the sentence the shelf guard then punished.
     doorNote('the door has put "' + (card.title || 'a song') + '"' + (c.artist ? ' by ' + c.artist : '')
-      + ' on his shelf with its listening link. Say the title once and that it is on the shelf, then ask once '
-      + 'whether a picture should go with it and what it should show, because it is the last question now. '
-      + 'Nothing is drawn until he answers.', true);
+      + ' on his shelf with its listening link. '
+      + (card.kind === 'store'
+        ? 'Say the title once and that it is on the shelf, and stop there. Do not ask for a picture, do not ask '
+          + 'what to do next, and never say it is still being looked for: it is already there.'
+        : 'Say the title once and that it is on the shelf, then ask once whether a picture should go with it '
+          + 'and what it should show, because it is the last question now. Nothing is drawn until he answers.'),
+      true);
   }).catch((e) => {
     hiddenHold = false;
     logLine('share.choose.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
