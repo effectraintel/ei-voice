@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T08:58';
-const BUILD_NO = 171;
+const BUILD = '2026-11-12T08:35';
+const BUILD_NO = 172;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -5074,13 +5074,15 @@ function cardTime(c) {
 }
 
 /* The shelf is one row in time, not a song list with links bolted under it. Newest first, whatever kind
-   each card is, and stable: a card that carries no stamp keeps the place it had, in front of the stamped
-   ones, because it is the one he just made. */
+   each card is, and stable. A card with no stamp at all goes LAST, not first: 08:33 proved why - the two
+   payment cards carried no stamp, so they claimed the front and sat over the songs. A card that cannot say
+   when it was made has no business claiming to be the newest thing on the shelf. What is made here is
+   stamped when it is made (see shelfAdd), so it still arrives on top honestly. */
 function shelfSort() {
   const loose = [], timed = [];
   shelf.forEach((c, i) => { const t = cardTime(c); (t === null ? loose : timed).push({ c, i, t }); });
   timed.sort((a, b) => (b.t - a.t) || (a.i - b.i));
-  const next = loose.map(x => x.c).concat(timed.map(x => x.c));
+  const next = timed.map(x => x.c).concat(loose.map(x => x.c));
   if (next.every((c, i) => c === shelf[i])) return;
   shelf.length = 0;
   for (const c of next) shelf.push(c);
@@ -5089,12 +5091,15 @@ function shelfSort() {
 
 function mergeCard(c) {
   if (!c || !c.title) return;
+  // A cover or a send is made by this page, seconds ago, so it is dated now. Everything else comes from a
+  // reader that must supply its own stamp.
+  if (!c.when && (c.kind === 'cover' || c.kind === 'send')) c = { ...c, when: new Date().toISOString() };
   const k = cardKey(c);
   if (shelfHidden.has(k) || isPutAway(k)) return;   // he put it away; only something new lands on a cleared shelf
   const i = shelf.findIndex(x => cardKey(x) === k);
   // Same song, same link: the card is updated where it sits, never stacked. A fresh play
   // token is minted on every read, so matching on the url would make a new card every minute.
-  if (i >= 0) { shelf[i] = { ...shelf[i], ...c, at: shelf[i].at }; renderShelf(); return; }
+  if (i >= 0) { shelf[i] = { ...shelf[i], ...c, at: shelf[i].at }; shelfSort(); renderShelf(); return; }
   shelfAdd(c);
 }
 // ---- the garage: where cleared things sit until he asks for them (build 57) ----
@@ -5602,6 +5607,8 @@ function openShareSheet(card, art) {
 
 function shelfAdd(item) {
   if (!item || !item.title) return;
+  // Made here, a moment ago, so it says so rather than arriving undated and sinking to the bottom.
+  if (!item.when) item = { ...item, when: new Date().toISOString() };
   const key = (item.url || item.title).slice(0, 300);
   // A request is one card, whatever its state: the same code must never sit on the
   // shelf twice as an old open card beside its receipt. (7 Nov, seen on a phone.)
