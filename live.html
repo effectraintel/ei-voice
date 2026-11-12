@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T22:44';
-const BUILD_NO = 177;
+const BUILD = '2026-11-13T00:42';
+const BUILD_NO = 178;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1885,7 +1885,7 @@ const CHAIN_LINKS = [
   { class: 'render', name: 'make', predicate: 'the rail returned a take with a receipt', requires: { said: 'string', sound: 'string' } },
   { class: 'free', name: 'anchor', predicate: 'the shelf proves the item and its picture are there', requires: { sha256: 'string', song_id: 'string' } }
 ];
-const chainRun = { ref: '', next: '', seq: 0, open: false, at: 0 };
+const chainRun = { ref: '', next: '', seq: 0, open: false, at: 0, madeAt: 0, held: '' };
 
 /* The chain lives server side and the door holds no key to it: chainDoor is the only way in.
    Build 175 called openChain/closeShackle directly, and every call threw user-exception, because a
@@ -1900,7 +1900,10 @@ async function chainCall(act, body) {
 
 async function chainOpen(subject) {
   if (!CHAIN_ON) return null;
-  if (chainRun.open && Date.now() - chainRun.at < 20 * 60 * 1000) return chainRun;
+  /* Build 178: a chain that already put a take into the studio is finished as a route, even while its
+     make ring stands open (the corridor cannot carry a receipt, so that ring cannot lock from here).
+     Reusing it would file the next song onto the last song's journey. */
+  if (chainRun.open && !chainRun.madeAt && Date.now() - chainRun.at < 20 * 60 * 1000) return chainRun;
   try {
     const r = await chainCall('open', {
       intent: 'make a song',
@@ -1946,16 +1949,83 @@ async function chainClose(link, inText, out) {
   }
 }
 
+/* Build 178 · THE CHAIN ASKS ITS OWN NEXT RING.
+   13 Nov 2026, 00:06. He said "It should be about sunshine in the open fields." The chain opened, locked
+   "hear", moved to "sound" - and the door said "That's being made now, Boss" one second later. Nothing was
+   in the studio. The ring was open and nobody asked for it, because the beat the door asks from is the
+   journey's askBeat and the ear's path never set it. A ring that needs a part the house does not hold is a
+   QUESTION; it is not permission to carry on and speak as if the part were there. */
+function chainAskNext(r) {
+  if (!CHAIN_ON || !chainRun.open) return;
+  const next = String((r && r.next_link) || chainRun.next || '');
+  if (next === 'sound' && !songDraft.sound && !songDraft.feel) {
+    songDraft.askBeat = 'sound';
+    songDraft.asks = (songDraft.asks || 0) + 1;
+    songDraft.at = Date.now();
+    logLine('journey.ask', 'sound · the chain asked for it', { level: 'info', target: 'music' });
+    railNote('journey · sound');
+    doorNote('Nothing has been made: the chain has locked what the song is about, and the next ring is the '
+      + 'sound, which is open. Ask him exactly one question, short, in your own voice: "What kind of music '
+      + 'should it be? Say you choose and I will pick." Do not describe the song, do not name a style he did '
+      + 'not give, and never say anything is being made, on its way, or arriving.', true);
+    return;
+  }
+  // The words ring is his own words, already in the draft; the make ring is the studio's.
+  if (next === 'words') {
+    const said = songDraft.said || '';
+    if (said) chainClose('words', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' })
+      .then((r2) => { if (r2 && r2.closed) { try { armMake(); } catch (e) {} } })
+      .catch(() => {});
+    return;
+  }
+  if (next === 'make') { try { armMake(); } catch (e) {} }
+}
+
 function chainBeat(beat) {
   if (!CHAIN_ON) return;
   const said = songDraft.said || '';
   if (beat === 'hear') {
     if (!said) return;
-    chainOpen(said).then(() => chainClose('hear', said, { said: said }));
+    chainOpen(said)
+      .then(() => chainClose('hear', said, { said: said }))
+      .then((r) => chainAskNext(r))
+      .catch(() => {});
     return;
   }
-  if (beat === 'sound') { chainClose('sound', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' }); return; }
-  if (beat === 'words') { chainClose('words', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' }); }
+  if (beat === 'sound') {
+    chainClose('sound', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' })
+      .then((r) => chainAskNext(r))
+      .catch(() => {});
+    return;
+  }
+  if (beat === 'words') {
+    chainClose('words', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' })
+      .then((r) => chainAskNext(r))
+      .catch(() => {});
+  }
+}
+
+/* A take exists only when the rail answers with a request. The door tells the chain the moment that
+   happens, and marks the journey spent so the next ask opens its own chain. The make ring itself cannot
+   lock through the corridor: chainDoor strips the receipt on purpose, and a render link without one is a
+   claim, not a result. So the door records the truth - the receipt it genuinely holds - and says plainly
+   that the ring stands open, instead of closing it on a receipt the corridor would never have let through. */
+function chainMade(requestId) {
+  if (!CHAIN_ON || !chainRun.open) return;
+  chainRun.madeAt = Date.now();
+  logLine('chain.receipt', String(requestId || ''), { level: 'info', target: 'music' });
+  chainClose('make', String(songDraft.said || ''), {
+    request_id: String(requestId || ''), provider: 'songRail',
+    said: songDraft.said || '', sound: songDraft.sound || ''
+  }).then((r) => {
+    if (r && r.closed) { logLine('chain.make', 'make ring locked', { level: 'info', target: 'music' }); return; }
+    if (!chainRun.held) {
+      chainRun.held = 'make';
+      logLine('chain.held', 'make · the corridor carries no receipt, so the ring stays open',
+        { level: 'warn', target: 'music' });
+      railNote('the take is in the studio · its ring stays open');
+    }
+  }).catch(() => {});
 }
 
 function songHearTurn(heard) {
@@ -2012,6 +2082,9 @@ function songHearTurn(heard) {
    has been asked for, it has the mouth asked once, and if the mouth still says nothing the door puts the
    song into the studio itself with the same rail call the tool would have made. One make, never two. */
 let makeArmedSig = '', makeArmedAt = 0, makeFiredAt = 0, makePostedSig = '';
+/* Build 178: when the rail actually took the words. A song is being made from this moment, and not one
+   second earlier - which is the difference between the door reporting a receipt and the door guessing. */
+let makeReceiptAt = 0;
 
 function makeSig() {
   return [songDraft.said, songDraft.sound, songDraft.feel, songDraft.who].join('|');
@@ -2062,6 +2135,7 @@ async function makeIfStillWaiting(sig) {
       'the music rail did not answer in time');
     makeFiredAt = Date.now();
     if (r.request_id) lastSongRequest = r.request_id;
+    if (r.request_id && !r.needs_word) { makeReceiptAt = Date.now(); chainMade(r.request_id); }
     if (styleLine && lastSongRequest && !r.needs_word) {
       gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.sound || '',
         feel_word: songDraft.feel || '' }).catch(() => {});
@@ -2655,6 +2729,12 @@ async function handleSongCall(call) {
       // and the picture is asked on the share sheet, so the route closes on the words and the sound.
       // A question with nothing behind it is what stalled the making on 10 Nov at 21:32.
       if (asked >= 3) askBeat = '';        // the journey is over: three is the whole route
+      /* Build 178: the open ring outranks the journey's own count. While the chain's sound ring stands
+         open, the door asks it and nothing is rendered: a take whose sound was never chosen is a guess
+         sung out loud, and he pays for it. */
+      if (CHAIN_ON && chainRun.open && !chainRun.madeAt && chainRun.next === 'sound' && !songDraft.sound) {
+        askBeat = 'sound';
+      }
 
       let ask = '';
       if (askBeat === 'subject') {
@@ -2711,6 +2791,7 @@ async function handleSongCall(call) {
         railOk = true;
         if (r.needs_word && r.prior_id) lastPriorId = r.prior_id;
         if (r.request_id) lastSongRequest = r.request_id;
+        if (r.request_id && !r.needs_word) { makeReceiptAt = Date.now(); chainMade(r.request_id); }
         if (styleLine && lastSongRequest && !r.needs_word) {
           gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.sound || '',
             feel_word: songDraft.feel || '' }).catch(() => {});
@@ -3178,6 +3259,28 @@ function judgeClaim() {
       doorCorrect('nothing has been made yet · your song is still to come',
         'No take exists: nothing has been made and nothing is on his shelf. Correct yourself in one short line '
         + 'and say what you are doing about it. Never name a song as ready that was not made in this conversation.', true);
+      return;
+    }
+    /* Build 178 · A SONG IS BEING MADE ONLY WHEN THE RAIL HOLDS IT.
+       13 Nov 2026, 00:06:40. One second after "It should be about sunshine in the open fields." the mouth
+       said "That's being made now, Boss." No tool call was made that turn, no request existed, and the
+       sentence was true of nothing. The inbox guard caught the word "inbox" in the same line and corrected
+       the address, which is why the fault read as a vocabulary slip instead of a false claim. A claim of
+       making, or of a thing on its way, now needs a receipt from the rail: with none, the door says what
+       is true and asks the ring that is still open. */
+    const madeClaim = /\b(?:being made|it'?s being made|making it now|in the studio|on its way|will arrive|is arriving|arrives in (?:a few|the next) minutes|in a few minutes|words are being written|almost ready|nearly ready)\b/i;
+    if (madeClaim.test(t) && !(makeReceiptAt && Date.now() - makeReceiptAt < 20 * 60 * 1000)) {
+      if (Date.now() - unbackedWarnedAt >= 8000) {
+        unbackedWarnedAt = Date.now();
+        hiddenHold = true; hiddenHoldUntil = Date.now() + 1400;
+        logLine('claim.nomake', t.slice(0, 160), { level: 'warn', target: 'copy' });
+        const beat = openJourneyBeat();
+        doorCorrect('nothing has been made yet',
+          'Nothing is being made: the rail has not been asked, so there is no take and no request. '
+          + (beat
+            ? 'Ask him this one question, short, and stop: "' + beat + '"'
+            : 'Ask him for the one thing the song still needs, in one short question, and stop.'));
+      }
       return;
     }
     // A locked picture brief stays locked (build 125). It used to be remembered for three seconds, so the
