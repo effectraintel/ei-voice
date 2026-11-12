@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T08:02';
-const BUILD_NO = 167;
+const BUILD = '2026-11-12T08:20';
+const BUILD_NO = 168;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1859,6 +1859,9 @@ const JOURNEY_NOMORE = /\b(?:just make|make it now|no more questions|stop asking
 // make down the share path and a share down the make path. (Edwin, 10 Nov 2026: "we should always confirm
 // which route the user wants to go and not just assume".)
 let songRoute = { pick: '', at: 0 };
+// Build 168 (Edwin, 12 Nov 2026, 07:53): "I want to share a song" is not a route. The first question after
+// it is the fork itself, and only the answer says whether the store rail or the song rail carries it.
+let songFork = 0, songForkAsks = 0;
 
 // The door's own ear for the draft it is holding. The mouth passes words, who and feel on its calls, and
 // when it forgets, the same question is asked again after he has already answered it: he said "rock" at
@@ -2129,6 +2132,91 @@ function openSongBeat() {
   logLine('journey.open', 'open at ' + songDraft.askBeat, { level: 'info', target: 'music' });
 }
 
+function askSongFork() {
+  songFork = Date.now(); songForkAsks = 0;
+  songRoute = { pick: '', at: Date.now() };
+  lastSongWords = '';
+  logLine('song.fork.ask', 'from the music stores, or a new one', { level: 'info', target: 'music' });
+  doorNote('Ask exactly one question and nothing else, in these words or close to them: "Do you want to '
+    + 'share a song from the music stores, or create a new song?" Nothing is searched and nothing is made '
+    + 'until he answers. Do not guess which one he means and do not offer a third option.', true);
+}
+
+// The answer to the fork. Returns true when it took the turn (so the route gate does not guess again).
+// The cheap branch is the default: if the answer is still unclear after one more ask, the door treats it
+// as a store song, because a song shared by mistake costs nothing and a song made by mistake costs money.
+function forkAnswer(heard) {
+  if (!songFork) return false;
+  if (Date.now() - songFork > 90000) { songFork = 0; songForkAsks = 0; return false; }
+  const said = String(heard || '').trim();
+  if (!said) return false;
+  const t = said.toLowerCase();
+  // a question back at the door is not the answer: it stays open and the mouth answers him
+  if (/^(?:what|how|why|which|where|when|can you|could you|do you|should i|are you|who)\b/.test(t)) {
+    songFork = Date.now();
+    return false;
+  }
+  const store = /\b(?:music stores?|the stores?|shop|spotify|apple music|deezer|itunes|amazon music|youtube music|already (?:exists|out|made)|existing)\b/.test(t);
+  const neg = /\b(?:not|don'?t|do not|no)\b[^.?!]{0,25}\b(?:make|making|create|creating|write|writing|compose)\b/.test(t);
+  const makeWord = /\b(?:make|making|create|creating|write|writing|compose|composing)\b/.test(t) && !neg;
+  const fresh = /\b(?:new|brand new|fresh|from scratch|suno)\b/.test(t);
+  const bare = /^(?:yes|yeah|yep|no|nope|nah|ok|okay|sure|please|fine)\b/.test(t) && t.split(/\s+/).length <= 4;
+  // A hesitation is not a song title. "hmm" reaching the title branch would have sent it to the stores as a
+  // query, and "you choose" would have ignored him: that answer is a deferral, and it takes the cheap branch.
+  const unsure = bare || /^(?:hmm+|mm+|uh+|um+|er+|ah+|oh+|i don'?t know|dunno|not sure|no idea)\b/.test(t);
+  const defer = /\b(?:you (?:choose|decide|pick)|up to you|whatever|either|surprise me)\b/.test(t);
+
+  if (store) {
+    songFork = 0; songForkAsks = 0;
+    songRoute = { pick: 'share', at: Date.now() };
+    logLine('song.fork.answer', 'share · from the stores', { level: 'info', target: 'music' });
+    doorNote('The route is SHARING a song that already exists: nothing is made. Say so in one short line, '
+      + 'then ask him for the title (and the artist if he has it) if he has not already said it.', true);
+    return true;
+  }
+  if (makeWord || fresh) {
+    songFork = 0; songForkAsks = 0;
+    songRoute = { pick: 'make', at: Date.now() };
+    openSongBeat();
+    logLine('song.fork.answer', 'make · a new song', { level: 'info', target: 'music' });
+    doorNote('The route is a NEW song, made here. Say so in one short line, then ask what it should say if '
+      + 'he has not given you the words. Do not search the stores for anything.', true);
+    return true;
+  }
+  if (defer) {
+    songFork = 0; songForkAsks = 0;
+    songRoute = { pick: 'share', at: Date.now() };
+    logLine('song.fork.defer', 'he left it to the door · the branch that makes nothing', { level: 'info', target: 'music' });
+    doorNote('He left the choice to the door, so it is a song from the stores: nothing is made. Say in one '
+      + 'short line that you will find one, and ask him for the title.', true);
+    return true;
+  }
+  if (!unsure) {
+    // He answered by naming the song itself. That is a store song, and the words he said are the query:
+    // clearing the fork lets noteSongAnswer take them to the rail on this same turn.
+    songFork = 0; songForkAsks = 0;
+    songRoute = { pick: 'share', at: Date.now() };
+    awaitSong = Date.now();
+    logLine('song.fork.answer', 'share · answered with the song itself', { level: 'info', target: 'music' });
+    return false;
+  }
+  if (songForkAsks < 1) {
+    songForkAsks += 1;
+    songFork = Date.now();
+    logLine('song.fork.again', said, { level: 'warn', target: 'music' });
+    doorNote('He has not chosen one of the two. Ask once more, in one short line: a song from the music '
+      + 'stores, or a new one made? Nothing is searched and nothing is made until he says which.', true);
+    return true;
+  }
+  // twice unclear: the branch that makes nothing
+  songFork = 0; songForkAsks = 0;
+  songRoute = { pick: 'share', at: Date.now() };
+  logLine('song.fork.default', 'twice unclear · treating it as a store song', { level: 'warn', target: 'music' });
+  doorNote('He did not choose, so the door is treating it as a song from the stores, which makes nothing. Say '
+    + 'in one short line that nothing has been made, and ask him for the title.', true);
+  return true;
+}
+
 function songRouteGate(heard) {
   const raw = String(heard || '');
   const cue = correctionCue(raw);
@@ -2156,13 +2244,20 @@ function songRouteGate(heard) {
     doorNote('The route is a NEW song. Say so in one short line ("a new one, then"), and ask what it should '
       + 'say if you do not already have his words. Do not search for an existing song.', true);
   } else if (wantShare) {
-    songRoute = { pick: 'share', at: Date.now() };
-    doorNote('The route is SHARING a song that already exists: nothing is made. Say so in one short line, '
-      + 'then find the song he means by title or artist.', true);
+    // 12 Nov 2026: "I want to share a song" names no origin, so the door asks the fork rather than deciding
+    // that sharing means the stores. A title, a quoted name, or "the music stores" settles it without asking.
+    const namesStore = /\b(?:music stores?|the stores?|spotify|apple music|deezer|itunes|amazon music|youtube music|already (?:exists|out|made)|existing)\b/.test(t);
+    const namesTitle = /["\u201c\u2018][^"\u201d\u2019]{2,}["\u201d\u2019]/.test(raw)
+      || /\b(?:share|send)\b[^.?!]{0,30}\b[A-Z][a-z]{2,}/.test(raw);
+    if (namesStore || namesTitle) {
+      songRoute = { pick: 'share', at: Date.now() };
+      doorNote('The route is SHARING a song that already exists: nothing is made. Say so in one short line, '
+        + 'then find the song he means by title or artist.', true);
+    } else {
+      askSongFork();
+    }
   } else if (negMake) {
-    songRoute = { pick: '', at: Date.now() };
-    doorNote('You cannot tell which he wants. Ask exactly one short question and nothing else: a new song '
-      + 'made, or one he already has shared?', true);
+    askSongFork();
   }
   if (songRoute.pick) logLine('song.route', songRoute.pick, { level: 'info', target: 'music' });
 }
@@ -3552,6 +3647,7 @@ function noteSongAnswer(heard) {
     // fall through: armed and answered in the same breath
     awaitSong = Date.now();
   }
+  if (songFork && Date.now() - songFork < 90000) return;   // the fork owns this turn (build 168)
   if (!awaitSong || Date.now() - awaitSong > 90000) return;
   if (shareStage !== 'idle' || shareQuery) {
     // A stale step is not a reason to go deaf. If the door is holding 'waiting' or an unfinished picture
@@ -6210,7 +6306,7 @@ function handleFrame(text) {
       if (/\b(?:share|send)\b|\b(?:make|write|create|do)\b[^.?!]{0,40}\b(?:for|to)\s+(?:my|his|her)\b/i.test(heard)) {
         shareIntentAt = Date.now();
       }
-      try { songRouteGate(heard); } catch (e) {}
+      try { if (!forkAnswer(heard)) songRouteGate(heard); } catch (e) {}
       try { shadowRouteNote(heard, songRoute && songRoute.pick); } catch (e) {}
       try { songHearTurn(heard); } catch (e) {}
       try { descentHear(heard); } catch (e) {}
