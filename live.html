@@ -302,7 +302,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-12T22:44';
-const BUILD_NO = 175;
+const BUILD_NO = 176;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1867,6 +1867,86 @@ let songFork = 0, songForkAsks = 0;
 // when it forgets, the same question is asked again after he has already answered it: he said "rock" at
 // 08:55:21 and was asked "what kind of song" again at 08:55:28. What he says is on the record before the
 // model is asked anything. (build 130)
+/* ---------- build 175 · Stage 4: the chain owns the journey (flag OFF) ----------
+   Why this exists: the door carries the journey in prose. A beat is remembered because a variable
+   was set, so a wrong sound ("You two.") or a misheard name ("Jock") is caught only if some guard
+   happens to look at it, and a joint between two beats is never closed at all. The chain puts the
+   beats in a ledger: each joint names what it needs, a joint closes only when those parts are there,
+   and a refusal names the part that failed. The mouth keeps hearing and phrasing; it stops deciding
+   what happens next.
+
+   Rollout: `?chain=1` turns it on. Without the flag every function below returns immediately, so
+   this build behaves exactly like 174. */
+const CHAIN_ON = (() => { try { return new URLSearchParams(location.search).get('chain') === '1'; } catch (e) { return false; } })();
+const CHAIN_LINKS = [
+  { class: 'free', name: 'hear', predicate: 'the subject is his, in his own words', requires: {} },
+  { class: 'free', name: 'sound', predicate: 'a sound was chosen, not a phrase that answers something else', requires: { said: 'string' } },
+  { class: 'free', name: 'words', predicate: 'the words are the ones he said', requires: { said: 'string', sound: 'string' } },
+  { class: 'paid', name: 'make', predicate: 'the rail returned a take with a receipt', requires: { said: 'string', sound: 'string' } },
+  { class: 'free', name: 'anchor', predicate: 'the shelf proves the item and its picture are there', requires: { sha256: 'string', song_id: 'string' } }
+];
+const chainRun = { ref: '', next: '', seq: 0, open: false, at: 0 };
+
+async function chainOpen(subject) {
+  if (!CHAIN_ON) return null;
+  if (chainRun.open && Date.now() - chainRun.at < 20 * 60 * 1000) return chainRun;
+  try {
+    const r = await gatePost('openChain', {
+      intent: 'make a song',
+      links: CHAIN_LINKS,
+      postcondition: 'the song is on his shelf with its picture',
+      spend_bound_cents: 0,
+      notes: 'opened by the door (build 175)'
+    });
+    if (r && r.chain_ref) {
+      chainRun.ref = r.chain_ref; chainRun.next = r.first_link || 'hear';
+      chainRun.seq = 0; chainRun.open = true; chainRun.at = Date.now();
+      logLine('chain.open', r.chain_ref + ' \u00b7 first ' + chainRun.next, { level: 'info', target: 'music' });
+    }
+  } catch (e) {
+    logLine('chain.open.fail', String((e && e.message) || e).slice(0, 140), { level: 'warn', target: 'music' });
+  }
+  return chainRun;
+}
+
+/* A joint closes with what the door actually knows. A refusal is the truth the mouth must say, and the
+   journey does not move past it: nothing is guessed past a refusal. */
+async function chainClose(link, inText, out) {
+  if (!CHAIN_ON || !chainRun.open) return null;
+  try {
+    const r = await gatePost('closeShackle', {
+      chain_ref: chainRun.ref, seq: chainRun.seq, in_text: String(inText || ''),
+      out: out || {}, paid_by: 'none'
+    });
+    if (r && r.closed) {
+      chainRun.seq = Number(r.release || chainRun.seq + 1);
+      chainRun.next = r.next_link || '';
+      logLine('chain.closed', link + ' \u00b7 next ' + chainRun.next, { level: 'info', target: 'music' });
+      return r;
+    }
+    const why = (r && (r.why || r.error)) || 'the chain refused this joint';
+    logLine('chain.refused', link + ' \u00b7 ' + why, { level: 'warn', target: 'music' });
+    doorNote('The chain refused this joint: ' + why + '. Say that plainly in one short line and ask only for '
+      + 'what is missing. Do not carry on to the next beat.', true);
+    return r;
+  } catch (e) {
+    logLine('chain.close.fail', link + ' \u00b7 ' + String((e && e.message) || e).slice(0, 140), { level: 'warn', target: 'music' });
+    return null;
+  }
+}
+
+function chainBeat(beat) {
+  if (!CHAIN_ON) return;
+  const said = songDraft.said || '';
+  if (beat === 'hear') {
+    if (!said) return;
+    chainOpen(said).then(() => chainClose('hear', said, { said: said }));
+    return;
+  }
+  if (beat === 'sound') { chainClose('sound', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' }); return; }
+  if (beat === 'words') { chainClose('words', said, { said: said, sound: songDraft.sound || '', feel: songDraft.feel || '' }); }
+}
+
 function songHearTurn(heard) {
   const t = String(heard || '').trim();
   if (!t) return;
@@ -1886,12 +1966,14 @@ function songHearTurn(heard) {
       songDraft.sound = t.slice(0, 160);
       songDraft.askBeat = '';
       logLine('song.journey.sound', songDraft.sound, { level: 'info', target: 'music' });
+      chainBeat('sound');
       return;
     }
     if (beat === 'feel' && words.length <= 18) {
       songDraft.feel = t.slice(0, 160);
       songDraft.askBeat = '';
       logLine('song.journey.feel', songDraft.feel, { level: 'info', target: 'music' });
+      chainBeat('feel');
       return;
     }
   }
@@ -1907,6 +1989,7 @@ function songHearTurn(heard) {
   if (!songDraft.said && words.length >= 3 && songConcrete(t) >= 3) {
     songDraft.said = t;
     logLine('song.subject.heard', t.slice(0, 120), { level: 'info', target: 'music' });
+    chainBeat('hear');
   }
 }
 
@@ -5968,7 +6051,7 @@ function keepFound(it) {
   try {
     const url = String((it && it.url) || '').trim();
     if (!/^https?:\/\//i.test(url)) return;
-    fetch('/functions/shelfKeep', {
+    fetch(FNBASE + 'shelfKeep', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         kind: it.kind || 'source',
