@@ -302,7 +302,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-13T01:40';
-const BUILD_NO = 180;
+const BUILD_NO = 181;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1970,8 +1970,9 @@ function chainAskNext(r) {
     railNote('journey · sound');
     doorNote('Nothing has been made: the chain has locked what the song is about, and the next ring is the '
       + 'sound, which is open. Ask him exactly one question, short, in your own voice: "What kind of music '
-      + 'should it be? Say you choose and I will pick." Do not describe the song, do not name a style he did '
-      + 'not give, and never say anything is being made, on its way, or arriving.', true);
+      + 'should it be? Say you choose and I will pick." The sound is HIS to choose and the rail does not decide '
+      + 'it, so never say the rail picks the style. Do not describe the song, do not name a style he did not '
+      + 'give, and never say anything is being made, on its way, or arriving.', true);
     return;
   }
   // The words ring is his own words, already in the draft; the make ring is the studio's.
@@ -2058,7 +2059,42 @@ function songHearTurn(heard) {
       return;
     }
     if (beat === 'sound' && words.length <= 14) {
-      songDraft.sound = t.slice(0, 160);
+      /* Build 181. The slot is closed: only a member of SOUND_WORDS fills it, and the member is what is kept,
+         not the word that happened to reach the ear. A word that is no sound at all leaves the ring OPEN and
+         asks again - the ring is a question, never permission to carry on. */
+      const real = soundIsReal(t);
+      if (!real) {
+        const near = soundNear(t);
+        songDraft.soundTries = (songDraft.soundTries || 0) + 1;
+        songDraft.askBeat = 'sound';
+        songDraft.guess = near || '';
+        logLine('song.sound.open', t.slice(0, 80) + (near ? ' ~ ' + near : ''),
+          { level: 'warn', target: 'music' });
+        doorNote(near
+          ? 'Nothing has been made. What he said is not a sound the door can use, and it is close to "' + near
+            + '". Ask him one short question: did he mean ' + near + '? Never say anything is being made, on its way or arriving.'
+          : 'Nothing has been made. What he said is not a kind of music, so the sound ring stays open. Ask him one '
+            + 'short question again for the sound, and if this is the second time offer three plainly: reggae, blues, pop. '
+            + 'Never name a style he did not give, and never say anything is being made, on its way or arriving.',
+          true);
+        railNote('journey · sound · still open');
+        return;
+      }
+      if (songDraft.guess && /^(?:yes|yeah|yep|correct|that'?s it|please|sure|right)\b/i.test(t) === false
+          && soundIsReal(t) === songDraft.guess) { /* he said the member itself */ }
+      songDraft.sound = real;
+      songDraft.guess = '';
+      songDraft.soundTries = 0;
+      songDraft.askBeat = '';
+      logLine('song.journey.sound', real, { level: 'info', target: 'music' });
+      chainBeat('sound');
+      return;
+    }
+    /* A "yes" to the door's own offer ("did you mean reggae?"). His yes is the answer to the open ring. */
+    if (beat === 'sound' && songDraft.guess && /^(?:yes|yeah|yep|correct|that'?s it|please|sure|right)\b/i.test(t)) {
+      songDraft.sound = songDraft.guess;
+      songDraft.guess = '';
+      songDraft.soundTries = 0;
       songDraft.askBeat = '';
       logLine('song.journey.sound', songDraft.sound, { level: 'info', target: 'music' });
       chainBeat('sound');
@@ -2110,7 +2146,9 @@ function routeClosed() {
     if (!songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000) return false;
     if (!songDraft.said || songConcrete(songDraft.said) < 1) return false;
     if (songDraft.askBeat) return false;
-    return !!(songDraft.sound || songDraft.feel);
+    /* Build 181: a feel is not a sound. A route that closed on a feel is how a render went out with the
+       style "gray" on 13 Nov. The route closes on a member of the sound vocabulary, and on nothing else. */
+    return !!soundIsReal(songDraft.sound);
   } catch (e) { return false; }
 }
 
@@ -2127,6 +2165,18 @@ function armMake() {
 
 async function makeIfStillWaiting(sig) {
   if (makeArmedSig !== sig) return;          // the brief moved on
+  /* Build 181. The last gate before the money. A render is never spent on a sound that is not a sound: the
+     ring stays open, the door asks again, and nothing leaves. */
+  if (!soundIsReal(songDraft.sound)) {
+    makeArmedSig = '';
+    songDraft.askBeat = 'sound';
+    logLine('song.make.blocked', 'no sound to make from: ' + String(songDraft.sound || '(none)').slice(0, 60),
+      { level: 'warn', target: 'music' });
+    railNote('journey · sound · still open');
+    doorNote('Nothing has been made and nothing will be until he names a kind of music. Ask him one short '
+      + 'question for the sound. Never say anything is being made, on its way or arriving.', true);
+    return;
+  }
   if (makeFiredAt > makeArmedAt) return;     // the mouth called the rail: nothing to rescue
   if (makePostedSig === sig) return;         // already put in from here
   if (!routeClosed()) return;
@@ -2163,7 +2213,9 @@ async function makeIfStillWaiting(sig) {
     doorNote(r.needs_word
       ? 'The door put the song in itself and the rail says he already has one like this. Say that in one short line.'
       : 'The door has already put the song into the studio itself, so it is being made and it lands on his shelf. '
-        + 'Say one short true line saying so. Do not ask about a picture, do not ask anything else, and never say it is sent.',
+        + 'Say one short true line saying so, naming the sound he chose and what the song is about, so he knows what '
+        + 'is being made rather than being surprised by it. Do not ask about a picture, do not ask anything else, and '
+        + 'never say it is sent.',
       true);
   } catch (e) {
     logLine('song.make.door.fail', String((e && e.message) || e).slice(0, 140),
@@ -2458,6 +2510,48 @@ function songRouteGate(heard) {
 const SONG_FILLER = /\b(i|we|you|want|wanna|would|like|please|can|could|will|make|making|write|create|sing|do|need|give|me|us|a|an|the|to|for|about|of|on|in|with|some|song|songs|tune|tracks|track|music|thing|something|anything|one|another|new|it|that|this|and|my|our|his|her|their|just|now|again|actually|really|be|is|are|it's|its)\b/gi;
 const SONG_PERSON = /\b(friend|mate|buddy|girlfriend|boyfriend|wife|husband|partner|mom|mum|mother|dad|father|sister|brother|son|daughter|kid|child|family|someone|somebody|person|people|colleague|boss|client|gran|grandma|grandpa)\b/i;
 const SONG_FEEL = /\b(rock|alternative|country|soul|jazz|blues|pop|folk|acoustic|piano|guitar|ballad|club|dance|house|hip hop|rap|metal|indie|gospel|reggae|swing|lullaby|orchestral|cinematic|drum|bass)\b/i;
+
+/* Build 181 · THE SOUND SLOT IS A CLOSED VOCABULARY, AND NOTHING IS RENDERED ON A WORD THAT IS NOT A SOUND.
+   13 Nov 2026, 00:57. He answered the sound ring with "reggae"; the ear wrote "gray"; the door took "gray" as
+   the sound and a paid render went out with style "gray". Nothing asked whether "gray" was a sound at all.
+   The list below is the SAME closed list the chain's predicates use (.agents/scripts/ei-chain/predicates.js,
+   SOUND_WORDS): adding a word is a deliberate edit, never something a spoken word can do by arriving. */
+const SOUND_WORDS = ['rock','pop','reggae','hip hop','rap','blues','jazz','classical','country','metal','folk',
+  'club','dance','techno','house','ballad','soul','funk','gospel','punk','alternative','indie','acoustic',
+  'orchestral','ballet','gqom','amapiano','kwaito','opera','choir','ska','swing','trance','disco',
+  'lullaby','cinematic','piano','guitar','drum and bass'];
+/* The member this answer names, in the list's own spelling, or '' when it names none. Longest member first,
+   so "hip hop" is not read as "pop" and "drum and bass" is not read as a drum. */
+function soundIsReal(answer) {
+  const t = ' ' + String(answer || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  if (t.trim().length < 2) return '';
+  const hits = SOUND_WORDS.filter((w) => t.includes(' ' + w + ' ') || t.includes(' ' + w + 's '));
+  if (!hits.length) return '';
+  return hits.sort((a, b) => b.length - a.length)[0];
+}
+/* A heard word that is one or two letters from a member, so the door can offer it back rather than pretend it
+   heard a style. "regae" finds reggae; "gray" finds nothing, and asking again is the honest answer. */
+function soundNear(answer) {
+  const words = String(answer || '').toLowerCase().replace(/[^a-z ]+/g, ' ')
+    .split(/\s+/).filter((w) => w.length >= 3);
+  const dist = (a, b) => {
+    const m = a.length, n = b.length;
+    const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+    for (let j = 0; j <= n; j++) d[0][j] = j;
+    for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[m][n];
+  };
+  for (const w of words) {
+    if (w.length < 3) continue;
+    for (const member of SOUND_WORDS) {
+      const m = member.replace(/\s+/g, '');
+      if (w[0] !== m[0]) continue;
+      if (dist(w, m) <= (m.length <= 4 ? 1 : 2)) return member;
+    }
+  }
+  return '';
+}
 
 function songWho(raw) {
   const said = String(raw || '');
