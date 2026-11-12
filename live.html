@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-11T00:06';
-const BUILD_NO = 165;
+const BUILD = '2026-11-12T07:58';
+const BUILD_NO = 166;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -3539,7 +3539,10 @@ function noteSongAnswer(heard) {
   if (SHARE_INTENT.test(said)) {
     // "share a song" alone is intent. "share a song by Ed Sheeran called I See Fire" is intent and the song,
     // and treating it as intent only is how he ended up with a fabricated "I couldn't find anything".
-    const carriesName = /\b(?:by|called|named|titled|from)\s+[A-Za-z]/i.test(said)
+    // "from the music store" is not a name. On 12 Nov 07:42 the door read that sentence as carrying a
+    // title, searched the rail with all of it, and spent four Deezer and three iTunes attempts on nothing.
+    // A preposition followed by a determiner ("from the", "by a") names no song.
+    const carriesName = /\b(?:by|called|named|titled|from)\s+(?!(?:the|a|an|my|our|some|that|this|his|her|their)\b)[A-Za-z]/i.test(said)
       || /["\u201c\u2018][^"\u201d\u2019]{2,}["\u201d\u2019]/.test(said);
     if (!carriesName) {
       awaitSong = Date.now();
@@ -3553,7 +3556,11 @@ function noteSongAnswer(heard) {
   if (shareStage !== 'idle' || shareQuery) {
     // A stale step is not a reason to go deaf. If the door is holding 'waiting' or an unfinished picture
     // step with no song behind it, it lets go and searches, rather than swallowing the turn. (10 Nov 08:19)
-    const nothingBehind = shareStage === 'waiting'
+    // A stage that is finished is not a step in flight. 'closed' after a cancelled share and 'sent' after
+    // an email both outlive the thing they describe, and 12 Nov 07:44 they ate four titles in a row: he
+    // said "I'm walking on sunshine" four times and the rail was never asked once. A finished stage is
+    // cleared here, exactly like a stale one.
+    const nothingBehind = shareStage === 'waiting' || shareStage === 'closed' || shareStage === 'sent'
       || (shareStage === 'art' && (!shareCard || shareCard.kind === 'made'));
     if (nothingBehind && !madeShare && !shareQuery) {
       shareStage = 'idle'; shareCard = null; shareCardTarget = null;
