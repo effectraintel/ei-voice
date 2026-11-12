@@ -302,7 +302,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-12T22:44';
-const BUILD_NO = 176;
+const BUILD_NO = 177;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1882,21 +1882,32 @@ const CHAIN_LINKS = [
   { class: 'free', name: 'hear', predicate: 'the subject is his, in his own words', requires: {} },
   { class: 'free', name: 'sound', predicate: 'a sound was chosen, not a phrase that answers something else', requires: { said: 'string' } },
   { class: 'free', name: 'words', predicate: 'the words are the ones he said', requires: { said: 'string', sound: 'string' } },
-  { class: 'paid', name: 'make', predicate: 'the rail returned a take with a receipt', requires: { said: 'string', sound: 'string' } },
+  { class: 'render', name: 'make', predicate: 'the rail returned a take with a receipt', requires: { said: 'string', sound: 'string' } },
   { class: 'free', name: 'anchor', predicate: 'the shelf proves the item and its picture are there', requires: { sha256: 'string', song_id: 'string' } }
 ];
 const chainRun = { ref: '', next: '', seq: 0, open: false, at: 0 };
+
+/* The chain lives server side and the door holds no key to it: chainDoor is the only way in.
+   Build 175 called openChain/closeShackle directly, and every call threw user-exception, because a
+   static page has no user session and the seal key authorises the write's intent, not its scope.
+   Build 177 sends the door's own pass instead, and the corridor checks it exactly as the voice room
+   does: the session record, its status, its expiry, and that it came from an enrolled device. */
+async function chainCall(act, body) {
+  const s = doorSession();
+  if (!s || !s.token) throw new Error('the door is locked: no session');
+  return gatePost('chainDoor', Object.assign({ act: act, session_token: s.token }, body || {}));
+}
 
 async function chainOpen(subject) {
   if (!CHAIN_ON) return null;
   if (chainRun.open && Date.now() - chainRun.at < 20 * 60 * 1000) return chainRun;
   try {
-    const r = await gatePost('openChain', {
+    const r = await chainCall('open', {
       intent: 'make a song',
       links: CHAIN_LINKS,
       postcondition: 'the song is on his shelf with its picture',
       spend_bound_cents: 0,
-      notes: 'opened by the door (build 175)'
+      notes: 'opened by the door (build 177)'
     });
     if (r && r.chain_ref) {
       chainRun.ref = r.chain_ref; chainRun.next = r.first_link || 'hear';
@@ -1914,7 +1925,7 @@ async function chainOpen(subject) {
 async function chainClose(link, inText, out) {
   if (!CHAIN_ON || !chainRun.open) return null;
   try {
-    const r = await gatePost('closeShackle', {
+    const r = await chainCall('close', {
       chain_ref: chainRun.ref, seq: chainRun.seq, in_text: String(inText || ''),
       out: out || {}, paid_by: 'none'
     });
