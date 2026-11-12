@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-12T09:02';
-const BUILD_NO = 171;
+const BUILD = '2026-11-12T09:10';
+const BUILD_NO = 173;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -2635,8 +2635,23 @@ async function handleSongCall(call) {
           // is followed to the shelf, so the door can say the one true thing when it lands, whether or not
           // he named anybody. The share button on the shelf carries the who, the where and the picture.
           const whoNamed = String(payload.who || '').trim();
+          // Build 173, Edwin 12 Nov 2026: "yes I think we have 3 already as I can only draw when I share at
+          // this moment?" He was right - nothing was ever drawn at landing unless he had answered the picture
+          // question while the song was being made. So a cover asked for in the ask ("make it with a cover")
+          // is remembered here and drawn the moment the take lands, and the share later carries the picture it
+          // already owns instead of drawing one after his tap.
+          const askLine = [String(payload.text || ''), songDraft.sound || '', songDraft.feel || '']
+            .join(' \u00b7 ');
+          // The word "cover" alone is not enough: "call it cover me in sunshine" is a title, and a title must
+          // never pay for a drawing. So the picture word only counts when a verb of asking stands close to it.
+          const coverInAsk = !/\b(?:no|without|skip) (?:a )?(?:cover|picture|image|artwork)\b/i.test(askLine)
+            && (/\b(?:with|plus|and|add|include|make|need|want|do)\b[^.]{0,20}\b(?:cover art|artwork|picture|image|cover)\b/i.test(askLine)
+              || /\ba cover (?:for|with|on|to)\b/i.test(askLine));
+          logLine('made.cover.ask', coverInAsk ? 'a cover was asked for with the song'
+            : 'no cover asked for', { level: 'info', target: 'coverDraw' });
           madeShare = {
             request_id: lastSongRequest || '', who: whoNamed, text: payload.text || '',
+            cover: coverInAsk,
             band: songDraft.sound || '', feel: songDraft.feel || '',
             title: r.title || '', stage: 'making',
           };
@@ -3516,7 +3531,7 @@ function madeSave() {
     localStorage.setItem(MADE_KEY, JSON.stringify({
       request_id: madeShare.request_id, who: madeShare.who || '', said: madeShare.text || '',
       band: madeShare.band || '', feel: madeShare.feel || '',
-      title: madeShare.title || '', at: Date.now(),
+      title: madeShare.title || '', at: Date.now(), cover: madeShare.cover ? 1 : 0,
     }));
   } catch (e) {}
 }
@@ -4503,11 +4518,18 @@ async function madeReady(r) {
   // Build 148: this song's own answer, never a previous song's. A held yes is paid here; no answer means the
   // descent is still open, and the question is asked below with nothing else in front of it.
   const heldArt = loadArtBrief(landedReq);
-  const artHeld = !!(heldArt && (heldArt.want || heldArt.brief));
+  // Build 173: a cover he asked for with the song is drawn HERE, the moment it lands, because that is the
+  // first moment there is a song to draw it from. The share afterwards needs no draw and no wait: the picture
+  // it has is the picture it keeps (shelfShare reuses it, and only "draw a new one" draws again).
+  const coverInAsk = !!(madeShare && madeShare.cover);
+  const artHeld = !!(coverInAsk || (heldArt && (heldArt.want || heldArt.brief)));
   shareArt = artHeld
-    ? { want: !!heldArt.want, brief: heldArt.brief || '', url: heldArt.url || '' }
+    ? { want: coverInAsk ? true : !!(heldArt && heldArt.want),
+        brief: (heldArt && heldArt.brief) || '', url: (heldArt && heldArt.url) || '' }
     : { want: false, brief: '', url: '' };
   if (!artHeld) artOpen = { at: Date.now(), request_id: landedReq, title: landedTitle };
+  if (coverInAsk) logLine('made.cover.ask.at.landing', 'drawn at landing, at his ask',
+    { level: 'info', target: 'coverDraw' });
   // Build 139: a yes given while the song was still being made pays for its picture HERE, the moment the song
   // lands and on its own record. Before this the yes was held and then thrown away with the draft.
   if (shareArt && shareArt.want) drawDescent();
@@ -6155,7 +6177,7 @@ function sayGreeting() {
     if (pend && (!madeShare || !madeShare.request_id)) {
       madeShare = { request_id: pend.request_id, who: pend.who || '', text: pend.said || '',
         band: pend.band || '', feel: pend.feel || '',
-        title: pend.title || '', stage: 'making' };
+        title: pend.title || '', cover: !!pend.cover, stage: 'making' };
       logLine('made.resume', pend.request_id + ' · still watching', { level: 'info', target: 'music' });
       startMadeWatch();
     }
