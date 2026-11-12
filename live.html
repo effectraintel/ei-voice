@@ -301,8 +301,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T01:12';
-const BUILD_NO = 179;
+const BUILD = '2026-11-13T01:40';
+const BUILD_NO = 180;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1993,7 +1993,15 @@ function chainBeat(beat) {
     if (!said) return;
     chainOpen(said)
       .then(() => chainClose('hear', said, { said: said }))
-      .then((r) => { songDraft.subjectAt = Date.now(); return chainAskNext(r); })
+      .then((r) => {
+        /* Build 180: the subject's moment is the SERVER's, read off the close's own reply. R-003 refuses a
+           words ring whose draft appears to predate the chain, so a device clock even a minute behind would
+           have his own words refused. Measured 13 Nov 01:16: this sandbox's clock is two minutes behind the
+           chain's, and the words ring said "the draft predates this chain" for words he had just spoken. */
+        const server = Date.parse(String((r && r.server_at) || ''));
+        songDraft.subjectAt = Number.isFinite(server) ? server : Date.now();
+        return chainAskNext(r);
+      })
       .catch(() => {});
     return;
   }
