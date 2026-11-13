@@ -402,8 +402,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T22:38';
-const BUILD_NO = 192;
+const BUILD = '2026-11-13T22:40';
+const BUILD_NO = 193;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1687,6 +1687,13 @@ if (doorSession()) {
 let roomWithoutKeyboard = 0;
 let keyboardUp = false;
 let kbReleasedAt = 0;
+/* Build 193. Put the page back at its own top. The log keeps its own scroll; this is the window. */
+function pinToTop() {
+  try { window.scrollTo(0, 0); } catch (e) {}
+  try { document.documentElement.scrollTop = 0; } catch (e) {}
+  try { document.body.scrollTop = 0; } catch (e) {}
+}
+
 function roomNow() {
   const vv = window.visualViewport;
   return (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
@@ -1694,7 +1701,18 @@ function roomNow() {
 
 function fitHeight() {
   const h = roomNow();
-  if (h) document.body.style.height = Math.round(h) + 'px';
+  /* Build 193. At 22:29 he tapped the line on his phone and the screen went black: the keyboard was
+     up, and the door's own content was nowhere on it.
+
+     The cause is how iOS brings a focused field into view. The composer sits at the bottom of the
+     page, so Safari scrolls the document down to reach it; that scroll stays where it is when the
+     page is then made shorter for the keyboard. The window ends up looking at the last stretch of a
+     page that is only as tall as the visible room: empty space below the content, nothing in view.
+     Nothing was missing; the view was parked past the end of it.
+
+     So the page is pinned to its own top whenever the room changes with the keys up, and a height
+     of zero or a sliver (which iOS reports mid-animation) is never taken as the room. */
+  if (h > 120) document.body.style.height = Math.round(h) + 'px';
   // Build 190. A hundred pixels is well above the small changes an address bar makes and well
   // below the 260 a keyboard takes on an SE, so the door does not flap while he scrolls.
   const typingHere = (() => { try { return document.activeElement && document.activeElement.id === 'saytext'; } catch (e) { return false; } })();
@@ -1708,11 +1726,23 @@ function fitHeight() {
     keyboardUp = up;
     try { document.body.classList.toggle('kb', up); } catch (e) {}
     logLine('door.keyboard', up ? 'up \u00b7 shelf and modes step aside' : 'down', { level: 'info' });
-    if (up) { try { const lg = el('log'); if (lg) lg.scrollTop = lg.scrollHeight; } catch (e) {} }
+    if (up) {
+      pinToTop(); setTimeout(pinToTop, 60); setTimeout(pinToTop, 320);
+      try { const lg = el('log'); if (lg) lg.scrollTop = lg.scrollHeight; } catch (e) {}
+    }
   }
 }
-window.addEventListener('focusin', () => setTimeout(fitHeight, 150));
+window.addEventListener('focusin', () => {
+  setTimeout(fitHeight, 150);
+  setTimeout(() => { if (keyboardUp) pinToTop(); }, 200);
+  setTimeout(() => { if (keyboardUp) pinToTop(); }, 450);
+});
 window.addEventListener('focusout', () => setTimeout(fitHeight, 250));
+/* iOS pans the visual viewport as well as resizing it, and the pan is what leaves the page sitting
+   past its own end. Any pan while the keys are up is undone. */
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('scroll', () => { if (keyboardUp) pinToTop(); });
+}
 window.addEventListener('resize', fitHeight);
 window.addEventListener('orientationchange', () => setTimeout(fitHeight, 120));
 if (window.visualViewport) window.visualViewport.addEventListener('resize', fitHeight);
