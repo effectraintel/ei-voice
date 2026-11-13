@@ -402,8 +402,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T22:30';
-const BUILD_NO = 191;
+const BUILD = '2026-11-13T22:38';
+const BUILD_NO = 192;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -726,6 +726,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const box = el('saytext');
     if (box) { try { box.blur(); } catch (e) {} }
     document.body.classList.remove('kb');
+    kbReleasedAt = Date.now() + 900;
     fitHeight();
     hint('tap the line to type again');
     logLine('door.minimise', 'keyboard away', { level: 'info' });
@@ -1685,6 +1686,7 @@ if (doorSession()) {
    remembering the room without a keyboard and watching how far it falls. */
 let roomWithoutKeyboard = 0;
 let keyboardUp = false;
+let kbReleasedAt = 0;
 function roomNow() {
   const vv = window.visualViewport;
   return (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
@@ -1698,7 +1700,10 @@ function fitHeight() {
   const typingHere = (() => { try { return document.activeElement && document.activeElement.id === 'saytext'; } catch (e) { return false; } })();
   if (!typingHere && h > roomWithoutKeyboard) roomWithoutKeyboard = h;
   if (!roomWithoutKeyboard) roomWithoutKeyboard = h;
-  const up = typed() && (roomWithoutKeyboard - h > 100);
+  /* Build 192. Tapping minimise while the keyboard is still animating down made the page re-enter
+     the compact layout for a blink, because the room had not come back yet. A short release after a
+     deliberate minimise keeps it from flapping. */
+  const up = typed() && (roomWithoutKeyboard - h > 100) && Date.now() > kbReleasedAt;
   if (up !== keyboardUp) {
     keyboardUp = up;
     try { document.body.classList.toggle('kb', up); } catch (e) {}
