@@ -318,11 +318,24 @@
   body.kb .hint { display:none !important; }
   body.kb header .sub { display:none; }
   /* The wordmark is on the wall; it does not need the last line of room above the words. */
-  body.kb header .wordmark { font-size:9px; letter-spacing:.2em; opacity:.7; }
+  /* The wordmark and the minimise control were fighting for the same top line. The branding is in
+     the footer of this same screen, so the top line belongs to the control while the keys are up. */
+  body.kb header .wordmark { display:none; }
   body.kb header { padding:2px 0 1px; }
-  body.kb header .state { font-size:11px; }
+  /* The state line shares the top row with the control, so it keeps clear of it. */
+  body.kb header .state { font-size:11px; padding-right:66px; }
   body.kb #log { padding-top:2px; }
   body.kb #say { margin:6px auto 4px; }
+
+  /* Build 191. He liked the keyboard door but there was no way back down: "the idea is good but we
+     need a minimise option at the top to bring down the chat". One control, top right, only while
+     the keyboard is up. It takes the keys away, the room comes back, and the shelf and the modes
+     return with it. Nothing is lost by typing; nothing is stuck by stopping. */
+  header { position:relative; }
+  #minimise { display:none; position:absolute; top:-2px; right:-4px; background:none; border:0;
+    padding:4px 6px; color:var(--gold); font:inherit; font-size:10px; letter-spacing:.14em;
+    text-transform:uppercase; cursor:pointer; }
+  body.kb #minimise { display:block; }
 </style>
 </head>
 <body>
@@ -330,6 +343,7 @@
   <div class="wordmark">Effectra Intelligence</div>
   <div class="sub">the live door · speech straight through</div>
   <div class="state" id="state">tap the circle to open the door</div>
+  <button id="minimise" type="button" aria-label="minimise the keyboard">⌄ minimise</button>
 </header>
 
 <main id="log"></main>
@@ -388,8 +402,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T22:15';
-const BUILD_NO = 190;
+const BUILD = '2026-11-13T22:30';
+const BUILD_NO = 191;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -682,7 +696,11 @@ setInterval(() => {
   const b = document.getElementById('build');
   if (!b) return;
   const base = b.textContent.split(' · mic ')[0];
-  if (!(sessionUp || listening)) { b.textContent = base; return; }
+  /* Build 191. On a 375px screen this tail was the whole footer: peak, sent, opens, replies,
+     unsought, voice, model, clipped on both sides, with the branding pushed out of it. It is my
+     instrument, not his door: it stays on a screen with room, and the facts go to the log. */
+  const shortScreen = (window.innerHeight <= 720 || window.innerWidth <= 400);
+  if (!(sessionUp || listening) || shortScreen) { b.textContent = base; return; }
   b.textContent = base + ' · mic ' + (micCtx ? micCtx.state : 'none') +
     ' · frames ' + dbgFrames + ' · peak ' + Math.round(dbgPeak * 1000) +
     ' · sent ' + dbgSent + ' · opens ' + dbgOpens + ' · replies ' + dbgReplies +
@@ -701,6 +719,16 @@ window.addEventListener('DOMContentLoaded', () => {
     const next = !document.body.classList.contains('tight');
     try { localStorage.setItem(FOLD_KEY, next ? '1' : '0'); } catch {}
     applyFold(next);
+  };
+  /* Build 191. The way back down from the keyboard. */
+  const minBtn = document.getElementById('minimise');
+  if (minBtn) minBtn.onclick = () => {
+    const box = el('saytext');
+    if (box) { try { box.blur(); } catch (e) {} }
+    document.body.classList.remove('kb');
+    fitHeight();
+    hint('tap the line to type again');
+    logLine('door.minimise', 'keyboard away', { level: 'info' });
   };
   const b = document.getElementById('build');
   // The address never carries the version, so the page has to say it: the footer is the build he is in.
@@ -7343,7 +7371,10 @@ function handleFrame(text) {
       closing.appendChild(l);
     }
     looked = null;
-    setState(listening ? 'listening' : 'the door is shut');
+    /* Build 191. This said "listening" in typed mode, because openListening sets listening true
+       before it branches: his phone said the door was listening while its microphone was shut. */
+    setState(!sessionUp ? 'the door is shut'
+      : (typed() ? 'the door is open · type whenever you like' : 'listening'));
   }
 }
 
@@ -7923,6 +7954,9 @@ function sendTyped() {
   if (!text) return false;
   box.value = '';
   try { appendLive('you', text); } catch (e) {}
+  /* Build 191, in his words: "when you do send the message the keyboard goes away again." The line
+     is sent, so the keys have no job left; the room comes back and with it the shelf and the modes. */
+  try { box.blur(); } catch (e) {}
   if (!ws || ws.readyState !== 1 || !sessionUp) {
     pendingTyped = text;
     if (!busy && !connecting) {
