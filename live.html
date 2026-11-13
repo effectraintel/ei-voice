@@ -302,7 +302,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-13T01:40';
-const BUILD_NO = 181;
+const BUILD_NO = 182;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -2055,6 +2055,16 @@ function songHearTurn(heard) {
     if (JOURNEY_SKIP.test(t)) {
       songDraft.skipped.push(beat);
       songDraft.askBeat = '';
+      /* Build 182: "you choose" is a promise, and this is where it is kept. The door picks a sound from his
+         own subject, writes it into the slot, and says which one when the take lands. */
+      if (beat === 'sound' && !soundIsReal(songDraft.sound)) {
+        songDraft.sound = doorPicksSound(songDraft.said);
+        songDraft.pickedBy = 'the door, on his "you choose"';
+        logLine('song.journey.sound.picked', songDraft.sound + ' · from: ' + String(songDraft.said || '').slice(0, 60),
+          { level: 'info', target: 'music' });
+        chainBeat('sound');
+        return;
+      }
       logLine('song.journey.skip', beat, { level: 'info', target: 'music' });
       return;
     }
@@ -2108,7 +2118,11 @@ function songHearTurn(heard) {
       return;
     }
   }
-  if (!songDraft.feel && words.length <= 10) {
+  /* Build 182: a genre word inside a scene is not a feel. On 13 Nov 06:09 he said "two happy dogs and three
+     happy people in one house" and this sniffed "house" out of "one house" as the feel, which made the
+     subject sound like a style and sent a take to the rail. A feel is a phrase of its own, so only a short
+     answer is sniffed - a scene is the subject, and it stays the subject. */
+  if (!songDraft.feel && words.length <= 3) {
     const m = t.match(SONG_FEEL);
     if (m) {
       songDraft.feel = m[0].toLowerCase();
@@ -2522,6 +2536,23 @@ const SOUND_WORDS = ['rock','pop','reggae','hip hop','rap','blues','jazz','class
   'lullaby','cinematic','piano','guitar','drum and bass'];
 /* The member this answer names, in the list's own spelling, or '' when it names none. Longest member first,
    so "hip hop" is not read as "pop" and "drum and bass" is not read as a drum. */
+/* Build 182. The sound ring's question ends with a promise: "Say you choose and I will pick." On 13 Nov a
+   skip left the slot empty and nothing could be made, so the promise was broken by a gate. The door now
+   picks, from his own subject, and says which one it picked. A promise the door made cannot depend on him
+   filling the slot himself. */
+function doorPicksSound(subject) {
+  const t = ' ' + String(subject || '').toLowerCase() + ' ';
+  const rules = [
+    [/\b(?:sun|sunny|summer|beach|coast|ocean|sea|holiday|warm|blue sk)/, 'pop'],
+    [/\b(?:night|club|dance|dancin|party|disco|neon)/, 'club'],
+    [/\b(?:rain|sad|loss|lost|miss|goodbye|blue|alone|grey|gray)/, 'blues'],
+    [/\b(?:child|children|baby|lullaby|sleep|dream|bed)/, 'lullaby'],
+    [/\b(?:home|house|family|mother|father|gran|dogs|garden)/, 'folk'],
+    [/\b(?:road|drive|highway|train|journey|travel)/, 'rock'],
+  ];
+  for (const [re, sound] of rules) if (re.test(t)) return sound;
+  return 'pop';
+}
 function soundIsReal(answer) {
   const t = ' ' + String(answer || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
   if (t.trim().length < 2) return '';
@@ -4696,8 +4727,30 @@ function descentHear(heard) {
     railNote('descent · no picture · it is left bare');
     return;
   }
-  const yes = /^(?:yes|yeah|yep|sure|please|ok|okay|go on|go ahead|do it|make it|draw it|absolutely|definitely)\b/i.test(t);
+  const yes = /^(?:yes|yeah|yep|sure|please|ok|okay|go on|go ahead|do it|make it|draw it|absolutely|definitely|ja|yebo)\b/i.test(t);
+  /* Build 182 · HIS YES IS THE CONSENT, SO IT HAS TO BE A YES.
+     13 Nov 2026, 06:09. The door asked "would you like a picture?" and he said "Let's create a new song."
+     This line had no check at all: anything that was not a no became a yes. A picture was drawn and paid
+     for on a sentence that asked for another song. So now: a sentence about something else closes the
+     window and draws nothing; a sentence that names a picture counts; anything else is unclear, and the
+     door asks once for a plain yes rather than deciding for him. */
+  const movedOn = /\b(?:new|another|different|next)\b[^.!?]{0,20}\b(?:song|one|track|version)\b/i.test(t)
+    || /^(?:let'?s|we can|can we|i want to|i'?d like to)\b[^.!?]{0,30}\b(?:make|create|start|share|find|play|send)\b/i.test(t);
+  if (movedOn && !yes) {
+    artOpen = null;
+    logLine('made.descent.moved', t.slice(0, 90), { level: 'info', target: 'coverDraw' });
+    railNote('descent · he moved on · no picture drawn');
+    return;
+  }
   if (/\?\s*$/.test(t) && !yes) return;                 // he is asking something, not answering
+  const namesArt = /\b(?:picture|cover|artwork|image|drawing)\b/i.test(t);
+  if (!yes && !namesArt) {
+    artOpen && (artOpen.askedAgainAt = Date.now());
+    logLine('made.descent.unclear', t.slice(0, 90), { level: 'warn', target: 'coverDraw' });
+    doorNote('He described something but did not say yes to a picture, so nothing has been drawn. Ask him one '
+      + 'short question with a plain answer: "Shall I draw a picture for it?" Nothing is drawn until he says yes.', true);
+    return;
+  }
   const brief = t
     .replace(/^(?:yes|yeah|yep|sure|please|ok|okay|go on|go ahead|do it|make it|draw it|absolutely|definitely)[,.:;\s]*/i, '')
     .replace(/\b(?:a|the|some) (?:picture|cover|art|artwork|image)\b/gi, ' ')
@@ -4942,6 +4995,8 @@ async function madeReady(r) {
         + 'it is: say one short line, the title once, that it is made and kept, and that it will be on the '
         + 'shelf. ')
     + (artHeld ? artLine : '')
+    + (landedStyle ? ' The sound on its record is ' + landedStyle + ', so if he asks what kind of music it is, '
+        + 'that is the answer, and never say it is still being made. ' : '')
     + ' Do not ask for an address or an email, do not say it has been sent or will arrive, and do not mention '
     + 'a sheet.', true);
 }
