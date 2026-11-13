@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- Build 197. The scale is pinned, and it has to be. His phone reported, twice in one sitting,
+     layout width 750 against a 375pt screen and scale 0.50: Safari had zoomed the page out to half
+     size, so the words went small, the right side fell off the edge and the rest of the door was
+     empty space. Between 22:51 and 22:56 the same page was seen at 0.50, 0.57, 0.68, 0.77, 0.81,
+     0.90, 1.02 and back - Safari moving the zoom while he was typing. A door is not a document to
+     be magnified: it is one room, and it is built for exactly the screen it is on. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#14110f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Effectra Intelligence — the live door</title>
@@ -18,8 +24,10 @@
      outside it. A fixed shell cannot be panned away. */
   /* Build 195. The shell IS the viewport: no height by script, so there is no room past the content
      for iOS to pan into, and nothing to disagree with. */
-  html { overflow-x:hidden; -webkit-text-size-adjust:100%; }
-  html, body { position:fixed; inset:0; height:auto; min-height:0; }
+  /* Build 197. Fixed positioning belongs on the body, not on the root: with <html> fixed the root
+     stopped being the document and iOS began reporting a layout viewport twice the screen. */
+  html { overflow:hidden; -webkit-text-size-adjust:100%; height:100%; }
+  body { position:fixed; inset:0; height:auto; min-height:0; width:100%; max-width:100%; }
   body { display:flex; flex-direction:column; min-height:0; overflow:hidden;
          padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
   header { padding:16px 0 6px; text-align:center; }
@@ -416,8 +424,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T23:15';
-const BUILD_NO = 196;
+const BUILD = '2026-11-13T23:25';
+const BUILD_NO = 197;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
