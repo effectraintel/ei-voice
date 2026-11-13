@@ -431,6 +431,7 @@
     </div>
     <button id="gbtn" class="gbtn" type="button">open the door</button>
     <button id="galt" class="galt" type="button">set this phone up instead</button>
+    <button id="glater" class="galt ghidden" type="button">not now</button>
     <div class="gmsg" id="gmsg"></div>
     <div class="gnote" id="gnote"></div>
   </div>
@@ -452,7 +453,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-13T23:40';
-const BUILD_NO = 200;
+const BUILD_NO = 201;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1529,12 +1530,29 @@ let passWanted = null;
 function passGone(what) {
   passWanted = { what: String(what || 'song'), at: Date.now() };
   logLine('pass.gone', String(what || 'song') + ' \u00b7 asking for the key', { level: 'warn', target: 'door' });
-  /* The answer to the tool call goes out before the door moves: returning to the gate closes the socket,
-     and a closed socket swallows the one line that tells him what is happening. */
+  /* Build 201 · THE CLOCK DOES NOT THROW HIM OUT.
+     He asked the right question on 13 Nov at 23:50: "should it automatically take me to the door?" No. A
+     pass that ran out on the clock is not a door closed from outside - he is still the person, the room shows
+     nothing new, and a fingerprint needs a tap either way, so jumping him to the gate first saves him no
+     gesture and costs him his place: the socket closes, the thread goes behind the gate and the shelf with it.
+     So the gate comes up over the room instead, with "not now" beside the key. Take the key and the held work
+     resumes; leave it and nothing moves and nothing is spent. Only a session closed from outside (build 165)
+     takes the room away, because that door really has been shut by someone else. */
   setTimeout(() => {
-    try { backToFrontDoor('your pass ran out; touch the key and I will carry on where we were'); } catch (e) {}
-  }, 800);
+    try {
+      showGate('your pass ran out at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        + '. Touch the key and I will carry on where we were, or leave it and nothing moves.');
+      const gl = document.getElementById('glater');
+      if (gl) { gl.classList.remove('ghidden'); gl.onclick = passLater; }
+    } catch (e) {}
+  }, 700);
 }
+function passLater() {
+  logLine('pass.later', 'not now \u00b7 the room stays as it is', { level: 'info', target: 'door' });
+  try { gateEl.classList.add('open'); } catch (e) {}
+  setState('the pass has run out; talk freely, and touch the key when you want to make or send');
+}
+
 function passBack() {
   if (!passWanted) return;
   const w = passWanted;
@@ -1770,6 +1788,7 @@ async function unlockFingerprint(mode, enrolCode) {
 
 function showGate(reason) {
   gateEl.classList.remove('open');
+  try { const gl = document.getElementById('glater'); if (gl) gl.classList.add('ghidden'); } catch (e) {}
   gCode.classList.add('ghidden');
   gBtn.textContent = 'open the door';
   gBtn.onclick = onUnlockTap;
@@ -1795,7 +1814,13 @@ async function onUnlockTap() {
   try {
     const done = await unlockWithFingerprint('unlock', null);
     gateSay('fingerprint verified · open for thirty minutes · ' + (done.device_label || 'this phone'));
-    setTimeout(() => { gatePassed(); setState('opening the voice'); startChannel('unlock'); }, 120);
+    setTimeout(() => {
+      gatePassed();
+      /* Build 201: if the room never went away - the clock ran out while he sat in it - there is nothing to
+         open. A second channel here would be two sessions from one phone, and the door only allows one. */
+      if (sessionUp) { setState('the pass is back \u00b7 carrying on'); }
+      else { setState('opening the voice'); startChannel('unlock'); }
+    }, 120);
   } catch (e) {
     gateSay(String(e.message || e), 'bad');
     if (/not a key/.test(String(e.message))) gAlt.click();
