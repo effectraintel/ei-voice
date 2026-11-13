@@ -8,6 +8,12 @@
      empty space. Between 22:51 and 22:56 the same page was seen at 0.50, 0.57, 0.68, 0.77, 0.81,
      0.90, 1.02 and back - Safari moving the zoom while he was typing. A door is not a document to
      be magnified: it is one room, and it is built for exactly the screen it is on. -->
+<!-- Build 198. Two things he asked for on 13 Nov at 23:24, both about the same complaint: the door
+     kept moving things he needs. The top band (wordmark, door status, minimise) was in the flow, so
+     when the room shrank or the page was panned to reach a line he had to scroll back up to find it,
+     and once the chat was long it was simply gone. It is now pinned to the screen and the conversation
+     scrolls underneath it. And the world rail defaulted to Wikipedia because Wikipedia was the only
+     engine it was ever told to use: any public fact now goes to Google's own search first. -->
 <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#14110f">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -28,9 +34,17 @@
      stopped being the document and iOS began reporting a layout viewport twice the screen. */
   html { overflow:hidden; -webkit-text-size-adjust:100%; height:100%; }
   body { position:fixed; inset:0; height:auto; min-height:0; width:100%; max-width:100%; }
+  /* Build 198. The top safe area belongs to the pinned band, not to the page box. */
   body { display:flex; flex-direction:column; min-height:0; overflow:hidden;
-         padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
-  header { padding:16px 0 6px; text-align:center; }
+         padding:0 18px calc(env(safe-area-inset-bottom) + 12px); }
+  /* Build 198. The band is fixed to the screen, not carried in the column. Edwin, 13 Nov 23:24:
+     "the top menu with the details on the door status and minimise option need to always be there
+     and not fall away when the chat gets going. I need to always go and scroll back to find it."
+     A thing he has to go and find is not a status line, it is a lost object. --head is measured from
+     the band itself and the words start below it, so nothing hides underneath. */
+  header { position:fixed; top:0; left:0; right:0; z-index:30; text-align:center;
+    background:var(--char); border-bottom:1px solid rgba(176,141,47,.16);
+    padding:calc(env(safe-area-inset-top) + 12px) 18px 6px; }
   .wordmark { letter-spacing:.34em; font-size:11px; color:var(--gold); text-transform:uppercase; }
   .sub { margin-top:6px; font-size:12px; color:var(--dim); letter-spacing:.06em; }
   .state { margin-top:8px; font-size:13px; color:var(--ink); letter-spacing:.04em; min-height:18px; }
@@ -38,7 +52,7 @@
   .warn { display:none; margin:10px 0 0; padding:10px 12px; border:1px solid #5a3a1c; background:#241a10;
     color:#e8cfae; font-size:12.5px; line-height:1.5; border-radius:10px; text-align:left; }
   .warn.show { display:block; }
-  main { flex:1; min-height:0; overflow-y:auto; padding:10px 2px 4px; -webkit-overflow-scrolling:touch; }
+  main { flex:1; min-height:0; overflow-y:auto; padding:calc(var(--head, 104px) + 6px) 2px 4px; -webkit-overflow-scrolling:touch; }
   .turn { margin:0 0 14px; max-width:92%; }
   .turn.you { margin-left:auto; text-align:right; }
   .who { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
@@ -229,7 +243,7 @@
   body.tight .footmark { margin-top:2px; padding-top:2px; font-size:8px; letter-spacing:.16em; }
   body.tight .footmark span { margin-top:1px; letter-spacing:.08em; }
   body.tight .sub { display:none; }
-  body.tight header { padding:4px 0 0; }
+  body.tight header { padding:calc(env(safe-area-inset-top) + 4px) 18px 0; }
   body.tight .wordmark { font-size:10px; letter-spacing:.24em; }
   .footmark { margin-top:10px; font-size:9.5px; letter-spacing:.28em; color:#4f4a41; text-transform:uppercase; }
   .footmark span { display:block; letter-spacing:.12em; margin-top:4px; color:#3f3a33; }
@@ -237,11 +251,11 @@
   /* A short screen must give its height to the words. This block sat above the rules it
      overrides, which is why the first attempt changed nothing: same specificity, later wins. */
   @media (max-height: 720px) {
-    header { padding:5px 0 0; }
+    header { padding:calc(env(safe-area-inset-top) + 5px) 18px 0; }
     .sub { display:none; }
     .wordmark { font-size:10px; letter-spacing:.26em; }
     .state { margin-top:3px; font-size:12px; min-height:16px; }
-    main { padding-top:6px; }
+    main { padding-top:calc(var(--head, 56px) + 4px); }
     .turn { margin-bottom:10px; }
     button#mic { width:56px; height:56px; margin-bottom:4px; }
     #mic .glyph { font-size:21px; }
@@ -343,21 +357,31 @@
   /* The wordmark and the minimise control were fighting for the same top line. The branding is in
      the footer of this same screen, so the top line belongs to the control while the keys are up. */
   body.kb header .wordmark { display:none; }
-  body.kb header { padding:2px 0 1px; }
+  body.kb header { padding:calc(env(safe-area-inset-top) + 2px) 18px 1px; }
   /* The state line shares the top row with the control, so it keeps clear of it. */
-  body.kb header .state { font-size:11px; padding-right:66px; }
-  body.kb #log { padding-top:2px; }
+  body.kb header .state { font-size:11px; padding-right:92px; }
+  body.kb #log { padding-top:calc(var(--head, 60px) + 2px); }
   body.kb #say { margin:6px auto 4px; }
 
   /* Build 191. He liked the keyboard door but there was no way back down: "the idea is good but we
      need a minimise option at the top to bring down the chat". One control, top right, only while
      the keyboard is up. It takes the keys away, the room comes back, and the shelf and the modes
      return with it. Nothing is lost by typing; nothing is stuck by stopping. */
-  header { position:relative; }
-  #minimise { display:none; position:absolute; top:-2px; right:-4px; background:none; border:0;
-    padding:4px 6px; color:var(--gold); font:inherit; font-size:10px; letter-spacing:.14em;
-    text-transform:uppercase; cursor:pointer; }
-  body.kb #minimise { display:block; }
+  /* Build 198. The band is fixed, so a control inside it is absolute against the band and cannot be
+     scrolled away. Two of them now, both top right: the way down from the keyboard (only while the
+     keys are up) and the way out of the house (always). Edwin, 13 Nov: "we also need a leave button
+     on the top right, if someone wants to leave the house." */
+  .topctl { position:absolute; top:calc(env(safe-area-inset-top) + 6px); right:12px;
+    display:flex; align-items:center; gap:0; }
+  .topctl button { background:none; border:0; padding:5px 7px; color:var(--gold); font:inherit;
+    font-size:10px; letter-spacing:.13em; text-transform:uppercase; cursor:pointer; }
+  #minimise { display:none; }
+  body.kb #minimise { display:inline-block; }
+  /* A leave that fires on one tap beside a thumb that is reaching for something else is a lockout,
+     so it asks twice: the same pattern as the purge on the log, four seconds and no longer. */
+  #leave.armed { color:#e8cfae; }
+  .state { padding-right:56px; }
+  body.kb #minimise .lbl { display:none; }
 </style>
 </head>
 <body>
@@ -365,7 +389,10 @@
   <div class="wordmark">Effectra Intelligence</div>
   <div class="sub">the live door · speech straight through</div>
   <div class="state" id="state">tap the circle to open the door</div>
-  <button id="minimise" type="button" aria-label="minimise the keyboard">⌄ minimise</button>
+  <div class="topctl">
+    <button id="minimise" type="button" aria-label="minimise the keyboard">⌄<span class="lbl"> minimise</span></button>
+    <button id="leave" type="button" aria-label="leave the house">leave</button>
+  </div>
 </header>
 
 <main id="log"></main>
@@ -424,8 +451,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T23:25';
-const BUILD_NO = 197;
+const BUILD = '2026-11-13T23:40';
+const BUILD_NO = 198;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -483,12 +510,19 @@ const DECLS = [{
               // "According to AccuWeather, it's around 21 degrees Celsius in Ballitoville right now"
               // with no tool call in the log. A sentence about the world has to come from a lookup.
               name: 'world',
-              description: 'Look up a PUBLIC fact about the world outside his house: the weather, a place, a price, a score, a news event, a date, who someone outside the family is. Call this before saying anything about the world, and never name a source (AccuWeather, Google, the news) you have not asked. Not for his own rooms, family, money or records: that is house.',
+              // Build 198. Edwin, 13 Nov 23:24: "I think we always need to default to Google for now, we
+              // can expand on this later, as this is not a core function and we just want to have the
+              // ability of search for now." The sentence that used to live here - "call this before
+              // saying anything about the world" - is why every fact came back encyclopaedic: Wikipedia
+              // was the only fact engine behind the rail, and the brief pointed at nothing else. The
+              // open web is the default now; this rail keeps the weather and stands behind a search
+              // that came back with nothing.
+              description: 'The measured weather rail, and the net under a fact your own search could not settle. Answers with facts and the engine that gave them. Use it for the weather and the temperature, and after your own web search has come back empty; for any other public fact, search the open web first. Never name a source you have not asked. Not for his own rooms, family, money or records: that is house.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
                   ask: { type: 'STRING', description: 'the question exactly as he asked it, in his own words, e.g. "what is the current weather in Ballito"' },
-                  kind: { type: 'STRING', description: 'weather = weather or temperature; fact = any other public fact; auto when unsure' },
+                  kind: { type: 'STRING', description: 'weather = weather or temperature; fact = only after your own search returned nothing; auto when unsure' },
                 },
                 required: ['ask'],
               },
@@ -580,6 +614,15 @@ const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send e
 
 const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
+  // Edwin, 13 Nov 2026, 23:24: "I think we always need to default to Google for now, we can expand on
+  // this later, as this is not a core function." Every fact question came back as an encyclopedia entry
+  // because the only instructed route was the world tool and Wikipedia was the only engine behind it.
+  // Google's own search is the default: search, answer from the search, name the source. The world tool
+  // keeps the weather and the net under a search that found nothing - never a shortcut past searching.
+  'For anything about the world outside his house - a price, a score, a news event, a date, who someone '
+  + 'is, anything happening now - search the open web with your own search first and answer from what '
+  + 'comes back, naming the source in a few words. Do not reach for the world tool instead of searching: '
+  + 'it is for the weather, and for a fact your own search could not settle. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
   // Edwin, 8 Nov 13:36: one Afrikaans sentence and the door carried on in Afrikaans, in another voice.
   // Edwin, 8 Nov 16:29: "it changed mid sentence to an Indian accent". A door with one speaker in it does
@@ -748,10 +791,51 @@ window.addEventListener('DOMContentLoaded', () => {
     const box = el('saytext');
     if (box) { try { box.blur(); } catch (e) {} }
     document.body.classList.remove('kb');
+    measureHead();
     kbReleasedAt = Date.now() + 900;
     fitHeight();
     hint('tap the line to type again');
     logLine('door.minimise', 'keyboard away', { level: 'info' });
+  };
+
+  /* Build 198. Leaving the house. Edwin, 13 Nov 23:30: "we also need a leave button on the top right,
+     if someone wants to leave the house." Leaving is not a fault and it is not a sign-out of the
+     account: it closes this tab's door, releases the voice room it was holding, and takes the key off
+     this tab, so the page returns to the gate and the next person needs a fingerprint. The thirty
+     minutes the server granted run out on their own; this does not shorten them, and the door does not
+     pretend it has. Two taps, four seconds apart, because one tap beside a thumb reaching for
+     something else would lock him out mid-sentence. */
+  const leaveBtn = document.getElementById('leave');
+  let leaveArmedAt = 0, leaveTimer = null;
+  function disarmLeave() {
+    leaveArmedAt = 0;
+    if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+    if (leaveBtn) { leaveBtn.textContent = 'leave'; leaveBtn.classList.remove('armed'); }
+  }
+  if (leaveBtn) leaveBtn.onclick = () => {
+    if (!leaveArmedAt || Date.now() - leaveArmedAt > 4000) {
+      leaveArmedAt = Date.now();
+      leaveBtn.textContent = 'leave?';
+      leaveBtn.classList.add('armed');
+      hint('tap leave once more to close the door on this phone');
+      if (leaveTimer) clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(disarmLeave, 4100);
+      return;
+    }
+    disarmLeave();
+    const box = el('saytext');
+    if (box) { try { box.blur(); } catch (e) {} }
+    document.body.classList.remove('kb');
+    try { shutDoor(); } catch (e) {}
+    try { sessionStorage.removeItem(DOOR_KEY); } catch (e) {}
+    try { sessionStorage.removeItem('ei-door-session'); } catch (e) {}
+    try { sessionStorage.removeItem(SILENCED); } catch (e) {}
+    if (logEl) logEl.innerHTML = '';
+    try { showGate(''); gateSay('you have left the house. one fingerprint opens this tab again.'); } catch (e) {}
+    setState('the door is locked');
+    hint('one fingerprint opens this tab, for thirty minutes');
+    logLine('door.leave', 'left from the top right', { level: 'info' });
+    measureHead();
   };
   const b = document.getElementById('build');
   // The address never carries the version, so the page has to say it: the footer is the build he is in.
@@ -1716,6 +1800,33 @@ function pinToTop() {
   try { document.documentElement.scrollTop = 0; } catch (e) {}
   try { document.body.scrollTop = 0; } catch (e) {}
 }
+
+/* Build 198. How tall the pinned band is right now. The band is fixed, so it takes no room in the
+   column; the words have to be told where it ends or the first line of the conversation hides under
+   it. Measured from the band itself rather than guessed, because it changes: the keyboard hides the
+   wordmark, the status line wraps to two lines on a narrow screen, and the safe area is not zero on
+   his phone. */
+function measureHead() {
+  const h = document.querySelector('header');
+  if (!h) return;
+  const px = Math.max(0, Math.round(h.getBoundingClientRect().height));
+  if (px) document.documentElement.style.setProperty('--head', px + 'px');
+}
+try {
+  if (window.ResizeObserver) new ResizeObserver(measureHead).observe(document.querySelector('header'));
+} catch (e) {}
+window.addEventListener('resize', measureHead, { passive: true });
+window.addEventListener('orientationchange', () => setTimeout(measureHead, 260));
+try { if (window.visualViewport) window.visualViewport.addEventListener('resize', measureHead); } catch (e) {}
+/* The band cannot be scrolled away, but the page behind it still can be: iOS pans the window to reach
+   whatever it thinks is focused and leaves it there. Every pan is undone, so the band is where he last
+   saw it. */
+window.addEventListener('scroll', () => {
+  try { if (window.scrollY || window.pageYOffset) pinToTop(); } catch (e) {}
+}, { passive: true });
+measureHead();
+setTimeout(measureHead, 120);
+setTimeout(measureHead, 600);
 
 
 function roomNow() {
