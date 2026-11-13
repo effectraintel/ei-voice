@@ -304,6 +304,25 @@
     #shelf { padding:4px 2px; }
     #shelf.on { padding-top:4px; }
   }
+
+  /* Build 190. The keyboard, which is the one thing on an SE that takes more room than the page
+     has. With it up at 22:02 he had a wordmark, a state line, a shelf header with refresh and clear,
+     a shelf of twelve cards, a composer, a mode row and the handle, and then the keyboard: nothing
+     left to read the conversation in, and his own words had nowhere to sit.
+     While the keyboard is up the door becomes the two things it is for in that moment: what has
+     already been said, and the line being typed. The shelf, its header and the mode row stand down
+     and come back the moment the keyboard does. Nothing is removed from the door; it steps aside. */
+  body.kb #shelfline,
+  body.kb #shelf,
+  body.kb #controls,
+  body.kb .hint { display:none !important; }
+  body.kb header .sub { display:none; }
+  /* The wordmark is on the wall; it does not need the last line of room above the words. */
+  body.kb header .wordmark { font-size:9px; letter-spacing:.2em; opacity:.7; }
+  body.kb header { padding:2px 0 1px; }
+  body.kb header .state { font-size:11px; }
+  body.kb #log { padding-top:2px; }
+  body.kb #say { margin:6px auto 4px; }
 </style>
 </head>
 <body>
@@ -369,8 +388,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T21:40';
-const BUILD_NO = 189;
+const BUILD = '2026-11-13T22:15';
+const BUILD_NO = 190;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1633,11 +1652,34 @@ if (doorSession()) {
 
 /* ---------- the door ---------- */
 
-function fitHeight() {
+/* The room the page has right now. On an iPhone the keyboard shrinks the visual viewport and
+   leaves window.innerHeight alone; on Android it shrinks the layout too. Both are handled by
+   remembering the room without a keyboard and watching how far it falls. */
+let roomWithoutKeyboard = 0;
+let keyboardUp = false;
+function roomNow() {
   const vv = window.visualViewport;
-  const h = (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
-  if (h) document.body.style.height = Math.round(h) + 'px';
+  return (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
 }
+
+function fitHeight() {
+  const h = roomNow();
+  if (h) document.body.style.height = Math.round(h) + 'px';
+  // Build 190. A hundred pixels is well above the small changes an address bar makes and well
+  // below the 260 a keyboard takes on an SE, so the door does not flap while he scrolls.
+  const typingHere = (() => { try { return document.activeElement && document.activeElement.id === 'saytext'; } catch (e) { return false; } })();
+  if (!typingHere && h > roomWithoutKeyboard) roomWithoutKeyboard = h;
+  if (!roomWithoutKeyboard) roomWithoutKeyboard = h;
+  const up = typed() && (roomWithoutKeyboard - h > 100);
+  if (up !== keyboardUp) {
+    keyboardUp = up;
+    try { document.body.classList.toggle('kb', up); } catch (e) {}
+    logLine('door.keyboard', up ? 'up \u00b7 shelf and modes step aside' : 'down', { level: 'info' });
+    if (up) { try { const lg = el('log'); if (lg) lg.scrollTop = lg.scrollHeight; } catch (e) {} }
+  }
+}
+window.addEventListener('focusin', () => setTimeout(fitHeight, 150));
+window.addEventListener('focusout', () => setTimeout(fitHeight, 250));
 window.addEventListener('resize', fitHeight);
 window.addEventListener('orientationchange', () => setTimeout(fitHeight, 120));
 if (window.visualViewport) window.visualViewport.addEventListener('resize', fitHeight);
@@ -7886,7 +7928,9 @@ function sendTyped() {
     if (!busy && !connecting) {
       lastOpenAt = 0;                     // he asked now; the two-second double-tap guard does not apply
       setState('the door was shut \u00b7 opening it for this line');
-      openDoor().catch(() => {});
+      openDoor().catch(() => {
+        setState('the door did not open \u00b7 tap the circle and this line goes');
+      });
     } else {
       setState('the door is opening \u00b7 your line goes as soon as it is');
     }
