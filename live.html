@@ -280,8 +280,6 @@
   body.textmode #say { margin:4px auto 8px; }
   body.textmode .hint { font-size:10px; margin-top:2px; }
   body.textmode .footmark { margin-top:4px; }
-  /* The declarations are diagnostics, and on a short screen they were the second and third line
-     of the footer. The build number stays; the list folds away. */
   .footmark span.decls { display:inline; margin-top:0; letter-spacing:.12em; }
   @media (max-height: 720px) {
     body.textmode footer { padding-top:2px; }
@@ -688,8 +686,13 @@ window.addEventListener('DOMContentLoaded', () => {
   const b = document.getElementById('build');
   // The address never carries the version, so the page has to say it: the footer is the build he is in.
   if (b) {
-    b.innerHTML = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST'
-      + '<span class="decls"> · ' + DECLS.map((d) => d.name).join('+') + '</span>';
+    /* Build 189. The declarations (world+house+song+pay+wrap+share) are diagnostics: they say which
+       tools this build carries, which is my question, not his. On a 375px screen they were the
+       second and third line of the footer, and the branding was being squeezed out to make room.
+       A person reads two things here: who made it, and which build he is in. */
+    const decls = (window.innerHeight <= 720 || window.innerWidth <= 400)
+      ? '' : ' · ' + DECLS.map((d) => d.name).join('+');
+    b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST' + decls;
   }
   keepCurrent();
 });
