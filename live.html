@@ -325,7 +325,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-13T01:40';
-const BUILD_NO = 186;
+const BUILD_NO = 187;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1356,7 +1356,15 @@ async function gatePost(fn, body) {
     });
     let d = {};
     try { d = await r.json(); } catch {}
-    if (!d || d.ok !== true) throw new Error((d && d.error) || ('the door refused (' + r.status + ')'));
+    if (!d || d.ok !== true) {
+      /* Build 183: a gate answer is not a failure. giftSongStart refuses a make whose style names no sound,
+         and it says so in a line meant for the mouth. Flattening that to "the door refused (200)" is what
+         made the door tell him the music rail had turned him down six times on 13 Nov. The payload rides
+         along on the error so the caller can read the reason. */
+      const refusal = new Error((d && (d.error || (d.needs_sound && 'needs a sound') || (d.needs_words && 'needs words'))) || ('the door refused (' + r.status + ')'));
+      refusal.payload = d || {};
+      throw refusal;
+    }
     logLine('call.back', fn + ' \u2192 ' + digest(d), { target: fn, ms: Date.now() - t0, status: r.status });
     return d;
   } catch (e) {
@@ -2111,7 +2119,10 @@ function songHearTurn(heard) {
       logLine('song.journey.skip', beat, { level: 'info', target: 'music' });
       return;
     }
-    if (beat === 'sound' && words.length <= 14) {
+    /* Build 183: the fourteen-word ceiling is gone. It existed to stop a paragraph being mistaken for a
+       sound, but soundIsReal already answers in a member, so a long answer that names one is a real answer
+       and throwing it away only sent the question back unanswered. */
+    if (beat === 'sound' && words.length) {
       /* Build 181. The slot is closed: only a member of SOUND_WORDS fills it, and the member is what is kept,
          not the word that happened to reach the ear. A word that is no sound at all leaves the ring OPEN and
          asks again - the ring is a question, never permission to carry on. */
@@ -2599,7 +2610,16 @@ function doorPicksSound(subject) {
 function soundIsReal(answer) {
   const t = ' ' + String(answer || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
   if (t.trim().length < 2) return '';
-  const hits = SOUND_WORDS.filter((w) => t.includes(' ' + w + ' ') || t.includes(' ' + w + 's '));
+  let hits = SOUND_WORDS.filter((w) => t.includes(' ' + w + ' ') || t.includes(' ' + w + 's '));
+  /* Build 183: a house is a home before it is a genre. On 13 Nov 06:09 "two happy dogs and three happy
+     people in one house" handed the rail "house" as the style and a take was spent on it. The word only
+     counts as a sound when he is talking about music, so the dwelling phrase is dropped - unless he has
+     named another sound as well, in which case "house" is doing its own work. */
+  if (hits.length === 1 && hits[0] === 'house'
+      && /\b(?:one|a|an|the|my|his|her|your|our|this|that|in a|in the)\s+house\b/i.test(t)
+      && !/\b(?:music|beat|beats|track|style|vibes|sound|mix|song)\b/i.test(t)) {
+    hits = [];
+  }
   if (!hits.length) return '';
   return hits.sort((a, b) => b.length - a.length)[0];
 }
@@ -2903,8 +2923,22 @@ async function handleSongCall(call) {
         songDraft.skipped.push(askedBeat);
         logLine('song.journey.skip', askedBeat, { level: 'info', target: 'music' });
       } else if (askedBeat === 'sound' && words) {
-        songDraft.sound = words.slice(0, 160);
-        logLine('song.journey.sound', songDraft.sound, { level: 'info', target: 'music' });
+        /* Build 183 · HIS WORDS ARE NOT A SOUND.
+           13 Nov 2026, 16:15, on his iPhone: he answered the sound question with "Friday is the best time to
+           feel happy and free! Let down your hair and have a little fun. Modern dance and club vibes with
+           male vocals." The ring's own handler passes an answer of more than fourteen words straight by,
+           and this line - the mouth's make path - then wrote the whole sentence into the sound slot. The
+           style went to the rail as his paragraph, the rail refused it, and the door told him the music had
+           turned him down for six turns while it kept re-sending the same paragraph. A sound is a member of
+           the vocabulary, never the sentence it arrived in. */
+        const realSound = soundIsReal(words);
+        if (realSound) {
+          songDraft.sound = realSound;
+          logLine('song.journey.sound', realSound, { level: 'info', target: 'music' });
+        } else {
+          songDraft.askBeat = 'sound';
+          logLine('song.sound.open', String(words).slice(0, 80), { level: 'warn', target: 'music' });
+        }
       } else if (askedBeat === 'feel' && words) {
         songDraft.feel = words.slice(0, 160);
         logLine('song.journey.feel', songDraft.feel, { level: 'info', target: 'music' });
@@ -3042,6 +3076,7 @@ async function handleSongCall(call) {
     }
   } catch (e) {
     const why = (e && e.message) ? e.message : String(e);
+    const payloadGate = (e && e.payload) || {};
     const stack = (e && e.stack) ? String(e.stack).replace(/\s+/g, ' ').slice(0, 700) : '';
     /* Build 144: the real reason, and who failed.
        10 Nov 16:08: he gave the tree line and the log held one line, "music rail · refused", for a window in
@@ -3055,6 +3090,16 @@ async function handleSongCall(call) {
         + 'went wrong at the door after the song was asked for; do not say the rail refused it, and do not '
         + 'claim it is on his shelf until it is.';
       railNote('the door failed after the rail took it · ' + why.slice(0, 90));
+    } else if ((e && e.payload && (e.payload.needs_sound || e.payload.needs_words)) || payloadGate.line) {
+      /* Build 183: the rail was never asked. The gate in front of it stopped the make because the style was
+         not a sound (or there was nothing to make from), and it hands back the exact question to ask. Nothing
+         was made, nothing was spent, and he hears a question rather than a refusal he cannot act on. */
+      const line = String(payloadGate.line || '');
+      logLine('song.sound.open.gate', String(payloadGate.heard_style || '').slice(0, 80),
+        { level: 'warn', target: 'music' });
+      result = line || 'Nothing has been made and nothing was spent. Ask him one short question: what kind of '
+        + 'music should it be?';
+      railNote('journey · sound · nothing made · the style was not a kind of music');
     } else if (railAsked) {
       result = 'the music rail refused: ' + why + '. Tell him plainly that it did not take, and do not claim '
         + 'a song was made.';
