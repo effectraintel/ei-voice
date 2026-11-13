@@ -261,6 +261,51 @@
   #say input:focus { border-color:var(--gold); }
   #say button { font:inherit; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
     color:#171310; background:var(--gold); border:0; border-radius:10px; padding:13px 17px; cursor:pointer; }
+
+  /* Build 189. The small screen, mostly the small screen in his hand.
+
+     On an iPhone SE the footer measured 246px of a 466px viewport - 53%, before the shelf took
+     its share - and the conversation itself was left about 150px to be read in. The door worked
+     and the chat was unusable, which from his side is the same thing. Nothing that does a job is
+     removed: the parts that exist only for a spoken door stand down when the mouth is shut, and
+     what is left is one composer, one row holding the two modes and the handle, and one line of
+     build. */
+  #controls { display:flex; flex-direction:column; align-items:center; }
+  body.textmode .voicebar { display:none; }
+  body.textmode #bars { display:none; }
+  body.textmode #controls { flex-direction:row; justify-content:center; align-items:center; gap:16px; }
+  body.textmode #modes { margin:0; }
+  body.textmode #mic { width:46px; height:46px; margin:0; }
+  body.textmode #mic .glyph { font-size:15px; }
+  body.textmode #say { margin:4px auto 8px; }
+  body.textmode .hint { font-size:10px; margin-top:2px; }
+  body.textmode .footmark { margin-top:4px; }
+  /* The declarations are diagnostics, and on a short screen they were the second and third line
+     of the footer. The build number stays; the list folds away. */
+  .footmark span.decls { display:inline; margin-top:0; letter-spacing:.12em; }
+  @media (max-height: 720px) {
+    body.textmode footer { padding-top:2px; }
+    body.textmode #say { margin:2px auto 6px; }
+    body.textmode #mic { width:42px; height:42px; }
+    /* One line, not three, in both modes: the branding and the build stay, the proof line and
+       the declarations fold away. A footer that says which build he is in has to survive; the
+       rest is diagnostics, and on a short screen it was 30px of a spoken door's last room. */
+    .footmark { margin-top:2px; padding-top:2px; font-size:8px; display:flex;
+      gap:6px; align-items:baseline; white-space:nowrap; overflow:hidden; justify-content:center;
+      letter-spacing:.10em; }
+    .footmark span { display:inline; margin:0; }
+    .footmark .mark { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .footmark .build { flex:0 0 auto; }
+    .footmark .proof { display:none; }
+    .footmark span.decls { display:none; }
+    /* One card, one line of title, one line of detail: the shelf is a row he scrolls, not a page
+       he reads, and its height was the other half of what the words lost. */
+    .card .thumb { width:48px; height:48px; }
+    .card .d { -webkit-line-clamp:1; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+    .card .acts { padding-top:5px; }
+    #shelf { padding:4px 2px; }
+    #shelf.on { padding-top:4px; }
+  }
 </style>
 </head>
 <body>
@@ -283,14 +328,16 @@
            placeholder="type it, then Enter">
     <button id="saysend" type="submit">send</button>
   </form>
-  <div id="modes">
-    <button id="modespeak" class="on" type="button">speak</button>
-    <button id="modetype" type="button">type</button>
+  <div id="controls">
+    <div id="modes">
+      <button id="modespeak" class="on" type="button">speak</button>
+      <button id="modetype" type="button">type</button>
+    </div>
+    <button id="mic" aria-label="open the door"><span class="glyph">◍</span></button>
   </div>
-  <button id="mic" aria-label="open the door"><span class="glyph">◍</span></button>
   <div id="bars"><i></i><i></i><i></i><i></i><i></i></div>
   <div class="hint" id="hint">one tap opens the microphone and the stream together</div>
-  <div class="footmark">Powered by Effectra Intelligence<span>Proof on chain. Payload in the vault.</span><span class="build" id="build"></span></div>
+  <div class="footmark"><span class="mark">Powered by Effectra Intelligence</span><span class="proof">Proof on chain. Payload in the vault.</span><span class="build" id="build"></span></div>
   <button id="fold" type="button" aria-label="more or less room for the words">▾</button>
 </footer>
 
@@ -324,8 +371,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T21:20';
-const BUILD_NO = 188;
+const BUILD = '2026-11-13T21:40';
+const BUILD_NO = 189;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -640,8 +687,10 @@ window.addEventListener('DOMContentLoaded', () => {
   };
   const b = document.getElementById('build');
   // The address never carries the version, so the page has to say it: the footer is the build he is in.
-  if (b) b.textContent = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST · '
-    + DECLS.map((d) => d.name).join('+');
+  if (b) {
+    b.innerHTML = 'build ' + BUILD_NO + ' · ' + BUILD.slice(11, 16) + ' SAST'
+      + '<span class="decls"> · ' + DECLS.map((d) => d.name).join('+') + '</span>';
+  }
   keepCurrent();
 });
 
@@ -6861,7 +6910,18 @@ function openListening() {
   greeting = false;
   if (!sessionUp) return;
   busy = false; listening = true;
-  micBtn.classList.remove('arming'); micBtn.classList.add('live');
+  micBtn.classList.remove('arming');
+  /* Build 189. It said "listening. speak whenever you like" in typed mode, where the microphone is
+     shut and nothing he says can reach the door. He read exactly that on the iPhone at 21:17: the
+     line claimed an ear the door did not have. Both modes now say what they are, from the one
+     place that opens the input. */
+  if (typed()) {
+    micBtn.classList.remove('live');
+    setState('the door is open · type whenever you like');
+    hint('type it, then Enter');
+    return;
+  }
+  micBtn.classList.add('live');
   setState('listening. speak whenever you like');
   hint('live now · tap the circle to be quiet');
 }
@@ -6918,7 +6978,14 @@ function handleFrame(text) {
     // Silence first, then the first word: the route settles in the gap instead of halfway
     // through the greeting. (Build 49)
     primeAudioSession(260);
-    setTimeout(() => { if (sessionUp && greeting) sayGreeting(); }, 280);
+    // A line already typed is the first thing the model should read, not a greeting.
+    if (pendingTyped) {
+      const line = pendingTyped; pendingTyped = '';
+      greeting = false;
+      setTimeout(() => { if (sessionUp) postTyped(line); }, 120);
+    } else {
+      setTimeout(() => { if (sessionUp && greeting) sayGreeting(); }, 280);
+    }
     return;
   }
   if (msg.serverContent && msg.serverContent.turnComplete) { try { flushFingerprint(); } catch (e) {} }
@@ -7385,6 +7452,28 @@ function sendPcm(float32) {
   }));
 }
 
+/* Build 189. A typed door goes quiet, and the server closes a session it hears nothing from.
+   13 Nov 21:14, two minutes into typing on his phone: "Session closed due to client inactivity",
+   and every line after it went nowhere. With the microphone shut nothing at all crosses the
+   socket, so a silent frame every twenty seconds says the client is still here. It carries no
+   speech, automatic activity detection has nothing to detect, and 50 ms of zeroes costs a handful
+   of tokens a minute. It only runs while the mouth is shut: in voice mode the microphone is
+   already saying this. */
+let idlePing = null;
+function idleTick() {
+  try {
+    if (!ws || ws.readyState !== 1 || !sessionUp) return;
+    if (!typed() || micStream) return;
+    const silence = new Uint8Array(1600);           // 50 ms of 16 kHz mono, all zeroes
+    let bin = '';
+    for (let i = 0; i < silence.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, silence.subarray(i, i + 0x8000));
+    }
+    ws.send(JSON.stringify({ realtimeInput: { audio: { data: btoa(bin), mimeType: 'audio/pcm;rate=16000' } } }));
+  } catch (e) { /* a keepalive that can break the door is not a keepalive */ }
+}
+function startIdlePing() { if (!idlePing) idlePing = setInterval(idleTick, 20000); }
+
 /* ---------- the engine's voice ---------- */
 
 /* iOS parks an audio context ('interrupted') when the phone takes an audio
@@ -7756,9 +7845,30 @@ function paintMode() {
   if (micBtn) micBtn.style.display = '';
   const barsEl = el('bars');
   if (barsEl) barsEl.style.display = on === 'text' ? 'none' : '';
+  // Build 189. The layout is a mode too. The footer was one column for both modes, so a door with
+  // its mouth shut still paid for the voice chip, the level bars and a 92px circle, and on a 553px
+  // screen those were the words' last 150 pixels.
+  try { document.body.classList.toggle('textmode', on === 'text'); } catch (e) {}
   if (hintEl) hintEl.textContent = on === 'text'
     ? 'type it, then Enter · the circle opens the door'
     : 'one tap opens the microphone and the stream together';
+}
+
+/* Build 189. A typed line that arrives at a shut door.
+   13 Nov 21:17: he typed "hello" into a door whose session the server had already closed for
+   inactivity, and the line sat in the box. A sentence he has already typed is an ask, so the send
+   opens the door and carries the line through rather than handing it back to him. */
+let pendingTyped = '';
+
+function postTyped(text) {
+  try {
+    ws.send(JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text: text }] }], turnComplete: true } }));
+    logLine('turn.you.typed', String(text).slice(0, 200), { level: 'info' });
+    return true;
+  } catch (e) {
+    hint('that line did not reach the door; try once more');
+    return false;
+  }
 }
 
 function sendTyped() {
@@ -7766,19 +7876,20 @@ function sendTyped() {
   const box = el('saytext');
   const text = String((box && box.value) || '').trim();
   if (!text) return false;
-  if (!ws || ws.readyState !== 1 || !sessionUp) {
-    hint('the door is shut · open it, then type');
-    return false;
-  }
   box.value = '';
   try { appendLive('you', text); } catch (e) {}
-  try {
-    ws.send(JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } }));
-  } catch (e) {
-    hint('that line did not reach the door; try once more');
-    return false;
+  if (!ws || ws.readyState !== 1 || !sessionUp) {
+    pendingTyped = text;
+    if (!busy && !connecting) {
+      lastOpenAt = 0;                     // he asked now; the two-second double-tap guard does not apply
+      setState('the door was shut \u00b7 opening it for this line');
+      openDoor().catch(() => {});
+    } else {
+      setState('the door is opening \u00b7 your line goes as soon as it is');
+    }
+    return true;
   }
-  return true;
+  return postTyped(text);
 }
 
 function setMode(m) {
@@ -7801,7 +7912,8 @@ function setMode(m) {
     try { if (micStream || micCtx) closeMic(); } catch (e) {}
     try { micBtn.classList.remove('live', 'arming'); } catch (e) {}
     if (sessionUp) {
-      setState('the door is open · type and read');
+      setState('the door is open · type whenever you like');
+      hint('type it, then Enter');
       try { el('saytext').focus(); } catch (e) {}
     } else {
       setState('text mode · tap the circle to open the door');
@@ -7821,6 +7933,7 @@ function setMode(m) {
 }
 
 (function wireTyped() {
+  startIdlePing();
   const form = el('say');
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); sendTyped(); });
   const sp = el('modespeak'), ty = el('modetype');
