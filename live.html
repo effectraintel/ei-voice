@@ -452,8 +452,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T23:40';
-const BUILD_NO = 201;
+const BUILD = '2026-11-14T00:05';
+const BUILD_NO = 202;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -8318,6 +8318,45 @@ function setMode(m) {
     }
   }
 }
+
+/* Build 202. The send button, which was dead in his hand while Enter worked.
+
+   13 Nov 23:54: "the send button on the screen doesn't do anything. enter or submit on the keyboard
+   works but the actual send button is dead." Enter and the button go through the same function, so
+   the difference was never in the sending; it was in whether the tap ever arrived. Measured on this
+   page at 375x812: with the keys up the button sits at y=700, and the moment the keyboard closes it
+   is at y=630 - it JUMPS 65-70px upward, because #controls (the two modes and the circle) comes back
+   and the footer grows from the bottom.
+
+   The order a tap follows is what kills it. A tap on a button blurs the field first, the keyboard
+   starts away, the footer re-grows, the button is already 65px above the finger by the time the click
+   is dispatched, so the click lands on empty space at the old spot and nothing is sent. A second tap
+   then works, because by then the layout has finished moving - which is exactly the "dead button" he
+   reported, and why Enter never suffered it: no keyboard closes before an Enter.
+
+   So the send is taken on the way DOWN, before iOS can move the room: pointerdown and touchstart
+   send immediately (and stop the default, so the keyboard does not start away first), click stays as
+   the fallback for a mouse and for any browser that fires only click. One tap is one send - the guard
+   is time, not a flag, so a slow thumb still works - and every path leaves a line in the log, because
+   the next report of a dead control should arrive with evidence rather than a guess. */
+(function wireSendButton() {
+  const btn = el('saysend');
+  if (!btn) return;
+  let lastTapAt = 0;
+  function tapSend(where) {
+    const now = Date.now();
+    if (now - lastTapAt < 400) return;          // pointerdown then click, one tap, one send
+    lastTapAt = now;
+    const box = el('saytext');
+    const had = String((box && box.value) || '').trim().length;
+    logLine('door.send.tap', where + ' \u00b7 ' + had + ' chars', { level: 'info' });
+    if (!sendTyped()) logLine('door.send.none', 'nothing went: ' + where, { level: 'info' });
+  }
+  const take = (e) => { try { e.preventDefault(); } catch (err) {} tapSend('pointerdown'); };
+  if (window.PointerEvent) btn.addEventListener('pointerdown', take, { passive: false });
+  btn.addEventListener('touchstart', (e) => { try { e.preventDefault(); } catch (err) {} tapSend('touchstart'); }, { passive: false });
+  btn.addEventListener('click', (e) => { try { e.preventDefault(); } catch (err) {} tapSend('click'); });
+})();
 
 (function wireTyped() {
   startIdlePing();
