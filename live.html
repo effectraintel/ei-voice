@@ -8,6 +8,15 @@
      empty space. Between 22:51 and 22:56 the same page was seen at 0.50, 0.57, 0.68, 0.77, 0.81,
      0.90, 1.02 and back - Safari moving the zoom while he was typing. A door is not a document to
      be magnified: it is one room, and it is built for exactly the screen it is on. -->
+<!-- Build 203. He could not get out of the full chat screen: "there is no easy option for me to exit
+     the full chat screen mode where the shelf and the exit button etc is". His own log said why, at
+     00:28: the page was laid out on the full screen while iOS had panned what he could SEE 86px down
+     to reach the line he was typing (visualViewport offsetTop 86). A fixed band is fixed to the laid-out
+     screen, not to the panned one, so the band - status, room and leave - was 86px above the top of the
+     screen, and the conversation was cut at the top by the same 86px. The shell is now the part of the
+     screen he can actually see (--vvtop/--vvh from visualViewport, re-read on every pan), the band sits
+     in that shell instead of being pinned to the layout, and the way back to the room is a labelled
+     button instead of a bare chevron. -->
 <!-- Build 198. Two things he asked for on 13 Nov at 23:24, both about the same complaint: the door
      kept moving things he needs. The top band (wordmark, door status, minimise) was in the flow, so
      when the room shrank or the page was panned to reach a line he had to scroll back up to find it,
@@ -33,7 +42,12 @@
   /* Build 197. Fixed positioning belongs on the body, not on the root: with <html> fixed the root
      stopped being the document and iOS began reporting a layout viewport twice the screen. */
   html { overflow:hidden; -webkit-text-size-adjust:100%; height:100%; }
-  body { position:fixed; inset:0; height:auto; min-height:0; width:100%; max-width:100%; }
+  /* Build 203. THE SHELL IS WHAT HE CAN SEE. iOS lays a fixed page out on the whole screen and then
+     pans what is visible (visualViewport.offsetTop) to reach the line being typed, and neither a laid
+     out nor a fixed element can see that pan. So the box is placed at the visible top and given the
+     visible height, and the band lives inside it. When the phone pans, the whole room moves with it. */
+  body { position:fixed; left:0; right:0; top:var(--vvtop, 0px); height:var(--vvh, 100%);
+         min-height:0; width:100%; max-width:100%; }
   /* Build 198. The top safe area belongs to the pinned band, not to the page box. */
   body { display:flex; flex-direction:column; min-height:0; overflow:hidden;
          padding:0 18px calc(env(safe-area-inset-bottom) + 12px); }
@@ -42,7 +56,7 @@
      and not fall away when the chat gets going. I need to always go and scroll back to find it."
      A thing he has to go and find is not a status line, it is a lost object. --head is measured from
      the band itself and the words start below it, so nothing hides underneath. */
-  header { position:fixed; top:0; left:0; right:0; z-index:30; text-align:center;
+  header { position:relative; flex:0 0 auto; z-index:30; text-align:center;
     background:var(--char); border-bottom:1px solid rgba(176,141,47,.16);
     padding:calc(env(safe-area-inset-top) + 12px) 18px 6px; }
   .wordmark { letter-spacing:.34em; font-size:11px; color:var(--gold); text-transform:uppercase; }
@@ -52,7 +66,7 @@
   .warn { display:none; margin:10px 0 0; padding:10px 12px; border:1px solid #5a3a1c; background:#241a10;
     color:#e8cfae; font-size:12.5px; line-height:1.5; border-radius:10px; text-align:left; }
   .warn.show { display:block; }
-  main { flex:1; min-height:0; overflow-y:auto; padding:calc(var(--head, 104px) + 6px) 2px 4px; -webkit-overflow-scrolling:touch; }
+  main { flex:1; min-height:0; overflow-y:auto; padding:6px 2px 4px; -webkit-overflow-scrolling:touch; }
   .turn { margin:0 0 14px; max-width:92%; }
   .turn.you { margin-left:auto; text-align:right; }
   .who { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
@@ -255,7 +269,7 @@
     .sub { display:none; }
     .wordmark { font-size:10px; letter-spacing:.26em; }
     .state { margin-top:3px; font-size:12px; min-height:16px; }
-    main { padding-top:calc(var(--head, 56px) + 4px); }
+    main { padding-top:4px; }
     .turn { margin-bottom:10px; }
     button#mic { width:56px; height:56px; margin-bottom:4px; }
     #mic .glyph { font-size:21px; }
@@ -357,10 +371,14 @@
   /* The wordmark and the minimise control were fighting for the same top line. The branding is in
      the footer of this same screen, so the top line belongs to the control while the keys are up. */
   body.kb header .wordmark { display:none; }
-  body.kb header { padding:calc(env(safe-area-inset-top) + 2px) 18px 1px; }
+  /* Build 203. The two controls are a real size now (they are buttons, not glyphs), so the band has to
+     be tall enough to hold them: measured, they run from 6px to 37px and a band of 23 cut them off over
+     the conversation. The band gives them 38 and the words keep the rest. */
+  body.kb header { padding:calc(env(safe-area-inset-top) + 3px) 18px 3px;
+    min-height:calc(env(safe-area-inset-top) + 38px); }
   /* The state line shares the top row with the control, so it keeps clear of it. */
-  body.kb header .state { font-size:11px; padding-right:92px; }
-  body.kb #log { padding-top:calc(var(--head, 60px) + 2px); }
+  body.kb header .state { font-size:11px; padding-right:124px; }
+  body.kb #log { padding-top:4px; }
   body.kb #say { margin:6px auto 4px; }
 
   /* Build 191. He liked the keyboard door but there was no way back down: "the idea is good but we
@@ -372,16 +390,17 @@
      keys are up) and the way out of the house (always). Edwin, 13 Nov: "we also need a leave button
      on the top right, if someone wants to leave the house." */
   .topctl { position:absolute; top:calc(env(safe-area-inset-top) + 6px); right:12px;
-    display:flex; align-items:center; gap:0; }
-  .topctl button { background:none; border:0; padding:5px 7px; color:var(--gold); font:inherit;
-    font-size:10px; letter-spacing:.13em; text-transform:uppercase; cursor:pointer; }
+    display:flex; align-items:center; gap:6px; }
+  .topctl button { background:none; border:1px solid rgba(176,141,47,.38); border-radius:8px;
+    padding:7px 9px; color:var(--gold); font:inherit;
+    font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
   #minimise { display:none; }
   body.kb #minimise { display:inline-block; }
   /* A leave that fires on one tap beside a thumb that is reaching for something else is a lockout,
      so it asks twice: the same pattern as the purge on the log, four seconds and no longer. */
   #leave.armed { color:#e8cfae; }
   .state { padding-right:56px; }
-  body.kb #minimise .lbl { display:none; }
+  /* Build 203. The label stays. A lone chevron in the corner is not an option, it is a hint. */
 </style>
 </head>
 <body>
@@ -390,7 +409,7 @@
   <div class="sub">the live door · speech straight through</div>
   <div class="state" id="state">tap the circle to open the door</div>
   <div class="topctl">
-    <button id="minimise" type="button" aria-label="minimise the keyboard">⌄<span class="lbl"> minimise</span></button>
+    <button id="minimise" type="button" aria-label="back to the room">⌄<span class="lbl"> room</span></button>
     <button id="leave" type="button" aria-label="leave the house">leave</button>
   </div>
 </header>
@@ -452,8 +471,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T00:05';
-const BUILD_NO = 202;
+const BUILD = '2026-11-14T00:42';
+const BUILD_NO = 203;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1883,6 +1902,29 @@ try {
   if (window.ResizeObserver) new ResizeObserver(measureHead).observe(document.querySelector('header'));
 } catch (e) {}
 window.addEventListener('resize', measureHead, { passive: true });
+/* Build 203. Follow the visible part of the screen, not the laid-out one. iOS reports where it has
+   panned (offsetTop) and how much is left once the keyboard has taken its share (height); the shell is
+   placed there, so the band cannot be above the screen and the line he types cannot be below it. */
+function glueToView() {
+  try {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const top = Math.max(0, Math.round(vv.offsetTop || 0));
+    const height = Math.max(120, Math.round(vv.height || 0));
+    const r = document.documentElement.style;
+    r.setProperty('--vvtop', top + 'px');
+    r.setProperty('--vvh', height + 'px');
+  } catch (e) {}
+}
+try {
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('scroll', glueToView, { passive: true });
+    window.visualViewport.addEventListener('resize', glueToView, { passive: true });
+  }
+} catch (e) {}
+glueToView();
+setTimeout(glueToView, 60);
+setTimeout(glueToView, 300);
 window.addEventListener('orientationchange', () => setTimeout(measureHead, 260));
 try { if (window.visualViewport) window.visualViewport.addEventListener('resize', measureHead); } catch (e) {}
 /* The band cannot be scrolled away, but the page behind it still can be: iOS pans the window to reach
@@ -1938,7 +1980,9 @@ function fitHeight() {
      animation: his log for 22:24 alone reads up, down, up, down, up, down within twenty seconds, each
      one stepping the shelf and the modes out and back. A reading now has to hold for 140ms before it
      is believed, and no change is made within 320ms of the last one. */
-  const up = typed() && (roomWithoutKeyboard - h > 100) && Date.now() > kbReleasedAt;
+  /* Build 203. The chat layout is for a keyboard that is up. If the line is not even focused there
+     is no keyboard to be up, so the door can never be left in the reduced layout on its own. */
+  const up = typed() && typingHere && (roomWithoutKeyboard - h > 100) && Date.now() > kbReleasedAt;
   if (up === keyboardUp) { kbWant = up; return; }
   if (kbWant !== up) { kbWant = up; kbWantAt = Date.now(); }
   const held = Date.now() - kbWantAt;
