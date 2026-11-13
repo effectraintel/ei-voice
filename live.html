@@ -16,7 +16,9 @@
      scroll. While the document could scroll, iOS could move the window past the end of a page that was
      then made shorter for the keyboard, and the screen went black with the door's own content just
      outside it. A fixed shell cannot be panned away. */
-  html, body { position:fixed; inset:0; }
+  /* Build 195. The shell IS the viewport: no height by script, so there is no room past the content
+     for iOS to pan into, and nothing to disagree with. */
+  html, body { position:fixed; inset:0; height:auto; min-height:0; }
   body { display:flex; flex-direction:column; min-height:0; overflow:hidden;
          padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
   header { padding:16px 0 6px; text-align:center; }
@@ -407,8 +409,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T22:50';
-const BUILD_NO = 194;
+const BUILD = '2026-11-13T23:00';
+const BUILD_NO = 195;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1700,6 +1702,7 @@ function pinToTop() {
   try { document.body.scrollTop = 0; } catch (e) {}
 }
 
+
 function roomNow() {
   const vv = window.visualViewport;
   return (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
@@ -1718,7 +1721,18 @@ function fitHeight() {
 
      So the page is pinned to its own top whenever the room changes with the keys up, and a height
      of zero or a sliver (which iOS reports mid-animation) is never taken as the room. */
-  if (h >= 240) document.body.style.height = Math.round(h) + 'px';
+  /* Build 195. NOBODY SETS THE PAGE HEIGHT ANY MORE.
+
+     His phone said it plainly at 22:40. With the keyboard up it reported innerHeight 274,
+     visualViewport 249, offsetTop 367, bodyHeight 249px - and half a second later every part of
+     the door measured NEGATIVE: state -362..-346, log -345..-203, say -195..-147. iOS had panned the
+     window 367px to reach the focused line, on a page I had made 249px tall. The door was not black;
+     it was 362px above the screen.
+
+     A page whose height I compute will always be a page iOS can disagree with. So the shell is now
+     simply the viewport (html, body position:fixed inset:0, no height in JS) and the phone decides
+     how tall the room is. What is left in JS is only the reading, never the sizing. */
+  if (!window.__shellNote) { window.__shellNote = 1; logLine('door.shell', 'the page is the viewport; height is not set by script', { level: 'info' }); }
   // Build 190. A hundred pixels is well above the small changes an address bar makes and well
   // below the 260 a keyboard takes on an SE, so the door does not flap while he scrolls.
   const typingHere = (() => { try { return document.activeElement && document.activeElement.id === 'saytext'; } catch (e) { return false; } })();
@@ -1755,6 +1769,7 @@ function applyKeyboard(up) {
     viewportNote('keyboard up');
     setTimeout(() => viewportNote('still up, 0.6s'), 600);
     setTimeout(() => viewportNote('still up, 1.8s'), 1800);
+    setTimeout(() => viewportNote('still up, 3s'), 3000);
   }
 }
 
@@ -1774,6 +1789,8 @@ function viewportNote(tag) {
       + ' \u00b7 offsetTop ' + (vv ? Math.round(vv.offsetTop) : 'x')
       + ' \u00b7 scrollY ' + Math.round(window.scrollY)
       + ' \u00b7 bodyHeight ' + (document.body.style.height || 'auto')
+      + ' \u00b7 htmlClient ' + document.documentElement.clientHeight
+      + ' \u00b7 scrollHeight ' + document.documentElement.scrollHeight
       + ' \u00b7 state ' + box('state')
       + ' \u00b7 log ' + box('log')
       + ' \u00b7 say ' + box('say')
