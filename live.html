@@ -18,6 +18,7 @@
      outside it. A fixed shell cannot be panned away. */
   /* Build 195. The shell IS the viewport: no height by script, so there is no room past the content
      for iOS to pan into, and nothing to disagree with. */
+  html { overflow-x:hidden; -webkit-text-size-adjust:100%; }
   html, body { position:fixed; inset:0; height:auto; min-height:0; }
   body { display:flex; flex-direction:column; min-height:0; overflow:hidden;
          padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
@@ -33,7 +34,8 @@
   .turn { margin:0 0 14px; max-width:92%; }
   .turn.you { margin-left:auto; text-align:right; }
   .who { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
-  .said { white-space:pre-wrap; }
+  /* A long unbroken word could always push a bubble wider than the screen: not clipped, overflowed. */
+  .said { white-space:pre-wrap; overflow-wrap:anywhere; }
   .turn.you .said { color:#cfc6b6; }
   .lat { margin-top:5px; font-size:11.5px; color:var(--gold); letter-spacing:.04em; }
   /* the gate: a shut door is the default state, not an error state */
@@ -263,7 +265,12 @@
   #modes button.on { color:#171310; background:var(--gold); border-color:var(--gold); }
   #say { display:flex; gap:8px; align-items:center; width:min(760px,100%); margin:6px auto 10px; }
   #say[hidden] { display:none; }
-  #say input { flex:1; min-width:0; font:inherit; font-size:15px; color:#efe7da; background:#14110f;
+  /* Build 196. SIXTEEN, and it is not a style choice. Safari zooms the whole page in when a field
+     smaller than 16px takes focus, and it does not always zoom back out when the keys go: at 22:48 his
+     screen showed the conversation cut off down the left side, with the words larger than they are
+     built to be, because the page was still magnified from the line he had typed a minute before.
+     A field at 16px is never zoomed, so the page is never left magnified. */
+  #say input { flex:1; min-width:0; font:inherit; font-size:16px; color:#efe7da; background:#14110f;
     border:1px solid #3a332a; border-radius:10px; padding:12px 14px; outline:none; }
   #say input:focus { border-color:var(--gold); }
   #say button { font:inherit; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
@@ -409,8 +416,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T23:00';
-const BUILD_NO = 195;
+const BUILD = '2026-11-13T23:15';
+const BUILD_NO = 196;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1791,6 +1798,9 @@ function viewportNote(tag) {
       + ' \u00b7 bodyHeight ' + (document.body.style.height || 'auto')
       + ' \u00b7 htmlClient ' + document.documentElement.clientHeight
       + ' \u00b7 scrollHeight ' + document.documentElement.scrollHeight
+      + ' \u00b7 width ' + document.documentElement.scrollWidth
+      + ' \u00b7 scale ' + (vv && vv.scale ? vv.scale.toFixed(2) : '?')
+      + ' \u00b7 offsetLeft ' + (vv ? Math.round(vv.offsetLeft) : 'x')
       + ' \u00b7 state ' + box('state')
       + ' \u00b7 log ' + box('log')
       + ' \u00b7 say ' + box('say')
