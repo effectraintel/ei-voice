@@ -452,7 +452,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-13T23:40';
-const BUILD_NO = 198;
+const BUILD_NO = 199;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1514,6 +1514,44 @@ function doorSession() {
   } catch { return null; }
 }
 
+/* Build 199 · THE PASS CAN RUN OUT IN THE MIDDLE OF A SONG.
+   13 Nov 2026, 23:43. He started a song at 23:42 and answered the sound question at 23:43, and the door said
+   "nothing was made because the door failed" twice. The pass minted at 23:13 had thirty minutes on it and
+   died at 23:43:07; doorSession() refuses one thirty seconds early, so from 23:42:37 every music tool threw
+   "the door session has gone" while the conversation carried on, because the mouth is a different socket.
+   Nothing about the song was wrong. The pass was.
+   Now: a tool that finds no pass says so in plain words, asks for the key once, and remembers what was
+   waiting, so the door picks the work up by itself the moment the pass is back. */
+let passWanted = null;
+function passGone(what) {
+  passWanted = { what: String(what || 'song'), at: Date.now() };
+  logLine('pass.gone', String(what || 'song') + ' \u00b7 asking for the key', { level: 'warn', target: 'door' });
+  /* The answer to the tool call goes out before the door moves: returning to the gate closes the socket,
+     and a closed socket swallows the one line that tells him what is happening. */
+  setTimeout(() => {
+    try { backToFrontDoor('your pass ran out; touch the key and I will carry on where we were'); } catch (e) {}
+  }, 800);
+}
+function passBack() {
+  if (!passWanted) return;
+  const w = passWanted;
+  passWanted = null;
+  logLine('pass.restored', w.what + ' \u00b7 carrying on', { level: 'info', target: 'door' });
+  if (w.what !== 'song') return;
+  setTimeout(() => {
+    try {
+      if (routeClosed()) {
+        makeArmedSig = ''; makePostedSig = '';
+        armMake();
+      } else {
+        songDraft.askBeat = 'sound';
+        doorNote('The pass is back, so nothing he gave is lost. Ask the sound question again in one short '
+          + 'line: what kind of music should it be?', true);
+      }
+    } catch (e) {}
+  }, 900);
+}
+
 function deviceLabel() {
   const ua = navigator.userAgent;
   const kind = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : 'browser';
@@ -1722,6 +1760,7 @@ async function unlockFingerprint(mode, enrolCode) {
     device: done.device_label,
     tier: done.verification_tier,
   }));
+  passBack();
   gBtn.disabled = false; gAlt.disabled = false;
   return done;
 }
@@ -2653,7 +2692,7 @@ async function makeIfStillWaiting(sig) {
   const styleLine = [songDraft.sound, songDraft.feel].filter(Boolean).join(', ').slice(0, 200);
   try {
     const s = doorSession();
-    if (!s || !s.token) return;
+    if (!s || !s.token) { passGone('song'); return; }
     const payload = {
       action: 'make',
       text: text,
@@ -3219,7 +3258,15 @@ async function handleSongCall(call) {
     // A `session` bound in the door-opening function is not in scope out here, and a
     // ReferenceError here used to swallow the reply entirely.
     const s = doorSession();
-    if (!s || !s.token) throw new Error('the door session has gone');
+    if (!s || !s.token) {
+      /* Build 199: this is a pass that ran out, never a song that failed. */
+      passGone('song');
+      result = 'Nothing has been made yet and nothing has been spent: the pass on this phone has run out. The '
+        + 'door has asked him to touch the key and the song carries on by itself the moment it opens. Tell him '
+        + 'in one short line that the song is held and he only has to touch the key. Do not ask him anything, '
+        + 'do not say it failed, and do not say anything is being made yet.';
+      return;
+    }
 
     const action = String(args.action || 'make').toLowerCase().trim();
     if (action === 'check') {
@@ -3635,7 +3682,7 @@ async function handleHouseCall(call) {
   let result = '';
   const t0 = Date.now();
   try {
-    if (!s) throw new Error('the door session has gone');
+    if (!s) { passGone('house'); throw new Error('the door session has gone'); }
     const intent = houseIntent(call.args || {});
     const r = await gatePost('doorHouseRead', { session_token: s.token, ...intent });
     // Short on purpose: a long tool result is what made the voice say it could not read the
@@ -4112,7 +4159,7 @@ async function handleShareCall(call) {
   const s = doorSession();
   let result = '';
   try {
-    if (!s || !s.token) throw new Error('the door session has gone');
+    if (!s || !s.token) { passGone('share'); throw new Error('the door session has gone'); }
     const args = call.args || {};
     const query = String(args.query || shareQuery || '').trim();
 
@@ -5584,7 +5631,7 @@ async function handleShareToCall(call) {
   const s = doorSession();
   let result = '';
   try {
-    if (!s || !s.token) throw new Error('the door session has gone');
+    if (!s || !s.token) { passGone('share'); throw new Error('the door session has gone'); }
     const a = call.args || {};
 
     let card = a.which ? shelfFind(a.which) : null;
@@ -5812,7 +5859,7 @@ async function handlePayCall(call) {
   let result = '';
   const t0 = Date.now();
   try {
-    if (!s) throw new Error('the door session has gone');
+    if (!s) { passGone('payment'); throw new Error('the door session has gone'); }
     const a = call.args || {};
     const amount = Number(a.amount);
     if (!isFinite(amount) || amount <= 0) throw new Error('no amount was given');
