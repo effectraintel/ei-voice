@@ -12,6 +12,11 @@
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; height:100%; background:var(--char); color:var(--ink);
     font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  /* Build 194. The page is a room, not a document: it is exactly as tall as the screen and it does not
+     scroll. While the document could scroll, iOS could move the window past the end of a page that was
+     then made shorter for the keyboard, and the screen went black with the door's own content just
+     outside it. A fixed shell cannot be panned away. */
+  html, body { position:fixed; inset:0; }
   body { display:flex; flex-direction:column; min-height:0; overflow:hidden;
          padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 12px); }
   header { padding:16px 0 6px; text-align:center; }
@@ -402,8 +407,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T22:40';
-const BUILD_NO = 193;
+const BUILD = '2026-11-13T22:50';
+const BUILD_NO = 194;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1687,6 +1692,7 @@ if (doorSession()) {
 let roomWithoutKeyboard = 0;
 let keyboardUp = false;
 let kbReleasedAt = 0;
+let kbWant = null, kbWantAt = 0, kbSettledAt = 0, kbTimer = null;
 /* Build 193. Put the page back at its own top. The log keeps its own scroll; this is the window. */
 function pinToTop() {
   try { window.scrollTo(0, 0); } catch (e) {}
@@ -1712,7 +1718,7 @@ function fitHeight() {
 
      So the page is pinned to its own top whenever the room changes with the keys up, and a height
      of zero or a sliver (which iOS reports mid-animation) is never taken as the room. */
-  if (h > 120) document.body.style.height = Math.round(h) + 'px';
+  if (h >= 240) document.body.style.height = Math.round(h) + 'px';
   // Build 190. A hundred pixels is well above the small changes an address bar makes and well
   // below the 260 a keyboard takes on an SE, so the door does not flap while he scrolls.
   const typingHere = (() => { try { return document.activeElement && document.activeElement.id === 'saytext'; } catch (e) { return false; } })();
@@ -1721,16 +1727,59 @@ function fitHeight() {
   /* Build 192. Tapping minimise while the keyboard is still animating down made the page re-enter
      the compact layout for a blink, because the room had not come back yet. A short release after a
      deliberate minimise keeps it from flapping. */
+  /* Build 194. The state used to flip on every reading, and iOS reports several during one keyboard
+     animation: his log for 22:24 alone reads up, down, up, down, up, down within twenty seconds, each
+     one stepping the shelf and the modes out and back. A reading now has to hold for 140ms before it
+     is believed, and no change is made within 320ms of the last one. */
   const up = typed() && (roomWithoutKeyboard - h > 100) && Date.now() > kbReleasedAt;
-  if (up !== keyboardUp) {
-    keyboardUp = up;
-    try { document.body.classList.toggle('kb', up); } catch (e) {}
-    logLine('door.keyboard', up ? 'up \u00b7 shelf and modes step aside' : 'down', { level: 'info' });
-    if (up) {
-      pinToTop(); setTimeout(pinToTop, 60); setTimeout(pinToTop, 320);
-      try { const lg = el('log'); if (lg) lg.scrollTop = lg.scrollHeight; } catch (e) {}
-    }
+  if (up === keyboardUp) { kbWant = up; return; }
+  if (kbWant !== up) { kbWant = up; kbWantAt = Date.now(); }
+  const held = Date.now() - kbWantAt;
+  if (held >= 140 && Date.now() > kbSettledAt) applyKeyboard(up);
+  else if (!kbTimer) kbTimer = setTimeout(() => {
+    kbTimer = null;
+    if (kbWant !== keyboardUp && Date.now() - kbWantAt >= 140 && Date.now() > kbSettledAt) applyKeyboard(kbWant);
+  }, Math.max(40, 140 - held));
+}
+
+function applyKeyboard(up) {
+  keyboardUp = up;
+  kbSettledAt = Date.now() + 320;
+  try { document.body.classList.toggle('kb', up); } catch (e) {}
+  logLine('door.keyboard', up ? 'up \u00b7 shelf and modes step aside' : 'down', { level: 'info' });
+  if (up) {
+    pinToTop(); setTimeout(pinToTop, 60); setTimeout(pinToTop, 320);
+    try { const lg = el('log'); if (lg) lg.scrollTop = lg.scrollHeight; } catch (e) {}
+    /* The numbers, because guessing at this twice was twice too many. If the screen is still black
+       these say what the phone itself believes the room is, and where each part of the door sits. */
+    viewportNote('keyboard up');
+    setTimeout(() => viewportNote('still up, 0.6s'), 600);
+    setTimeout(() => viewportNote('still up, 1.8s'), 1800);
   }
+}
+
+function viewportNote(tag) {
+  try {
+    const vv = window.visualViewport;
+    const box = (id) => {
+      const e = el(id);
+      if (!e) return '?';
+      const b = e.getBoundingClientRect();
+      return Math.round(b.top) + '..' + Math.round(b.bottom) + ' (' + Math.round(b.height) + ')';
+    };
+    const gate = el('gate');
+    logLine('door.viewport', tag
+      + ' \u00b7 innerHeight ' + Math.round(window.innerHeight)
+      + ' \u00b7 visualViewport ' + (vv ? Math.round(vv.height) : 'none')
+      + ' \u00b7 offsetTop ' + (vv ? Math.round(vv.offsetTop) : 'x')
+      + ' \u00b7 scrollY ' + Math.round(window.scrollY)
+      + ' \u00b7 bodyHeight ' + (document.body.style.height || 'auto')
+      + ' \u00b7 state ' + box('state')
+      + ' \u00b7 log ' + box('log')
+      + ' \u00b7 say ' + box('say')
+      + ' \u00b7 gate ' + (gate ? getComputedStyle(gate).display + '/' + gate.className : 'x')
+      + ' \u00b7 bodyClass ' + (document.body.className || '-'), { level: 'info' });
+  } catch (e) {}
 }
 window.addEventListener('focusin', () => {
   setTimeout(fitHeight, 150);
