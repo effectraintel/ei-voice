@@ -452,7 +452,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-13T23:40';
-const BUILD_NO = 199;
+const BUILD_NO = 200;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -474,6 +474,9 @@ const typed = () => MODE === 'text';
    was ever drawn. There is now one sentence, and everything that talks about the picture uses it. */
 const PICTURE_RULE = 'The picture is the last question of the making: the door asks it once, after the song '
   + 'has landed on his shelf and there is something to draw from, and nothing is drawn before he answers. '
+  + 'It is never bundled onto another question: at 23:42 on 13 Nov the door asked the sound and the picture in '
+  + 'one breath ("What kind of music should it be? Do you want to add a picture?"), so the picture arrived '
+  + 'four questions early. Ask one question a turn, and never a picture question at the sound. '
   + 'A no leaves it bare. Never ask about a picture while a song is still being made, never announce it as '
   + 'something to do later ("we can talk about the cover once it arrives"), and never say a cover is drawn '
   + 'when he shares it: that reading was withdrawn on 10 Nov.';   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
@@ -2462,7 +2465,8 @@ function chainAskNext(r) {
       + 'sound, which is open. Ask him exactly one question, short, in your own voice: "What kind of music '
       + 'should it be? Say you choose and I will pick." The sound is HIS to choose and the rail does not decide '
       + 'it, so never say the rail picks the style. Do not describe the song, do not name a style he did not '
-      + 'give, and never say anything is being made, on its way, or arriving.', true);
+      + 'give, and never say anything is being made, on its way, or arriving. Ask THAT question and nothing '
+      + 'else: one question a turn, and nothing about a picture here.', true);
     return;
   }
   // The words ring is his own words, already in the draft; the make ring is the studio's.
