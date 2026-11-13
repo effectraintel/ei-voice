@@ -311,6 +311,10 @@
   #say input:focus { border-color:var(--gold); }
   #say button { font:inherit; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
     color:#171310; background:var(--gold); border:0; border-radius:10px; padding:13px 17px; cursor:pointer; }
+  /* Build 204. The button says it was touched, in the same instant, before any work happens. On the
+     first typed line after a spell of speaking the door sometimes has to be opened again, which takes
+     a second or two; with no feedback that reads as a button that did not respond. */
+  #saysend.sent { background:#f2e0bb; box-shadow:0 0 0 2px rgba(242,224,187,.35); }
 
   /* Build 189. The small screen, mostly the small screen in his hand.
 
@@ -471,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T00:42';
-const BUILD_NO = 203;
+const BUILD = '2026-11-14T01:05';
+const BUILD_NO = 204;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -8297,6 +8301,26 @@ function postTyped(text) {
   }
 }
 
+/* Build 204. The first typed line after speaking sometimes waits a second or two, and he said so:
+   14 Nov 00:44, "when i switch to speak and spoke few things and switch back to type, it takes a while
+   before the send button respond. But it is only the first time then it is fine." His own log at 00:43
+   shows the shape of it: the tap went at 00:43:34 and the line only reached the model at 00:43:37,
+   because the door had to be opened again first. Nothing was wrong with the button; the room behind it
+   was shut.
+
+   So the door is opened while he is still typing, not when he reaches for send. The first keystroke is
+   the ask - he does not type a line he does not mean to send - and opening early turns a wait he can
+   feel into a wait he never sees. It is throttled, it never interrupts a door that is already opening,
+   and it is silent when the session is already up. */
+let warmAt = 0;
+function warmDoor(why) {
+  if (sessionUp || connecting || busy) return;
+  if (Date.now() - warmAt < 3000) return;
+  warmAt = Date.now();
+  logLine('door.warm', why, { level: 'info' });
+  try { lastOpenAt = 0; openDoor().catch(() => {}); } catch (e) {}
+}
+
 function sendTyped() {
   if (MODE !== 'text') return false;
   const box = el('saytext');
@@ -8308,6 +8332,10 @@ function sendTyped() {
      is sent, so the keys have no job left; the room comes back and with it the shelf and the modes. */
   try { box.blur(); } catch (e) {}
   if (!ws || ws.readyState !== 1 || !sessionUp) {
+    logLine('door.send.wait', 'the door was not ready: '
+      + (ws ? 'socket ' + ws.readyState : 'no socket')
+      + (sessionUp ? ' \u00b7 session up' : ' \u00b7 session down')
+      + (connecting ? ' \u00b7 connecting' : '') + (busy ? ' \u00b7 busy' : ''), { level: 'warn' });
     pendingTyped = text;
     if (!busy && !connecting) {
       lastOpenAt = 0;                     // he asked now; the two-second double-tap guard does not apply
@@ -8394,7 +8422,15 @@ function setMode(m) {
     const box = el('saytext');
     const had = String((box && box.value) || '').trim().length;
     logLine('door.send.tap', where + ' \u00b7 ' + had + ' chars', { level: 'info' });
-    if (!sendTyped()) logLine('door.send.none', 'nothing went: ' + where, { level: 'info' });
+    const went = sendTyped();
+    if (went) {
+      try {
+        btn.classList.add('sent');
+        setTimeout(() => { try { btn.classList.remove('sent'); } catch (e) {} }, 900);
+      } catch (e) {}
+    } else {
+      logLine('door.send.none', 'nothing went: ' + where, { level: 'info' });
+    }
   }
   const take = (e) => { try { e.preventDefault(); } catch (err) {} tapSend('pointerdown'); };
   if (window.PointerEvent) btn.addEventListener('pointerdown', take, { passive: false });
@@ -8406,6 +8442,8 @@ function setMode(m) {
   startIdlePing();
   const form = el('say');
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); sendTyped(); });
+  const bx = el('saytext');
+  if (bx) bx.addEventListener('input', () => warmDoor('a line is being typed'), { passive: true });
   const sp = el('modespeak'), ty = el('modetype');
   if (sp) sp.addEventListener('click', () => setMode('voice'));
   if (ty) ty.addEventListener('click', () => setMode('text'));
