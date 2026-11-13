@@ -325,7 +325,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-13T01:40';
-const BUILD_NO = 184;
+const BUILD_NO = 186;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6821,7 +6821,7 @@ function handleFrame(text) {
     stopClock();
     foldForDoor(true);
     setState('one moment');
-    hint('the door is open · wait for my voice');
+    hint(typed() ? 'the door is open · type it, then Enter' : 'the door is open · wait for my voice');
     // Silence first, then the first word: the route settles in the gap instead of halfway
     // through the greeting. (Build 49)
     primeAudioSession(260);
@@ -7569,6 +7569,14 @@ document.addEventListener('visibilitychange', () => {
 });
 
 micBtn.addEventListener('click', async () => {
+  // Build 186. In text mode the circle is still the door's handle, but tapping it while the
+  // door is open must never start the microphone: that is exactly the listening he switched
+  // away from. Point him at the composer instead.
+  if (typed() && sessionUp) {
+    try { el('saytext').focus(); } catch (e) {}
+    hint('the door is open · type it, then Enter');
+    return;
+  }
   // Waking is not silencing. On a landing where the platform kept audio asleep, the first
   // tap on the circle must open the voice, not close the door he just opened.
   if (sessionUp && !listening) {
@@ -7650,11 +7658,13 @@ function paintMode() {
   if (speak) speak.classList.toggle('on', on === 'voice');
   if (type) type.classList.toggle('on', on === 'text');
   if (box) box.hidden = on !== 'text';
-  if (micBtn) micBtn.style.display = on === 'text' ? 'none' : '';
+  // Build 186. The circle stays in both modes. It is the door's handle, not only the
+  // microphone: hiding it in text mode left him with a composer and no way to open the door.
+  if (micBtn) micBtn.style.display = '';
   const barsEl = el('bars');
   if (barsEl) barsEl.style.display = on === 'text' ? 'none' : '';
   if (hintEl) hintEl.textContent = on === 'text'
-    ? 'type it, then Enter · the door answers in words'
+    ? 'type it, then Enter · the circle opens the door'
     : 'one tap opens the microphone and the stream together';
 }
 
@@ -7683,10 +7693,38 @@ function setMode(m) {
   MODE = m;
   try { localStorage.setItem('ei-door-mode', m); } catch (e) {}
   paintMode();
-  // The modality is set when a session opens, so switching means a fresh door. Closing it here
-  // is the honest version: a session that can only speak would swallow every typed word.
-  try { if (sessionUp || connecting || ws) shutDoor(); } catch (e) {}
-  setState(m === 'text' ? 'text mode · tap to open the door in words' : 'tap the circle to open the door');
+  /* Build 186. Switching modes does NOT close the door, and that is the whole fix.
+
+     On 13 Nov selecting text closed the session and hid the circle, so there was a composer,
+     no way to open the door and nothing to submit into. Selecting speak again then asked the
+     server for a room it had not finished releasing, and the voice was dead too. One call,
+     two failures.
+
+     The session is audio in both modes because this model has no other output, so a switch
+     only changes two things: whether the microphone is captured, and whether the reply is
+     played. Both can change on a live session. The socket is not touched. */
+  if (m === 'text') {
+    listening = false;
+    try { if (micStream || micCtx) closeMic(); } catch (e) {}
+    try { micBtn.classList.remove('live', 'arming'); } catch (e) {}
+    if (sessionUp) {
+      setState('the door is open · type and read');
+      try { el('saytext').focus(); } catch (e) {}
+    } else {
+      setState('text mode · tap the circle to open the door');
+    }
+  } else {
+    if (sessionUp) {
+      // The tap that switched is the gesture, so the microphone can come back inside it.
+      setState('listening. speak whenever you like');
+      try { micBtn.classList.add('live'); } catch (e) {}
+      openMic().then(() => { try { openListening(); } catch (e) {} }).catch(() => {
+        hint('the microphone did not open · tap the circle');
+      });
+    } else {
+      setState('tap the circle to open the door');
+    }
+  }
 }
 
 (function wireTyped() {
