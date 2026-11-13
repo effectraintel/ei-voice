@@ -324,8 +324,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-13T01:40';
-const BUILD_NO = 187;
+const BUILD = '2026-11-13T21:20';
+const BUILD_NO = 188;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1090,15 +1090,54 @@ const DOOR_KEY = 'ei-door-session';
 // is two of everything. The tab that opens last takes the voice, and the others stand down and say so.
 const VOICE_KEY = 'ei.voice.owner';
 const MY_VOICE = LOG_SID + '.' + Date.now();
+// Build 188. The lease used to be one word, written once when a socket opened, and it outlived
+// the document that wrote it. localStorage survives a reload, so a page opened later inherited
+// "someone else holds the voice" from a door closed hours before and stood down against a tab
+// that was not there. 13 Nov 19:03 is exactly that: the fingerprint took nine seconds, the
+// four-second check fired before the socket opened, and the one thing that clears a stale lease
+// (a socket opening, which rewrites it) was the thing the stand-down prevented.
+// Two changes: the lease now carries the moment it was last renewed and is ignored once it is
+// older than LEASE_FRESH_MS, and this page claims the voice when he taps, not when the socket
+// finally opens.
+const LEASE_FRESH_MS = 12000;
+
+function leaseRead() {
+  try {
+    const raw = localStorage.getItem(VOICE_KEY);
+    if (!raw) return null;
+    let v = null;
+    try { v = JSON.parse(raw); } catch (e) {
+      // A lease written by an older build ("sid.stamp"): keep the id, and leave its age at the
+      // stamp it carries, so one written hours ago cannot block a door that is opening now.
+      v = { id: String(raw), at: Number(String(raw).split('.')[1] || 0) };
+    }
+    if (!v || typeof v !== 'object') return null;
+    return { id: String(v.id || ''), at: Number(v.at || 0) };
+  } catch (e) { return null; }
+}
+
+/* Who, other than this document, holds the voice right now. Empty means nobody: the lease is
+   ours, there is none, or the one on record stopped beating long enough ago to be a document
+   that is no longer here. */
+function otherVoiceHolder() {
+  const h = leaseRead();
+  if (!h || !h.id || h.id === MY_VOICE) return '';
+  if (!(Date.now() - h.at < LEASE_FRESH_MS)) return '';
+  return h.id;
+}
 
 function takeTheVoice() {
-  try { localStorage.setItem(VOICE_KEY, MY_VOICE); } catch (e) {}
+  try { localStorage.setItem(VOICE_KEY, JSON.stringify({ id: MY_VOICE, at: Date.now() })); } catch (e) {}
 }
 
 function standDown(why) {
   try {
     if (ws) { try { ws.close(); } catch (e) {} ws = null; }
     sessionUp = false; listening = false; busy = false;
+    // A door that has stood down is not speaking, so it must not keep renewing the room's hold:
+    // left beating, it would keep a room it does not use and hold the next door out for three
+    // minutes. (Build 188.)
+    try { stopRoomBeat(); } catch (e) {}
     try { micBtn.classList.remove('hot'); micBtn.classList.add('quiet'); } catch (e) {}
     try { stateEl.textContent = 'this door is open in another tab. that one has the voice.'; } catch (e) {}
     logLine('session.standdown', why || 'another door opened on this device', { level: 'info' });
@@ -1107,9 +1146,10 @@ function standDown(why) {
 
 try {
   window.addEventListener('storage', (e) => {
-    if (e.key === VOICE_KEY && e.newValue && e.newValue !== MY_VOICE) {
-      standDown('another tab took the voice at ' + String(e.newValue).split('.')[1]);
-    }
+    if (e.key !== VOICE_KEY) return;
+    if (!ws && !sessionUp) return;      // an idle tab is not speaking, so it has nothing to yield
+    const other = otherVoiceHolder();
+    if (other) standDown('another tab took the voice at ' + String(other).split('.')[1]);
   });
 } catch (e) {}
 
@@ -1239,8 +1279,11 @@ setInterval(() => {
 setInterval(() => {
   try {
     if (!ws && !sessionUp) return;
-    const owner = localStorage.getItem(VOICE_KEY);
-    if (owner && owner !== MY_VOICE) standDown('another door holds the voice: ' + String(owner).split('.')[1]);
+    const other = otherVoiceHolder();
+    if (other) { standDown('another door holds the voice: ' + String(other).split('.')[1]); return; }
+    // Beat the lease while this door is up, so a page that loads after this one can tell a door
+    // that is still here from one that was closed and forgotten. (Build 188.)
+    takeTheVoice();
   } catch (e) {}
 }, 4000);
 
@@ -1571,6 +1614,11 @@ async function openDoor() {
   // than none. Build 46.
   dbgFrames = 0; dbgSent = 0; dbgPeak = 0; dbgOpens = 0; dbgReplies = 0; dbgHeard = 0; dbgUnsought = 0;
   busy = true; connecting = true;
+  // Build 188: claim the voice at the tap. It used to be claimed in sock.onopen, two network
+  // round trips and a fingerprint later - long enough for the four-second lease check to fire
+  // against a lease left behind by a page that had already gone, which stood this door down
+  // before it ever opened. The newest tap wins, which is the rule this lease already had.
+  takeTheVoice();
   micBtn.classList.add('arming');
   bars.forEach(b => b.classList.remove('hot'));
   hint('');
