@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T13:22';
-const BUILD_NO = 208;
+const BUILD = '2026-11-14T13:32';
+const BUILD_NO = 209;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -884,7 +884,11 @@ window.addEventListener('DOMContentLoaded', () => {
 async function keepCurrent() {
   try {
     const last = Number(sessionStorage.getItem('ei-build-check') || 0);
-    if (Date.now() - last < 60000) { logPageLoad(); return; }
+    // 14 Nov 13:12: he reloaded while testing and the footer still read 207, twice. The check ran once a
+    // minute and he was reloading every few seconds, so the newer build was already published and the page
+    // never asked. GitHub Pages serves this file with max-age=600, so a plain reload can hand back the
+    // cached copy for ten minutes - the probe is the only thing that breaks out of it, and it was asleep.
+    if (Date.now() - last < 5000) { logPageLoad(); return; }
     sessionStorage.setItem('ei-build-check', String(Date.now()));
     // Edwin, 8 Nov 13:53: "I'm accessing from the live.html not with a build number." He should not have
     // to carry a version in the address. Two faults kept him on an old page: a held 30-minute door token
@@ -907,6 +911,15 @@ async function keepCurrent() {
       }
     }
     if (latest > BUILD_NO) {
+      // A stale CDN edge can serve the old page from the fresh address, and with a five-second check that
+      // would be a reload loop. If the address already asks for this build, wait instead of asking again.
+      const asked = (location.search.match(/[?&]v=(\d+)/) || [])[1];
+      if (asked && Number(asked) >= latest) {
+        logLine('page.waiting', 'build ' + latest + ' is published, this edge still serves '
+          + BUILD_NO + ' · holding, not reloading', { level: 'warn' });
+        logPageLoad();
+        return;
+      }
       sessionStorage.setItem('ei-build-check', '0');
       logLine('page.update', 'taking build ' + latest + ' over ' + BUILD_NO, { level: 'info' });
       // the outgoing page must not leave a socket behind: two sockets are two voices
