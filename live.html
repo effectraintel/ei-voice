@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T13:12';
-const BUILD_NO = 207;
+const BUILD = '2026-11-14T13:22';
+const BUILD_NO = 208;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4222,7 +4222,15 @@ function judgeClaim() {
       || (Date.now() - railToldAt < 20000);
     // Build 139: the truth, not a denial, when the song is already found and locked. On 10 Nov he was told
     // "I couldn't find that song right now" while Back in Black sat on his shelf with its link made.
-    if (shareCard && shareCard.title && /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found/i.test(t)) {
+    // 14 Nov 13:07: the door was deaf to "Pump pump the jam", the mouth covered for it with "Nothing was
+    // found on the rail", and this branch corrected him with "Back in Black is on your shelf" - a card left
+    // over from an earlier share. A correction has to be about the song he is actually asking for.
+    const aboutCard = (() => {
+      const hay = (String(t) + ' ' + String(lastSongWords || '')).toLowerCase();
+      const w = String(shareCard && shareCard.title || '').toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length > 3);
+      return w.length > 0 && w.some((x) => hay.indexOf(x) >= 0);
+    })();
+    if (shareCard && shareCard.title && aboutCard && /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found/i.test(t)) {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
         logLine('claim.found', t.slice(0, 160), { level: 'warn', target: 'rail-found' });
@@ -4788,10 +4796,42 @@ function noteSongAnswer(heard) {
       try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
       logLine('share.stale.cleared', 'a step with nothing behind it, let go', { level: 'warn', target: 'share' });
     } else {
-      // A real step is open, so the title is not searched. Say so: a silent swallow is exactly how
-      // 12 Nov 07:44 became invisible in the log, where four titles left no trace at all.
-      logLine('share.held', 'a step is open (' + shareStage + '), so "' + String(said).slice(0, 60) + '" was not searched', { level: 'warn', target: 'share' });
-      awaitSong = 0; return;
+      // A sheet is one step HE is typing into: the address and the message go in its own fields on screen.
+      // It is not permission for the door to stop hearing him. 14 Nov 13:06: a sheet was open, he said
+      // "ok another song then" and then "Pump pump the jam", and both were held - "a step is open (sheet),
+      // so ... was not searched" - so he asked for a song and the mouth told him the rail had found
+      // nothing. His words win: the sheet is set aside (nothing is sent, and the song stays on his shelf),
+      // unless what he said is an address or a message, which is exactly what the sheet exists to take.
+      const addrShaped = /@|\b(?:email|e-mail|mail|whatsapp|phone|number|cell)\b|(?:\+?\d[\d\s]{6,})/i.test(said);
+      const msgShaped = /^\s*(?:tell|say|write|message|note|wish|happy birthday|merry christmas|love you)\b/i.test(said);
+      const anotherSong = /\b(?:another|a different|different|other)\s+(?:song|one)\b|\bsomething else\b|\bnot (?:this|that) one\b/i.test(said)
+        && said.trim().split(/\s+/).length <= 8;
+      const setAsideShare = (why) => {
+        const was = (shareCard && shareCard.title) ? shareCard.title : 'a song';
+        shareStage = 'idle'; shareCard = null; shareCardTarget = null; shareQuery = '';
+        shareArt = { want: false, brief: '' }; shareArtTries = 0;
+        try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+        logLine('share.setaside', why + ' · "' + String(said).slice(0, 40) + '" · nothing was sent, '
+          + was + ' stays on his shelf', { level: 'warn', target: 'share' });
+      };
+      if (shareStage === 'sheet' && anotherSong) {
+        // "another song" is not a title, so it is not searched for one. It is a request for the song he
+        // wants instead, and the honest answer is to ask which one.
+        setAsideShare('sheet set aside, he wants another song');
+        awaitSong = Date.now();
+        doorNote('He has put that share aside and wants a different song. Nothing was sent and the sheet is '
+          + 'closed, so do not mention it. Ask which song he wants instead, one short line, and nothing else.', true);
+        return;
+      }
+      if (shareStage === 'sheet' && !addrShaped && !msgShaped) {
+        setAsideShare('sheet set aside, his words are a song and not an address');
+        // fall through: his words are searched
+      } else {
+        // A real step is open, so the title is not searched. Say so: a silent swallow is exactly how
+        // 12 Nov 07:44 became invisible in the log, where four titles left no trace at all.
+        logLine('share.held', 'a step is open (' + shareStage + '), so "' + String(said).slice(0, 60) + '" was not searched', { level: 'warn', target: 'share' });
+        awaitSong = 0; return;
+      }
     }
   }
   // Thinking aloud is not a song. "I'm still thinking about it" and "hold on" have no business reaching the
