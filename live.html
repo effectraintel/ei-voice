@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T22:20';
-const BUILD_NO = 227;
+const BUILD = '2026-11-14T23:05';
+const BUILD_NO = 228;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3232,9 +3232,23 @@ function readRoute(text, opts) {
   const first = acts[0];
   const songish = SONG_NOUN.test(t);
   const negMake = !!(made && actNegated(t, made.at));
-  const titled = /["\u201c\u2018][^"\u201d\u2019]{2,}["\u201d\u2019]/.test(raw)
+  const quoted = /["\u201c\u2018][^"\u201d\u2019]{2,}["\u201d\u2019]/.test(raw);
+  const titled = quoted
     || /\b(?:share|send|find|get|play)\b[^.?!]{0,30}\b[A-Z][a-z]{2,}/.test(raw)
     || TITLE_HINT.test(raw);
+  /* Build 228 - A QUESTION ABOUT THE WORLD IS NOT A SONG. 14 Nov 2026, 22:52: he typed "How can I get from
+     Ballito to Cape Town". "get" is the obtain act, and the words left over once the act and the filler were
+     stripped - "how ballito cape town" - counted as two substantial words, which is this reader's test for a
+     title. So the store was searched with the whole sentence and an MTShare card for "Waterfalls" landed on
+     the shelf beside the travel answer that was already correct. Nothing was made and nothing was paid, but
+     he got a song he never asked for.
+     The same fault fires on "how do I get to Durban from here", on directions, and on any "find/get/play" ask
+     whose object is a place or a thing rather than a song. Interrogative framing is the signal the words reader
+     was missing: "how/what/where/when/why/who/which" opening a sentence is him asking the door a question, not
+     naming a song. "can you play ..." is excluded because that IS a request. */
+  const quotedTitle = quoted;
+  const worldQuestion = /^\s*(?:how|what|where|when|why|who|whose|which|is|are|was|were|do|does|did|have|has|should)\b/i.test(raw)
+    || (/^\s*(?:can|could|would|will)\b/i.test(raw) && !/^\s*(?:can|could|would|will)\s+you\b/i.test(raw));
 
   /* An act aimed at nothing is not a song act. The object may be a song word anywhere, or a pronoun
      standing in for one just after the verb ("make a new ONE"). Without either, the sentence is about
@@ -3296,6 +3310,14 @@ function readRoute(text, opts) {
     /* For a share, the song he is sharing is the song he named, wherever in the sentence it sits:
        "new song share" names it before the act. For a make that would be wrong - the object of "make"
        is the thing made - which is why make reads only the word straight after the verb. */
+    /* Build 228: inside a question, only a real title marker settles a share. Interrogative framing means he is
+       asking the door something, and the store must not be handed the world's sentence. A quoted title, a
+       "by <Artist>", or the stores named is him pointing at one song even while asking; anything else is a
+       question, and the world rail answers it. "can you play ..." never gets here: it is a request. */
+    if (worldQuestion && !(quotedTitle || /\bby\s+[A-Z]/.test(raw) || STORE_NAME.test(t))) {
+      return { act: 'none', route: 'none', negMake, titled, namedTitle,
+        why: 'a question about the world, not a song' };
+    }
     if (aimedAtSong(first.at) || songish || namedTitle || titled || STORE_NAME.test(t) || (o.fork && bareAct(first.at))) {
       return { act: first.act, route: 'share', negMake, titled, namedTitle,
         why: first.act === 'obtain' ? 'he asks the door to find a song that exists' : 'he asks to share a song that exists' };
