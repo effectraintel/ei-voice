@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T15:55';
-const BUILD_NO = 215;
+const BUILD = '2026-11-14T16:20';
+const BUILD_NO = 216;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6776,7 +6776,13 @@ async function loadGarage(force) {
 
 async function putInGarage(cards) {
   const items = (cards || [])
-    .filter(c => c && (c.kind === 'song' || c.kind === 'store'))
+    /* Build 216. ONLY SONGS AND WRAPPED LINKS COULD BE PUT AWAY. A found page ('source') was filtered out
+       here, so clearOneCard fell through to rememberCleared() - a note in THIS browser's storage - and the
+       only thing that ever reads that note is the money rail. The shelf reader that redraws the row had no
+       idea the page had been cleared, so it handed it straight back on the next read. 14 Nov: he cleared the
+       Kimberley forecast at 13:21:29 and again at 13:22:04. A payment request stays out of this on purpose:
+       it is not a card on a shelf, it is a live thing with a status, and it is cleared by watching it. */
+    .filter(c => c && c.kind !== 'pay' && (c.song_id || c.code || c.url))
     .map(c => ({ kind: c.kind, ref: c.song_id || c.code || c.url || c.title,
                  title: c.title || 'a thing', subtitle: c.sub || '', url: c.url || '', sha: c.sha || '',
                  // Build 214. When this card ARRIVED. The garage already refuses to let an old removal
@@ -6859,6 +6865,7 @@ function renderGarage(el) {
 let lastCardsSig = '';    // what the shelf looked like last time, so an unchanged poll stays quiet
 let lastPaySig = '';
 async function refreshCards(force) {
+  if (clearing) return;                 // build 216: a read taken during a clear predates the clear
   if (!force && Date.now() - cardsAt < 8000) return;
   cardsAt = Date.now();
   try {
@@ -7325,7 +7332,13 @@ async function clearAllCards() {
   } catch (e) { return { ok: false }; }
 }
 
+/* Build 216. While a clear is in flight the row must not be repainted from a read taken before it landed.
+   The shelf polls every sixty seconds and after every turn, so with a clear that took nineteen seconds the
+   cards came back underneath his thumb and the tap looked like it had done nothing. (14 Nov 15:24.) */
+let clearing = false;
+
 function clearShelf() {
+  if (clearing) return;
   const n = shelf.length;
   // What is remembered across doors is a REQUEST: an open payment that keeps coming back is a
   // nag. A song or a wrapped link is a RECORD, so it is parked on the server, where he can ask
@@ -7337,14 +7350,29 @@ function clearShelf() {
   renderShelf();
   railNote(n ? 'shelf cleared \u00b7 ' + n + ' card' + (n === 1 ? '' : 's') + ' put away' : 'nothing on the shelf \u00b7 putting it all away');
   looked = 'the shelf \u00b7 cleared';
-  clearAllCards().then(d => {
-    loadGarage(true);
-    if (d && d.ok) {
-      railNote('shelf clear \u00b7 ' + (d.moved || 0) + ' in the garage' + (d.count ? ' \u00b7 ' + d.count + ' stored' : ''));
-    } else {
+  clearing = true;
+  // Thirty seconds is a guard, not the expectation: the cut lands in about a second and the parking behind
+  // it takes a few more. If the call does not answer, the row still tells him the truth and the cut may
+  // well have landed anyway - which is exactly why the cut is written first now.
+  Promise.resolve(withTimeout(clearAllCards(), 30000, 'the clear did not reach the garage'))
+    .then(d => {
+      clearing = false;
+      loadGarage(true);
+      if (d && d.ok) {
+        railNote('shelf clear \u00b7 ' + (d.moved || 0) + ' in the garage' + (d.count ? ' \u00b7 ' + d.count + ' stored' : ''));
+        // Read the shelf back from the record, then draw what it says. Drawing the array that happened to
+        // be on screen is what let a stale poll put cleared cards back under his thumb.
+        refreshCards(true).then(() => renderShelf());
+      } else {
+        railNote('the shelf could not be put away just now \u00b7 try again');
+        refreshCards(true).then(() => renderShelf());
+      }
+    })
+    .catch(() => {
+      clearing = false;
       railNote('the shelf could not be put away just now \u00b7 try again');
-    }
-  });
+      refreshCards(true).then(() => renderShelf());
+    });
 }
 
 function renderShelf() {
@@ -7438,15 +7466,24 @@ async function clearOneCard(card) {
   const i = shelf.findIndex(x => cardKey(x) === cardKey(card));
   if (i < 0) return;
   const [gone] = shelf.splice(i, 1);
-  if (gone.kind !== 'song' && gone.kind !== 'store') {
-    rememberCleared([gone.code].filter(Boolean));
-  }
+  /* Build 216. What can be put away on the record is what has a row behind it: a song (the vault), a wrapped
+     link and a found page (ShelfLink). A payment request has no shelf row of its own, so it keeps the
+     browser memory until the money rail settles it. Everything else is now parked, which is why a cleared
+     page finally stays cleared. */
+  const parkable = !!(gone.code || gone.song_id);
+  if (!parkable) rememberCleared([gone.code].filter(Boolean));
   renderShelf();
   railNote('shelf \u00b7 put away \u00b7 ' + (gone.title || 'one card'));
-  if (gone.kind === 'song' || gone.kind === 'store') {
-    const moved = await putInGarage([gone]);
+  if (parkable) {
+    await putInGarage([gone]);
+    // Prove it, do not assume it: the garage has just been read back, so the truth is in `garage`, not in
+    // the count the call returned. A card the garage quietly declined used to be reported as taken and
+    // then reappeared with no explanation. (Build 214 learned the same lesson about 'moved' + 'skipped'.)
     await loadGarage(true);
-    if (!moved) railNote('the garage did not take it just now \u00b7 it may come back on the next read');
+    const ref = String(gone.song_id || gone.code || '');
+    if (ref && !garage.some(g => String(g.ref) === ref)) {
+      railNote('the garage did not take it just now \u00b7 it may come back on the next read');
+    }
   }
 }
 
