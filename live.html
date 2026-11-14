@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T13:31';
-const BUILD_NO = 210;
+const BUILD = '2026-11-14T14:10';
+const BUILD_NO = 211;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2996,6 +2996,169 @@ function askSongFork() {
     + 'he picks one. Nothing about titles or artists yet: whether a song exists at all is the question.', true);
 }
 
+/* Build 211 · ONE PLACE DECIDES THE ROUTE.
+
+   14 Nov 2026, the dog show. In one day: "music" was searched as a song title; "eye of the tiger" was
+   matched against a list left over from three questions earlier; "new song share" was read as MAKE
+   because of the word "new"; "make a new one" was read as nothing at all because it names no song;
+   "stop" was searched as a title; and the mouth twice claimed the rail had not answered when the rail
+   had never been asked. Six builds, six patches, each one changing the input to two or three of the
+   others.
+
+   The cause was never any one of those. It was that SEVEN places each read his raw words with their own
+   pattern and each made its own decision: the fork, the route word list, the choice list, the sheet, the
+   claim guard, the correction cue, and the engine-ask arm. A stack like that is combinatorial. Every fix
+   adds an interaction, and the interactions are where the faults live.
+
+   So the route is now decided in ONE place, by ONE rule, and everything else renders its answer:
+
+     The route is the FIRST act he asks for, and what that act is aimed at.
+     A word inside a sentence is not an act. ("new song share" is a share: "new" is an adjective.)
+     An act with no noun is still an act when an object follows it. ("make a new one".)
+     An act aimed at no song at all is not a song act. ("I made a mistake.")
+
+   The rule reads meaning, not a word list, and it is the same rule the offline reader proved
+   (ei-chain/semantic.js: act + object, never a bare word). It cannot be bypassed: the fork, the route
+   gate and the search arm all ask this one function, so they cannot disagree with each other.
+
+   What it returns, and nothing else reads the words to decide a route:
+     { act, route, negMake, titled, why }
+       route: 'make' | 'make_then_share' | 'share' | 'ask' | 'none'
+*/
+const ACT_MAKE = ['make', 'makes', 'making', 'made', 'create', 'creates', 'creating', 'created',
+  'write', 'writes', 'writing', 'wrote', 'compose', 'composes', 'composing', 'sing', 'sings', 'singing',
+  'record', 'records', 'recording'];
+const ACT_SHARE = ['share', 'shares', 'sharing', 'shared', 'send', 'sends', 'sending', 'sent', 'forward'];
+const ACT_OBTAIN = ['find', 'finds', 'finding', 'get', 'gets', 'getting', 'search', 'searching', 'lookup',
+  'play', 'plays', 'playing', 'pull'];
+/* A song word anywhere in the sentence is what an act is aimed at. "hear" and "listen" are deliberately
+   absent: a sentence about hearing a song is a statement, not a request (proved offline: 5 of 6). */
+const SONG_NOUN = /\b(?:song|songs|tune|tunes|track|tracks|music|lyric|lyrics|melody|beat|beats|anthem)\b/i;
+/* Only pronouns that stand in for a song. "this" and "that" are left out on purpose: "write this down"
+   is a command about writing, not a song, and a list that cannot tell them apart routes nonsense. */
+const SONG_PRONOUN = /\b(?:one|it|something|anything|another|them)\b/i;
+const FRESH_HINT = /\b(?:new|brand new|fresh|from scratch|suno|different one)\b/i;
+const TITLE_HINT = /\b(?:by|called|named|titled)\s+[A-Za-z]/i;
+const STORE_NAME = /\b(?:music stores?|the stores?|stores?|shop|spotify|apple music|deezer|itunes|amazon music|youtube music|already (?:exists|out|made)|existing)\b/i;
+const NEG_BEFORE = /\b(?:not|don'?t|do not|doesn'?t|never|no longer|without)\b[^.?!]{0,20}$/i;
+
+/* Is the act at this position negated? Read backwards to the start of the clause, and never across a
+   full stop: "don't make a song, share one" negates the make, not the share. */
+function actNegated(t, at) {
+  const before = t.slice(Math.max(0, at - 40), at);
+  return NEG_BEFORE.test(before);
+}
+
+function readRoute(text, opts) {
+  const o = opts || {};
+  const raw = String(text || '');
+  const t = raw.toLowerCase();
+  const hit = (words) => {
+    let best = null;
+    for (const w of words) {
+      const re = new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+      let m;
+      while ((m = re.exec(t))) {
+        if (best === null || m.index < best.at) best = { at: m.index, word: m[0] };
+        if (m.index === re.lastIndex) re.lastIndex += 1;
+      }
+    }
+    return best;
+  };
+  const made = hit(ACT_MAKE);
+  const shared = hit(ACT_SHARE);
+  const found = hit(ACT_OBTAIN);
+
+  const acts = [];
+  if (made) acts.push({ act: 'make', at: made.at });
+  if (shared) acts.push({ act: 'share', at: shared.at });
+  if (found) acts.push({ act: 'obtain', at: found.at });
+  acts.sort((a, b) => a.at - b.at);
+
+  const first = acts[0];
+  const songish = SONG_NOUN.test(t);
+  const negMake = !!(made && actNegated(t, made.at));
+  const titled = /["\u201c\u2018][^"\u201d\u2019]{2,}["\u201d\u2019]/.test(raw)
+    || /\b(?:share|send|find|get|play)\b[^.?!]{0,30}\b[A-Z][a-z]{2,}/.test(raw)
+    || TITLE_HINT.test(raw);
+
+  /* An act aimed at nothing is not a song act. The object may be a song word anywhere, or a pronoun
+     standing in for one just after the verb ("make a new ONE"). Without either, the sentence is about
+     something else and the door stays out of it. */
+  /* WHAT THE ACT IS AIMED AT is the word right after it, not any word later in the sentence. This is the
+     difference between "make a SONG" and "make a MISTAKE in the last one": both had a song-ish word in
+     them, and only the first is about a song. */
+  const OBJECT_FILLER = /^(?:\s*(?:me|us|my|our|him|her|them|a|an|the|some|another|brand new|fresh|new|up|out)\b)+/i;
+  const objectWord = (at) => {
+    const after = t.slice(at).replace(/^\S+/, '').replace(OBJECT_FILLER, '').trim();
+    return (after.split(/[^a-z']+/)[0] || '');
+  };
+  const objectIsSong = (at) => {
+    const w = objectWord(at);
+    if (!w) return false;
+    if (SONG_NOUN.test(w)) return true;
+    return SONG_PRONOUN.test(w);
+  };
+  /* A phrase he named is a title. Without this, "share back in black from acdc" has no song word in it
+     and would be read as a bare ask, sending him back to a question he had already answered. */
+  const leftover = (() => {
+    let rest = t;
+    for (const w of ACT_MAKE.concat(ACT_SHARE, ACT_OBTAIN)) {
+      rest = rest.replace(new RegExp('\\b' + w + '\\b', 'gi'), ' ');
+    }
+    rest = rest.replace(/\b(?:i|we|you|me|us|my|our|please|just|can|could|would|will|do|to|for|of|with|the|a|an|some|it|that|this|now|then|and|from|by)\b/g, ' ')
+      // The song word and the intent words are what is LEFT when a title is absent, so they cannot be
+      // mistaken for one: "i want to share a song" leaves "want song", and neither is a title.
+      .replace(/\b(?:song|songs|tune|tunes|track|tracks|music|lyric|lyrics|melody|beat|beats|want|wanna|need|like|give|let|have|feel)\b/g, ' ')
+      .replace(/[^a-z0-9']+/gi, ' ').trim();
+    return rest;
+  })();
+  /* A leftover is a title only when it reads like one: two or more substantial words, or a capitalised
+     name. "i want to share a song" leaves "want", which is an intent, not a song, and treating that as a
+     title sent him straight past the question he needed to be asked. */
+  const leftoverTokens = leftover.split(/\s+/).filter(Boolean);
+  const substantial = leftoverTokens.filter((w) => w.length >= 4).length;
+  const namedTitle = (substantial >= 2) || /\b[A-Z][a-z]{2,}/.test(raw.replace(/^\S+/, ''));
+  /* A named title only settles a SHARE. For a make it is noise: the object of "make" is the thing made. */
+  const aimedAtSong = (at) => objectIsSong(at);
+  const bareAct = (at) => {
+    const word = t.slice(at).split(/[^a-z']+/)[0] || '';
+    const rest = t.replace(new RegExp('\\b' + word + '\\b', 'i'), ' ')
+      .replace(/\b(?:i|we|you|me|us|a|an|the|please|just|can|could|would|will|do|to|for|of|it|now|then|and)\b/g, ' ')
+      .replace(/[^a-z']+/g, ' ').trim();
+    return rest.length === 0;
+  };
+
+  if (first && first.act === 'make' && !actNegated(t, first.at)) {
+    // "make a song and share it" makes first, then shares: the route is the making.
+    const shareAfter = shared && shared.at > first.at && !actNegated(t, shared.at);
+    if (aimedAtSong(first.at) || (o.fork && (bareAct(first.at) || FRESH_HINT.test(t)))) {
+      return { act: 'make', route: shareAfter ? 'make_then_share' : 'make', negMake, titled,
+        why: shareAfter ? 'he wants a new song, and it goes out afterwards' : 'he asks for a song to be made' };
+    }
+    return { act: 'none', route: 'none', negMake, titled, why: 'a make with no song in it' };
+  }
+  if (first && (first.act === 'share' || first.act === 'obtain')) {
+    /* For a share, the song he is sharing is the song he named, wherever in the sentence it sits:
+       "new song share" names it before the act. For a make that would be wrong - the object of "make"
+       is the thing made - which is why make reads only the word straight after the verb. */
+    if (aimedAtSong(first.at) || songish || namedTitle || titled || STORE_NAME.test(t) || (o.fork && bareAct(first.at))) {
+      return { act: first.act, route: 'share', negMake, titled, namedTitle,
+        why: first.act === 'obtain' ? 'he asks the door to find a song that exists' : 'he asks to share a song that exists' };
+    }
+    return { act: 'none', route: 'none', negMake, titled, why: 'a share with no song in it' };
+  }
+  // No act he asked for (or the make was negated). A bare route word still answers the fork's question.
+  if (o.fork && (ROUTE_WORD_ONLY.test(t) || STORE_NAME.test(t))) {
+    return { act: 'share', route: 'share', negMake, titled, why: 'he answered where from: the stores' };
+  }
+  if (o.fork && negMake) {
+    return { act: 'share', route: 'share', negMake, titled, why: 'he ruled out making one, so it is the stores' };
+  }
+  return { act: 'none', route: 'none', negMake, titled, why: made && actNegated(t, made.at)
+    ? 'he ruled out making one' : 'no song act in the sentence' };
+}
+
 // The answer to the fork. Returns true when it took the turn (so the route gate does not guess again).
 // The cheap branch is the default: if the answer is still unclear after one more ask, the door treats it
 // as a store song, because a song shared by mistake costs nothing and a song made by mistake costs money.
@@ -3010,12 +3173,15 @@ function forkAnswer(heard) {
     songFork = Date.now();
     return false;
   }
-  const store = /\b(?:music stores?|the stores?|shop|spotify|apple music|deezer|itunes|amazon music|youtube music|already (?:exists|out|made)|existing)\b/.test(t)
-    // A bare route word answers the route question and nothing else: it is the stores, and it names no song.
-    || ROUTE_WORD_ONLY.test(t);
-  const neg = /\b(?:not|don'?t|do not|no)\b[^.?!]{0,25}\b(?:make|making|create|creating|write|writing|compose)\b/.test(t);
-  const makeWord = /\b(?:make|making|create|creating|write|writing|compose|composing)\b/.test(t) && !neg;
-  const fresh = /\b(?:new|brand new|fresh|from scratch|suno)\b/.test(t);
+  /* Build 211: the fork's answer is read by the ONE decider, so "new song share" can never become a make
+     because of the adjective "new", and "make a new one" can no longer be read as nothing at all. */
+  const read = readRoute(said, { fork: true });
+  const store = read.route === 'share';
+  const neg = read.negMake;
+  const makeWord = read.route === 'make' || read.route === 'make_then_share';
+  const fresh = false;
+  if (read.route !== 'none') logLine('song.read', read.route + ' \u00b7 ' + read.why,
+    { level: 'info', target: 'music' });
   const bare = /^(?:yes|yeah|yep|no|nope|nah|ok|okay|sure|please|fine)\b/.test(t) && t.split(/\s+/).length <= 4;
   // A hesitation is not a song title. "hmm" reaching the title branch would have sent it to the stores as a
   // query, and "you choose" would have ignored him: that answer is a deferral, and it takes the cheap branch.
@@ -3087,14 +3253,16 @@ function songRouteGate(heard) {
   const t = (cue >= 0 ? raw.slice(cue) : raw).toLowerCase();
   // A song is usually named as one ("share a song"), but he also names the track directly ("share I See
   // Fire with me"), so a share verb followed by a capitalised word counts as the same ask.
-  if (!/\bsong\b|\btune\b|\btrack\b/.test(t)
-      && !/\b(?:share|send)\b[^.?!]{0,30}\b[A-Z][a-z]{2,}/.test(String(heard || ''))) return;
+  /* Build 211: whether there is a route at all, and which one, is the decider's answer and nobody else's.
+     The word list that lived here could not hear "make a new one" and heard a make in "new song share". */
+  const read = readRoute(raw, { fork: false });
+  if (read.route === 'none') return;
   // Mid-flow turns (a picture answer, a name, an address) are not route choices. Only a fresh ask is.
   if (shareStage !== 'idle' && shareStage !== 'closed') return;
-  const negMake = /\b(?:not|don'?t|do not|no)\b[^.]{0,25}\b(?:make|making|write|writing|create)\b/.test(t)
-    || /\b(?:make|write|create)\w*\s+(?:nothing|no song)\b/.test(t);
-  const wantMake = /\b(?:make|making|write|writing|create|compose)\b/.test(t) && !negMake;
-  const wantShare = /\b(?:share|sharing|send|sending)\b/.test(t);
+  const negMake = read.negMake;
+  const wantMake = read.route === 'make' || read.route === 'make_then_share';
+  const wantShare = read.route === 'share';
+  logLine('song.read', read.route + ' \u00b7 ' + read.why, { level: 'info', target: 'music' });
   if (wantMake && wantShare) {
     songRoute = { pick: 'make_then_share', at: Date.now() };
     openSongBeat();
@@ -3109,11 +3277,14 @@ function songRouteGate(heard) {
   } else if (wantShare) {
     // 12 Nov 2026: "I want to share a song" names no origin, so the door asks the fork rather than deciding
     // that sharing means the stores. A title, a quoted name, or "the music stores" settles it without asking.
-    const namesStore = /\b(?:music stores?|the stores?|spotify|apple music|deezer|itunes|amazon music|youtube music|already (?:exists|out|made)|existing)\b/.test(t);
-    const namesTitle = /["\u201c\u2018][^"\u201d\u2019]{2,}["\u201d\u2019]/.test(raw)
-      || /\b(?:share|send)\b[^.?!]{0,30}\b[A-Z][a-z]{2,}/.test(raw);
+    const namesStore = STORE_NAME.test(t);
+    const namesTitle = read.titled || read.namedTitle;
     if (namesStore || namesTitle) {
       songRoute = { pick: 'share', at: Date.now() };
+      /* Build 211: when he names the song in the same breath as the ask, there is nothing left to ask
+         him. The route used to settle here and then hand the turn to a mouth with no title armed, so
+         "share back in black" searched nothing and the reply was a question he had already answered. */
+      if (namesTitle) awaitSong = Date.now();
       doorNote('The route is SHARING a song that already exists: nothing is made. Say so in one short line, '
         + 'then find the song he means by title or artist.', true);
     } else {
