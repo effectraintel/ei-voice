@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Journey log</title>
+<!--
+  The journey log (14 Nov 2026). Edwin: "I want to be able to have a view on the run as it happens
+  with a level of detail I decide. So we can log it to a new log location so that separately from
+  the current .../ei-voice/log.html"
+
+  A surface, not a capability: every line here was collected by the same eiTurnLog, under the
+  journey.* namespace, and grouped by run. The voice log is untouched and this page never appears
+  in it.
+
+  TWO THINGS THIS PAGE DELIBERATELY DOES NOT DO.
+  1. It never posts `clear`. The collector's clear drops the whole stream, which today also holds
+     the voice log. The button here clears the screen only.
+  2. It cannot show a detail level that was never sent. The dial starts at the emitter; this one
+     only narrows. A run logged at 1 has no step rows to reveal.
+-->
+<style>
+  :root { --bg:#14141c; --ink:#c7cbd1; --dim:#6b6e7a; --line:#23232e; --gold:#7b6fe0;
+          --live:#3fc9bd; --warn:#e0b45a; --bad:#e07b6a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  header { position:sticky; top:0; z-index:3; background:var(--bg); border-bottom:1px solid var(--line);
+           padding:10px 14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  h1 { font-size:10px; letter-spacing:.24em; text-transform:uppercase; color:#8d8f9a;
+       margin:0 6px 0 0; font-weight:600; }
+  select,input,button { background:#1b1b24; color:#e7e8ee; border:1px solid #2e2a35;
+       border-radius:6px; padding:6px 9px; font:inherit; }
+  input#q { flex:1 1 180px; min-width:120px; }
+  button { cursor:pointer; }
+  button.on { border-color:var(--gold); color:var(--gold); }
+  .dial { display:flex; gap:0; border:1px solid #2e2a35; border-radius:6px; overflow:hidden; }
+  .dial button { border:0; border-radius:0; padding:6px 8px; color:var(--dim); background:#1b1b24; }
+  .dial button + button { border-left:1px solid #2e2a35; }
+  .dial button.on { background:#241f3a; color:var(--gold); }
+  .meta { color:var(--dim); }
+  .live { color:var(--live); }
+  .live.stale { color:var(--warn); }
+  main { padding:10px 14px 40px; }
+  .run { border:1px solid var(--line); border-radius:8px; margin:0 0 12px; overflow:hidden; }
+  .run.now { border-color:#3a3358; }
+  .rhead { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; padding:8px 12px;
+           background:#181823; cursor:pointer; }
+  .rhead .rid { color:var(--gold); letter-spacing:.06em; }
+  .rhead .when { color:var(--dim); }
+  .rhead .tally { color:#8d8f9a; }
+  .rhead .spend { color:var(--warn); }
+  .rhead .caret { color:var(--dim); margin-left:auto; }
+  table { width:100%; border-collapse:collapse; }
+  tr.hide { display:none; }
+  td { padding:3px 12px; vertical-align:top; border-top:1px solid #1b1b24; }
+  .t { color:var(--dim); white-space:nowrap; }
+  .f { color:var(--dim); white-space:nowrap; width:1%; }
+  .x { color:#d7dae1; word-break:break-word; }
+  .x.you { color:#e7e8ee; }
+  .x.route { color:#a99cea; }
+  .x.hold { color:var(--warn); }
+  .x.end { color:var(--live); }
+  .chip { display:inline-block; border-radius:4px; padding:0 5px; margin-left:6px;
+          font-size:10px; letter-spacing:.08em; text-transform:uppercase; border:1px solid #2e2a35; color:var(--dim); }
+  .chip.render { border-color:#5b4a24; color:var(--warn); }
+  .chip.mail { border-color:#24424a; color:var(--live); }
+  .chip.money { border-color:#5b2424; color:var(--bad); }
+  .kv { color:#8d8f9a; padding:2px 0 0 0; }
+  .kv b { color:#b8bcc7; font-weight:600; }
+  .empty { color:var(--dim); padding:18px 2px; }
+  .faded { opacity:.55; }
+  tr.new td { animation:fade 1s ease-out; }
+  @keyframes fade { from { background:#1f1e2c; } to { background:transparent; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Journey log</h1>
+  <select id="run"><option value="">all runs</option></select>
+  <div class="dial" id="dial" title="how much detail to show">
+    <button data-d="0" title="what he said, and how it ended">0 result</button>
+    <button data-d="1" title="+ the route the door decided">1 acts</button>
+    <button data-d="2" title="+ every step of the flow">2 steps</button>
+    <button data-d="3" title="+ arguments, writes, refusal branches">3 full</button>
+  </div>
+  <input id="q" placeholder="filter">
+  <button id="clear" title="clears this screen only. The collector's clear would drop the voice log too, so this page never calls it.">clear view</button>
+  <span class="meta" id="hits"></span>
+  <span class="meta live" id="live">connecting</span>
+</header>
+<main>
+  <div class="empty" id="empty">reading the journey log…</div>
+</main>
+
+<script>
+var BASE = 'https://solene-7ba0f3a1.base44.app/functions/eiTurnLog';
+var rows = [];              // oldest first
+var since = '-';
+var paused = false;
+var dial = Number(localStorage.getItem('ei.journey.detail'));
+if (!(dial >= 0 && dial <= 3)) dial = 2;
+var onlyRun = '';
+var q = '';
+var openRuns = {};          // run id -> expanded
+var seen = 0;
+
+var mainEl = document.querySelector('main'),
+    emptyEl = document.getElementById('empty'),
+    hitsEl = document.getElementById('hits'),
+    liveEl = document.getElementById('live'),
+    runSel = document.getElementById('run'),
+    dialEl = document.getElementById('dial'),
+    qEl = document.getElementById('q');
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (m) {
+    return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[m];
+  });
+}
+function hhmmss(ts) {
+  try { return new Date(ts).toLocaleTimeString([], { hour12: false }); } catch (e) { return ''; }
+}
+function day(ts) { try { return new Date(ts).toLocaleDateString(); } catch (e) { return ''; } }
+
+// ---- collecting ------------------------------------------------------------------------------
+function keep(e) { return e && e.facility && e.facility.indexOf('journey.') === 0; }
+
+function merge(list) {
+  var have = {}, added = 0;
+  for (var i = 0; i < rows.length; i++) have[rows[i].id] = 1;
+  for (var j = 0; j < list.length; j++) {
+    var e = list[j];
+    if (!keep(e) || have[e.id]) continue;
+    rows.push(e); have[e.id] = 1; added++; seen++;
+  }
+  if (!added) return 0;
+  rows.sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+  if (rows.length > 4000) rows = rows.slice(-4000);
+  since = rows[rows.length - 1].id;
+  return added;
+}
+
+function get(url, cb) {
+  var x = new XMLHttpRequest();
+  x.open('GET', url, true);
+  x.onload = function () {
+    try { cb(JSON.parse(x.responseText)); } catch (e) { cb({ ok:false }); }
+  };
+  x.onerror = function () { cb({ ok:false }); };
+  x.send();
+}
+
+// ---- grouping --------------------------------------------------------------------------------
+function groups() {
+  var by = {}, order = [];
+  for (var i = 0; i < rows.length; i++) {
+    var e = rows[i], r = (e.extra && e.extra.run) || e.session || 'run';
+    if (!by[r]) { by[r] = { id: r, rows: [], first: e.ts, spend: {} }; order.push(r); }
+    by[r].rows.push(e);
+    var c = e.extra && e.extra.cost;
+    if (c && c !== 'free') by[r].spend[c] = (by[r].spend[c] || 0) + 1;
+  }
+  return order.map(function (r) { return by[r]; }).reverse();   // newest run first
+}
+
+// ---- rendering -------------------------------------------------------------------------------
+function wanted(e) {
+  var d = Number((e.extra && e.extra.detail) || 0);
+  return d <= dial;
+}
+
+function rowHtml(e) {
+  var f = e.facility.replace('journey.', '');
+  var kind = f === 'turn' ? 'you' : f === 'route' ? 'route' : f === 'hold' ? 'hold' : f === 'end' ? 'end' : '';
+  var chip = '';
+  var c = e.extra && e.extra.cost;
+  if (c) chip = '<span class="chip ' + esc(c) + '">' + esc(c) + '</span>';
+  var detail = '';
+  if (f === 'detail' && e.extra) {
+    var bits = [];
+    ['args','writes','gate','proves','on_fail'].forEach(function (k) {
+      var v = e.extra[k];
+      if (!v || v === '[]' || v === '{}') return;
+      bits.push('<div class="kv"><b>' + k.replace('_',' ') + '</b> ' + esc(v) + '</div>');
+    });
+    detail = bits.join('');
+  }
+  return '<tr data-d="' + esc((e.extra && e.extra.detail) || 0) + '">'
+    + '<td class="t">' + esc(hhmmss(e.ts)) + '</td>'
+    + '<td class="f">' + esc(f) + chip + '</td>'
+    + '<td class="x ' + kind + '">' + esc(e.text) + detail + '</td></tr>';
+}
+
+function render() {
+  var gs = groups();
+  var html = '';
+  var shown = 0;
+  for (var i = 0; i < gs.length; i++) {
+    var g = gs[i];
+    if (onlyRun && g.id !== onlyRun) continue;
+    var visible = g.rows.filter(function (e) {
+      return wanted(e) && (!q || (e.text + ' ' + JSON.stringify(e.extra || {})).toLowerCase().indexOf(q) >= 0);
+    });
+    if (!visible.length && (onlyRun || q)) continue;
+    var isNow = i === 0 && !onlyRun;
+    // the newest run is open by default; older ones open only when he clicked them
+    if (!(g.id in openRuns)) openRuns[g.id] = isNow;
+    var spend = Object.keys(g.spend).map(function (k) { return g.spend[k] + ' ' + k; }).join(' · ');
+    html += '<section class="run' + (isNow ? ' now' : '') + '">'
+      + '<div class="rhead" data-run="' + esc(g.id) + '">'
+      + '<span class="rid">' + (isNow ? 'now · ' : '') + esc(g.id) + '</span>'
+      + '<span class="when">' + esc(day(g.first)) + ' ' + esc(hhmmss(g.first)) + '</span>'
+      + '<span class="tally">' + g.rows.length + ' line' + (g.rows.length === 1 ? '' : 's') + '</span>'
+      + (spend ? '<span class="spend">spends: ' + esc(spend) + '</span>' : '')
+      + '<span class="caret">' + (openRuns[g.id] ? '▾' : '▸') + '</span>'
+      + '</div><table><tbody>';
+    if (openRuns[g.id]) {
+      for (var j = 0; j < g.rows.length; j++) {
+        if (!wanted(g.rows[j])) continue;
+        if (q && (g.rows[j].text + ' ' + JSON.stringify(g.rows[j].extra || {})).toLowerCase().indexOf(q) < 0) continue;
+        html += rowHtml(g.rows[j]);
+        shown++;
+      }
+    }
+    html += '</tbody></table></section>';
+  }
+  mainEl.innerHTML = html || '';
+  emptyEl.style.display = html ? 'none' : '';
+  if (!html) {
+    emptyEl.textContent = rows.length
+      ? 'nothing at this detail. ' + (dial < 3 ? 'The dial narrows what was sent, it cannot reveal what was not: try a higher level, or log the run at a higher one.' : 'no run matches the filter.')
+      : 'no journey lines yet. Run a rehearsal: node rehearse.js "..." and it appears here.';
+    if (!mainEl.contains(emptyEl)) mainEl.appendChild(emptyEl);
+  }
+  hitsEl.textContent = shown + ' of ' + rows.length + ' lines';
+
+  // the run picker, rebuilt only when the set changes
+  var opts = ['<option value="">all runs</option>'];
+  for (var k = 0; k < gs.length; k++) {
+    opts.push('<option value="' + esc(gs[k].id) + '"' + (onlyRun === gs[k].id ? ' selected' : '') + '>'
+      + esc(gs[k].id) + ' · ' + esc(hhmmss(gs[k].first)) + ' · ' + gs[k].rows.length + '</option>');
+  }
+  if (runSel.getAttribute('data-sig') !== opts.join('')) {
+    runSel.setAttribute('data-sig', opts.join(''));
+    runSel.innerHTML = opts.join('');
+  }
+
+  var ping = rows.length ? rows[rows.length - 1].ts : null;
+  var stale = !ping || (Date.now() - new Date(ping).getTime() > 60000);
+  liveEl.textContent = paused ? 'paused' : stale ? 'idle' : 'live';
+  liveEl.className = 'meta live' + (paused ? ' stale' : stale ? ' stale' : '');
+}
+
+// ---- following -------------------------------------------------------------------------------
+function follow() {
+  if (paused || !window.EventSource) return;
+  var url = BASE + '?stream=1&since=' + encodeURIComponent(since);
+  var es = new EventSource(url);
+  es.onmessage = function (ev) {
+    try {
+      var e = JSON.parse(ev.data);
+      if (merge([e])) render();
+    } catch (x) { /* a partial line is not a fault */ }
+  };
+  es.onerror = function () {
+    es.close();
+    liveEl.textContent = 'reconnecting';
+    setTimeout(function () { seed(false); }, 4000);
+  };
+}
+
+function seed(first) {
+  var url = BASE + '?facility=journey.&tail=1&limit=' + (first ? 400 : 200);
+  get(url, function (d) {
+    if (d && d.ok && d.entries) {
+      rows = [];                       // a reseed replaces, so a gap in the stream cannot double lines
+      merge(d.entries);
+      render();
+    }
+    follow();
+  });
+}
+
+// ---- controls --------------------------------------------------------------------------------
+document.querySelectorAll('#dial button').forEach(function (b) {
+  b.className = Number(b.getAttribute('data-d')) === dial ? 'on' : '';
+  b.onclick = function () {
+    dial = Number(b.getAttribute('data-d'));
+    localStorage.setItem('ei.journey.detail', String(dial));
+    document.querySelectorAll('#dial button').forEach(function (x) {
+      x.className = Number(x.getAttribute('data-d')) === dial ? 'on' : '';
+    });
+    render();
+  };
+});
+
+runSel.onchange = function () { onlyRun = runSel.value; render(); };
+qEl.oninput = function () { q = qEl.value.trim().toLowerCase(); render(); };
+
+document.getElementById('clear').onclick = function () {
+  // the screen, not the stream: the collector's clear would also drop the voice log
+  rows = []; since = '-'; openRuns = {}; render();
+  seed(false);
+};
+
+mainEl.addEventListener('click', function (ev) {
+  var h = ev.target.closest ? ev.target.closest('.rhead') : null;
+  if (!h) return;
+  var id = h.getAttribute('data-run');
+  openRuns[id] = !openRuns[id];
+  render();
+});
+
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) seed(false);
+});
+
+seed(true);
+setInterval(function () { if (!paused) render(); }, 15000);
+</script>
+</body>
+</html>
