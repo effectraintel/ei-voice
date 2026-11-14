@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-15T00:20';
-const BUILD_NO = 234;
+const BUILD_NO = 235;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6605,14 +6605,20 @@ async function drawDescent() {
     if (r && r.cover_url) {
       shareArt.url = r.cover_url;
       saveDraft(); saveArtBrief(reqId);
-      mergeCard({ kind: 'cover', title: 'The picture for ' + (card.title || 'the song'),
-        sub: shareArt.brief ? 'from your words' : 'from the song', url: r.cover_url, img: r.cover_url,
-        code: 'cover-' + (reqId || 'door') });
+      /* Build 235 · ONE DRAWING, ONE CARD.
+         Edwin, 15 Nov 2026, 00:51: "drop it, If i decide to have pictures shared separately again then we
+         can bring that in again." The drawing went onto the shelf as its own card while the song card
+         carried the same image, so one picture showed twice - the fault he named at 23:11 for a looked-up
+         answer, whose card already holds everything a second card would say. A cover belongs to its song:
+         it shows on the song's card, it rides with the song when that is shared, and the record keeps it
+         on the request so the card is born with it on every read (build 217). The picture is not lost by
+         this: it is where it belongs. */
       if (shareCard) shareCard.img = r.cover_url;
+      renderShelf();
       logLine('made.descent.drawn', r.cover_url, { level: 'info', target: 'coverDraw' });
-      railNote('descent · drawn · with the song on his shelf');
-      doorNote('the picture he said yes to is drawn and it is with the song on his shelf. Say one short line '
-        + 'that it is there. Do not describe it in detail and do not offer another one.', false);
+      railNote('descent · drawn · on the song');
+      doorNote('the picture he said yes to is drawn and it is on the song, on his shelf. Say one short line '
+        + 'that it is there, on the song. Do not describe it in detail and do not offer another one.', false);
     }
   } catch (e) {
     logLine('made.descent.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'coverDraw' });
@@ -7115,11 +7121,12 @@ async function handleShareToCall(call) {
         title: card.title || '', to_name: shareDraft.to_name || '', to_masked: r.to_masked || '',
         channel: 'email', message_id: r.message_id || '', cover: !!r.cover_url, at: new Date().toISOString(),
       });
-      if (r.cover_url) mergeCard({ kind: 'cover', title: 'The cover for ' + (card.title || 'the song'), sub: 'drawn from the song and your words', url: r.cover_url, code: 'cover-' + (r.message_id || Date.now()) });
+      /* Build 235: a picture drawn here and sent with the mail is not a shelf item either. It went out
+         inside the message; the shelf keeps the send, not the wrapping. */
       railNote('shared · email · ' + (card.title || '') + ' · ' + (r.to_masked || '') + (r.cover_url ? ' · with a cover' : ''));
       result = 'Sent by email to ' + (shareDraft.to_name ? shareDraft.to_name : 'them') + ' (' + (r.to_masked || 'the address')
         + '), message id ' + (r.message_id || '') + (r.cover_url ? ', with the cover drawn into it' : ', no cover')
-        + '. Say it in one line: it has gone, and the cover is on the shelf if he wants to look. Do not read the address out.';
+        + '. Say it in one line: it has gone' + (r.cover_url ? ', with its picture drawn in' : '') + '. Do not read the address out.';
       looked = 'sharing · sent';
       shareDraft = null; shareCoverAsked = false; shareAddrOk = false; shareAddrTries = 0;
       return;
@@ -7558,7 +7565,13 @@ async function refreshCards(force) {
     }
     if (!d || !d.ok || !Array.isArray(d.cards)) return;
     // Oldest first, because shelfAdd puts each one at the front: the newest song ends up on top.
-    for (const c of d.cards.slice().reverse()) mergeCard(c);
+    for (const c of d.cards.slice().reverse()) {
+      /* Build 235: a picture is not a shelf item of its own. A row written by an older build is skipped
+         here rather than deleted, so the rule holds for what is already stored and the record is left
+         intact - the song's card carries the same picture. */
+      if (/^cover$/i.test(String((c && c.kind) || ''))) continue;
+      mergeCard(c);
+    }
     return d;
   } catch (e) { /* a shelf that cannot be read is quiet, not an error */ }
 }
