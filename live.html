@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T16:20';
-const BUILD_NO = 216;
+const BUILD = '2026-11-14T16:40';
+const BUILD_NO = 217;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4627,6 +4627,7 @@ async function handleShareCall(call) {
               ? 'made here · a day of listening'
               : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
             url: r.url, code: r.code || '', song_id: r.song_id || '', sha: r.sha || '',
+            img: r.art || r.cover_url || '',   // build 217: the picture the rail already had, so the card is born complete
           });
           result = shareResultLine(r);
           looked = 'sharing · ' + (r.title || 'a song');
@@ -4786,6 +4787,7 @@ async function handleShareCall(call) {
           ? 'made here · a day of listening'
           : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
         url: r.url, code: r.code || '', song_id: r.song_id || '', sha: r.sha || '',
+        img: r.art || r.cover_url || '',   // build 217: the picture the rail already had, so the card is born complete
       };
       mergeCard(cardNow);
       shareSongLocked(cardNow);
@@ -5332,6 +5334,7 @@ function noteSongAnswer(heard) {
               ? 'made here · a day of listening'
               : [r.artist, r.album].filter(Boolean).join(' · ') + (r.platform_text ? ' · ' + r.platform_text : ''),
             url: r.url, code: r.code || '', song_id: r.song_id || '', sha: r.sha || '',
+            img: r.art || r.cover_url || '',   // build 217: the picture the rail already had, so the card is born complete
           };
           if (!wordsCover(said, r.title || '')) {
             // his words and the found name do not meet: the ear may have got a word wrong
@@ -5379,6 +5382,7 @@ function noteSongAnswer(heard) {
             ? 'made here · a day of listening'
             : [c.artist, c.album].filter(Boolean).join(' · ') + (c.platform_text ? ' · ' + c.platform_text : ''),
           url: c.url, code: c.code || '', song_id: c.song_id || '', sha: c.sha || '',
+          img: c.art || c.cover_url || '',   // build 217: the picture the rail already had, so the card is born complete
         };
         if (lastSongWords && !wordsCover(lastSongWords, planned.title)) {
           askAboutCard(planned, lastSongWords);
@@ -5710,8 +5714,15 @@ function resolveChoice(heard) {
       sub: c.found === 'shelf' ? 'made here · a day of listening'
         : [c.artist, c.album].filter(Boolean).join(' · ') + (c.platform_text ? ' · ' + c.platform_text : ''),
       url: c.url, code: c.code || '', song_id: c.song_id || '', sha: c.sha || '',
+      img: c.art || c.cover_url || '',   // build 217: the picture the rail already had, so the card is born complete
     };
     mergeCard(card);
+    /* Build 217. A store card always has art and a made song's picture is drawn later, at the landing. So a
+       missing picture on a store card means the rail answered with less than it knows: ask the record once,
+       now, instead of leaving a blank square for the next poll. One read, no money, nothing invented. */
+    if (!card.img && card.kind === 'store') {
+      refreshCards(true).then(() => renderShelf()).catch(() => {});
+    }
     railAnsweredAt = Date.now();
     shareSongLocked(card);
     railNote('share · ' + (c.found || 'wrapped') + ' · ' + (card.title || ''));
