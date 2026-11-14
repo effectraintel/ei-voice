@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T23:50';
-const BUILD_NO = 230;
+const BUILD = '2026-11-15T00:05';
+const BUILD_NO = 231;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -585,7 +585,7 @@ const DECLS = [{
                  all (measured: groundingChunks 0 in the live audio session), so a fact answered that way can
                  never be shown with its source. Asked here, the rail returns the facts and the links that
                  back them, and the door puts both on his shelf. */
-              description: 'The search rail: anything about the world outside his house. Use it FIRST for a score, a result, a price, a news event, a date, a person, or anything happening now, and for the weather. It answers with the facts and the source links behind them, and the door puts what it found on his shelf for him to open. Speak only from the facts it returns and name the source it names. Never answer a world question from memory and never name a source you were not given. Not for his own rooms, family, money or records: that is house. Never for a question about the door itself, its rail, its shelf or why something just happened: the web knows nothing about this door, so answer from what you did, or say you do not know.',
+              description: 'The search rail: anything about the world outside his house. Use it FIRST for a score, a result, a price, a news event, a date, a person, or anything happening now, and for the weather. It answers with the facts and the source links behind them, and the door puts what it found on his shelf for him to open. For a map of a place - "map of Japan", "where is Durban on a map" - it answers with a map he can open. Speak only from the facts it returns and name the source it names. Never answer a world question from memory and never name a source you were not given. Not for his own rooms, family, money or records: that is house. Never for a question about the door itself, its rail, its shelf or why something just happened: the web knows nothing about this door, so answer from what you did, or say you do not know.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
@@ -690,6 +690,7 @@ const BRIEF = NO_CLAIM +
   'For anything about the world outside his house - a price, a score, a result, a news event, a date, who '
   + 'someone is, anything happening now - call the world tool. It searches, and what it finds lands on his '
   + 'shelf with the sources it came from, so say in a few words that it is on his shelf and let him open it. '
+  + 'When he asks for a map of a place, call the world tool: a map lands on his shelf as a card that opens it, and you never describe the map, because you cannot see one. '
   + 'Answer from what it returns, name the source it names, and never fill a gap with what you already knew. '
   + 'A question about the door itself, such as why something just happened, is never a world question: do not call the world tool for it. Say only what you actually did this conversation, and if you do not know why, say you do not know. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
@@ -4095,7 +4096,11 @@ function shelfTruth() {
     // Build 143: songs and found links are on the shelf too. This line used to name only money cards, so a
     // shelf holding his songs read as a shelf holding nothing he had made.
     const songs = cards.filter((c) => c.kind === 'song' || c.kind === 'made');
-    const found = cards.filter((c) => c.kind === 'store');
+    /* Build 231: a looked-up card and a map are on his shelf too, and the mouth cannot name what it is not
+       told. Before this only store links were listed under "found", so the door spoke as if a shelf holding
+       three findings was a shelf holding nothing he could open. */
+    const found = cards.filter((c) => c.kind === 'store' || c.kind === 'map' || c.kind === 'fact'
+      || c.kind === 'source' || c.kind === 'link');
     let line = 'The shelf in front of him holds ' + cards.length + ' card' + (cards.length === 1 ? '' : 's') + '.';
     if (songs.length) line += ' Made here, and playable from it: ' + said(songs) + '.';
     if (found.length) line += ' Found elsewhere: ' + said(found) + '.';
@@ -4166,7 +4171,41 @@ async function handleWorldCall(call) {
       body: JSON.stringify({ q: ask, kind }),
     }).then((x) => x.json());
     worldLookedAt = Date.now();
-    if (!r || !r.ok) {
+    if (r && r.ok && r.kind === 'map' && r.map_url) {
+      /* Build 231 - A MAP IS NOT A FACT. 14 Nov 2026: "map of Japan" came back as a news item about a map
+         (Japan protesting a UN-backed world map over the Kuril Islands) and "map of South Africa" as a note
+         about the 1994 redrawing of the provinces. Both true, and neither is a map: no sentence can be a map.
+         The rail resolves the place and hands back the map at it, and the card is a normal link card - so it
+         opens, it copies, it shares, and it can be put away, which is what "I can do nothing with it" was
+         about. */
+      const place = String(r.place || ask);
+      const mapCard = {
+        kind: 'map',
+        title: 'Map of ' + place,
+        sub: 'a map you can open \u00b7 ' + clockNow(),
+        url: String(r.map_url),
+        note: 'tap it to open the map',
+        when: new Date().toISOString(),
+        detail: {
+          ask: String(ask || ''),
+          place,
+          engine: String(r.engine || ''),
+          as_of: String(r.as_of || ''),
+          sources: ((r && Array.isArray(r.sources)) ? r.sources : [])
+            .filter((s) => s && /^https?:\/\//i.test(String(s.url || '')))
+            .slice(0, 5).map((s) => ({ title: String(s.title || s.url).slice(0, 180), url: String(s.url) })),
+        },
+      };
+      shelfAdd(mapCard);
+      keepFound(mapCard);
+      shelfWriteAt = Date.now();
+      shelfWriteKind = 'fact';
+      looked = 'the world \u00b7 a map';
+      logLine('world.map', place + ' \u00b7 ' + mapCard.url.slice(0, 90), { level: 'info', target: 'world' });
+      result = 'A card with a map of ' + place + ' is on his shelf now, and tapping it opens the map. Say in '
+        + 'one short line that the map is on his shelf and that he can open it. Do not describe what the map '
+        + 'shows, because you cannot see it, and never say the links are beside the card.';
+    } else if (!r || !r.ok) {
       result = 'the world lookup returned nothing for "' + ask + '"'
         + (r && r.error ? ' (' + r.error + ')' : '')
         + '. Say plainly that you have not looked and could not see it. Never invent the fact and never name a source.';
@@ -6571,8 +6610,41 @@ function songArtPrompt(card) {
   return bits.join(', ') + '.';
 }
 
+/* Build 231. THE RECORD HANDS A CARD BACK WITH ITS DETAIL AS TEXT.
+   14 Nov 2026: shelfCards passes `detail` on as the JSON string the row holds, and nothing in the page ever
+   parsed it. So a card that came back from the record had a detail that was a STRING: `it.detail.facts` was
+   undefined, the card drew no "read" badge, tapping its own words did nothing, and the sources travelling
+   inside it were invisible. Edwin: "I can do nothing with it. No links etc."
+   A card is a view; the record is the thing. Both places read it through here now, so a card cannot be rich
+   when the door just made it and empty the moment it is read back. */
+function detailOf(it) {
+  let d = it && it.detail;
+  if (typeof d === 'string') {
+    try { d = JSON.parse(d); } catch (e) { d = null; }
+  }
+  return (d && typeof d === 'object') ? d : {};
+}
+// The links a finding came with, held to the only shape a link can open in.
+function srcLinks(d) {
+  const list = (d && Array.isArray(d.sources)) ? d.sources : [];
+  return list
+    .filter((s) => s && /^https?:\/\//i.test(String(s.url || '')))
+    .slice(0, 5)
+    .map((s) => ({ title: String(s.title || s.url).slice(0, 180), url: String(s.url) }));
+}
 function cardPayload(c) {
-  return { title: c.title || '', sub: c.sub || '', url: c.url || '', code: c.code || '', song_id: c.song_id || '' };
+  /* A looked-up card owns no url: it owns an answer and the links behind it, and the rail cannot send what
+     it is never told. They travel with the payload now (build 231). */
+  const d = detailOf(c);
+  const facts = (Array.isArray(d.facts) ? d.facts : (d.facts ? [String(d.facts)] : []))
+    .map((f) => String(f)).filter(Boolean).slice(0, 6);
+  const sources = srcLinks(d);
+  return { title: c.title || '', sub: c.sub || '', url: c.url || '', code: c.code || '', song_id: c.song_id || '',
+    ...(String(d.ask || '') ? { ask: String(d.ask) } : {}),
+    ...(String(d.engine || '') ? { engine: String(d.engine) } : {}),
+    ...(String(d.as_of || '') ? { as_of: String(d.as_of) } : {}),
+    ...(facts.length ? { facts } : {}),
+    ...(sources.length ? { sources } : {}) };
 }
 
 // Spoken addresses do not arrive as addresses. On 8 Nov a run produced "etwin fun sale", "A2 and fans
@@ -7399,7 +7471,7 @@ function openSheet(url, heading) {
 function openFact(it) {
   const was = document.getElementById('factview');
   try { if (was) was.remove(); } catch (e) { /* no panel open: nothing to replace */ }
-  const d = (it && it.detail) || {};
+  const d = detailOf(it);   // build 231: the record's detail arrives as text, and this is the one reader
   const facts = Array.isArray(d.facts) ? d.facts : (d.facts ? [String(d.facts)] : []);
   const el = document.createElement('div');
   el.id = 'factview';
@@ -7421,8 +7493,7 @@ function openFact(it) {
   box.appendChild(h); box.appendChild(s); box.appendChild(body);
   /* Build 222. The sources, as links he can open. The card said "with links to sources" before there were
      any; this is the panel that has to make the sentence true. */
-  const srcs = (Array.isArray(d.sources) ? d.sources : [])
-    .filter((x) => x && /^https?:\/\//i.test(String(x.url || '')));
+  const srcs = srcLinks(d);
   if (srcs.length) {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'margin-top:15px;padding-top:12px;border-top:1px solid #2a261f';
@@ -7597,6 +7668,44 @@ function openShareSheet(card, art) {
       artLine.textContent = 'this song already has a picture. send it with that, or draw a new one.';
     }
   }
+  /* Build 231. "When I click share there is also no details." A looked-up card's sheet asked for an address
+     and told him nothing about what was about to go: the answer and the links it came from were invisible on
+     the very screen that was going to send them. So the sheet shows what will go - the first line of the
+     answer, and the sources as tappable links - before it asks him anything. */
+  const sheetDet = detailOf(card);
+  const sheetFacts = (Array.isArray(sheetDet.facts) ? sheetDet.facts : (sheetDet.facts ? [String(sheetDet.facts)] : []))
+    .map(String).filter(Boolean);
+  const sheetLinks = srcLinks(sheetDet);
+  let sheetWhat = null;
+  if (!isSong && (sheetFacts.length || sheetLinks.length)) {
+    sheetWhat = document.createElement('div');
+    sheetWhat.style.cssText = 'margin:0 0 12px;padding:10px 11px;border:1px solid #2f2b24;border-radius:9px;background:#12110e';
+    const lab = document.createElement('div');
+    lab.textContent = 'what will go';
+    lab.style.cssText = 'font-size:9.5px;letter-spacing:.13em;color:#8f8577;margin-bottom:6px';
+    sheetWhat.appendChild(lab);
+    if (sheetFacts.length) {
+      const p = document.createElement('div');
+      const one = sheetFacts[0];
+      p.textContent = one.length > 320 ? one.slice(0, 319) + '\u2026' : one;
+      p.style.cssText = 'font-size:12px;line-height:1.5;color:#ded5c2';
+      sheetWhat.appendChild(p);
+    }
+    for (const one of sheetLinks.slice(0, 3)) {
+      const a = document.createElement('a');
+      a.href = one.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = String(one.title || one.url).slice(0, 80);
+      a.style.cssText = 'display:block;font-size:11.5px;line-height:1.5;color:#c9a86a;text-decoration:none;'
+        + 'padding:4px 0;word-break:break-word';
+      sheetWhat.appendChild(a);
+    }
+    if (sheetLinks.length > 3) {
+      const more = document.createElement('div');
+      more.textContent = 'and ' + (sheetLinks.length - 3) + ' more';
+      more.style.cssText = 'font-size:11px;color:#8f8577;padding-top:3px';
+      sheetWhat.appendChild(more);
+    }
+  }
   const status = document.createElement('div');
   status.style.cssText = 'font-size:11px;color:#9b9182;min-height:15px;margin:8px 0';
   const row = document.createElement('div');
@@ -7691,7 +7800,9 @@ function openShareSheet(card, art) {
     }
   };
   row.appendChild(close); row.appendChild(send);
-  box.appendChild(h); box.appendChild(artLine);
+  box.appendChild(h);
+  if (sheetWhat) box.appendChild(sheetWhat);
+  box.appendChild(artLine);
   if (isSong) { box.appendChild(artChoice); box.appendChild(artText); }
   box.appendChild(to); box.appendChild(msg); box.appendChild(status); box.appendChild(row);
   // Whatever he taps, he ends up typing somewhere useful. The target of the tap decides which field.
@@ -7991,7 +8102,9 @@ function cardShell(it, label) {
 function drawCards(el) {
   el.innerHTML = '';
   shelf.forEach((it) => {
-    const k = it.kind === 'thought' ? 'thinking about' : (it.kind === 'fact' ? 'looked up' : (it.kind || 'link'));
+    const k = it.kind === 'thought' ? 'thinking about'
+      : (it.kind === 'fact' ? 'looked up'
+        : (it.kind === 'map' ? 'a map you can open' : (it.kind || 'link')));
     const { card, body } = cardShell(it, k);
     const t = document.createElement('span'); t.className = 't'; t.textContent = it.title;
     const d = document.createElement('span'); d.className = 'd';
@@ -8033,21 +8146,29 @@ function drawCards(el) {
       /* Build 220. A card that carries detail opens on a tap of its own words, the same way a sheet card does:
          he should not have to find a badge to read what the door found. The badge is still there, because an
          affordance he can see is what stops "I see it but I tap it and nothing happens". */
-      if (it.detail && (it.detail.facts || it.detail.ask)) {
+      /* Build 231: read through detailOf, so a card the record handed back is as openable as one the door
+         just made. And the face says how many links are inside it, because "no links" was his complaint and
+         a link he cannot see is a link he does not have. */
+      const det = detailOf(it);
+      const inside = srcLinks(det);
+      if (det.facts || det.ask) {
         const b = document.createElement('button');
         b.type = 'button';
         b.style.cssText = 'all:unset;display:block;cursor:pointer;min-width:0';
         b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openFact(it); };
         b.appendChild(t); body.appendChild(b);
       } else body.appendChild(t);
-      if (it.sub) { d.textContent = it.sub; body.appendChild(d); }
-      else if (it.note) { d.textContent = it.note; body.appendChild(d); }
+      const face = it.sub || it.note || '';
+      const withLinks = face + (inside.length
+        ? (face ? ' \u00b7 ' : '') + inside.length + (inside.length === 1 ? ' link inside' : ' links inside')
+        : '');
+      if (withLinks) { d.textContent = withLinks; body.appendChild(d); }
       // Build 154, Edwin 21:39: "Not coming through on the shelf..." The share chip was only drawn for a card
       // that had a url, and a song made here has no store link - so the one card that most needs the sheet, the
       // song he just made, had no way to open it. Every card can be shared now, and a song opens the sheet with
       // the cover question on it.
       const acts = document.createElement('div'); acts.className = 'acts';
-      if (it.detail && (it.detail.facts || it.detail.ask)) {
+      if (det.facts || det.ask) {
         const read = document.createElement('button');
         read.className = 'copy read'; read.type = 'button'; read.textContent = 'read';
         read.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openFact(it); };
