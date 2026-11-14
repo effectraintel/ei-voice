@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T21:10';
-const BUILD_NO = 223;
+const BUILD = '2026-11-14T21:25';
+const BUILD_NO = 224;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -9332,6 +9332,31 @@ function warmDoor(why) {
   try { lastOpenAt = 0; openDoor().catch(() => {}); } catch (e) {}
 }
 
+/* Build 224. Put the caret back in the line, and nothing else.
+
+   preventScroll is the whole point of the options object. Plain focus() on iOS scrolls the focused
+   field into view, and on 13 Nov that pan (offsetTop 367 on a 249px room) is what left his screen
+   black. A focus that does not move the page is the only kind this door may use.
+
+   It is honest about failure: if the line is not focusable right now - the mode switched under the
+   turn, the sheet is holding the room - it says so and does nothing. It never steals focus from a
+   field he is already typing in (the sheet's address line, the picture brief). */
+function keepTyping() {
+  if (!typed()) return false;
+  let box = null;
+  try { box = el('saytext'); } catch (e) { return false; }
+  if (!box || box.hidden) return false;
+  try {
+    const here = document.activeElement;
+    if (here && here !== box && (here.tagName === 'INPUT' || here.tagName === 'TEXTAREA') && here.id !== 'saytext') {
+      // the sheet's own field has the room; the send did not come from there
+      return false;
+    }
+  } catch (e) {}
+  try { box.focus({ preventScroll: true }); } catch (e) { try { box.focus(); } catch (err) {} }
+  try { return document.activeElement === box; } catch (e) { return true; }
+}
+
 function sendTyped() {
   if (MODE !== 'text') return false;
   const box = el('saytext');
@@ -9339,9 +9364,18 @@ function sendTyped() {
   if (!text) return false;
   box.value = '';
   try { appendLive('you', text); } catch (e) {}
-  /* Build 191, in his words: "when you do send the message the keyboard goes away again." The line
-     is sent, so the keys have no job left; the room comes back and with it the shelf and the modes. */
-  try { box.blur(); } catch (e) {}
+  /* Build 224. THE LINE KEEPS THE KEYS.
+
+     14 Nov 2026, in his words: "Every time I press send on the chat text box it looses focus." The
+     blur that did it was build 191's, and it was deliberate: that build read "when you do send the
+     message the keyboard goes away again" as a complaint about the room and nothing else, so it sent
+     the keys away on purpose and brought the shelf and the modes back.
+
+     Build 203 removed the reason. The room now has a layout for a keyboard that is up - shelf and
+     modes step aside, the conversation takes the screen - so the keys are no longer in the way, and
+     the chevron is the way down for when he does want them gone. A send is not a request to stop
+     typing; it is the middle of a conversation. */
+  keepTyping();
   if (!ws || ws.readyState !== 1 || !sessionUp) {
     logLine('door.send.wait', 'the door was not ready: '
       + (ws ? 'socket ' + ws.readyState : 'no socket')
@@ -9351,8 +9385,13 @@ function sendTyped() {
     if (!busy && !connecting) {
       lastOpenAt = 0;                     // he asked now; the two-second double-tap guard does not apply
       setState('the door was shut \u00b7 opening it for this line');
-      openDoor().catch(() => {
+      openDoor().then(() => {
+        /* Build 224. The line waited; the keys should not have gone while it did. Opening the door
+           redraws the room, so the caret is put back deliberately rather than hoped for. */
+        keepTyping();
+      }).catch(() => {
         setState('the door did not open \u00b7 tap the circle and this line goes');
+        keepTyping();
       });
     } else {
       setState('the door is opening \u00b7 your line goes as soon as it is');
