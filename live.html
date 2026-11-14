@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T23:05';
-const BUILD_NO = 228;
+const BUILD = '2026-11-14T23:25';
+const BUILD_NO = 229;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4134,12 +4134,13 @@ async function handleWorldCall(call) {
     } else {
       const facts = (r.facts || []).join(' ');
       const srcList = ((r && Array.isArray(r.sources)) ? r.sources : [])
-        .filter((s) => s && /^https?:\/\//i.test(String(s.url || ''))).slice(0, 4);
+        .filter((s) => s && /^https?:\/\//i.test(String(s.url || ''))).slice(0, 5);
       result = facts
         + ' (source: ' + r.engine + ', as of ' + r.as_of + '. If you name a source, name this one and nothing else. '
         + (srcList.length
-          ? 'The door has put this on his shelf with ' + srcList.length + ' source link'
-            + (srcList.length === 1 ? '' : 's') + ' he can tap, so say it is on his shelf. '
+          ? 'The door has put ONE card on his shelf and it carries the ' + srcList.length + ' source link'
+            + (srcList.length === 1 ? '' : 's') + ' inside it, so say it is on his shelf and let him open it. '
+            + 'Never say the links are beside it, because they are in it. '
           : '')
         + 'If the place or thing is not the one he meant, ask him which he meant rather than answering about it.)';
       logLine('world.look', ask + ' · ' + r.engine + ' · ' + String(facts).slice(0, 120), { level: 'info', target: 'world' });
@@ -4151,14 +4152,12 @@ async function handleWorldCall(call) {
       if (foundCard) {
         if (!shelfReplace(foundCard.code, foundCard)) shelfAdd(foundCard);
         keepFound(foundCard);
-        /* Build 222. Each source is its own card, with the address it came from. A link he cannot open is
-           the same as no link: he asked for "the results with links to sources", so the links land beside
-           the answer rather than inside a sentence. */
-        for (const s of (foundCard.detail && foundCard.detail.sources) || []) {
-          const sc = { kind: 'source', title: String(s.title || s.url).slice(0, 120), url: String(s.url) };
-          shelfAdd(sc);
-          keepFound(sc);
-        }
+        /* Build 229 - ONE ANSWER, ONE CARD. 14 Nov 2026, 23:11: "When I googled how can I get to Cape Town it
+           landed 4 items on the shelf. We only need 1 as it contains all the links in it already."
+           He is right and nothing was missing. Build 222 did BOTH halves of the same job and neither was
+           removed: it put the sources inside the card (detail.sources, drawn as tappable links when he opens
+           it) AND made every source its own card. So one answer cost three cards, two of them duplicating
+           links already in the first. The card is the answer; its links travel inside it. */
         shelfWriteAt = Date.now();
         shelfWriteKind = 'fact';
         logLine('world.card', foundCard.code + ' \u00b7 ' + foundCard.title, { level: 'info', target: 'shelf' });
