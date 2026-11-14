@@ -4289,7 +4289,7 @@ async function handleShareCall(call) {
           result = shareResultLine(r);
           looked = 'sharing · ' + (r.title || 'a song');
           railAnsweredAt = Date.now();
-          shareChoices = [];
+          shareChoices = []; shareChoicesAt = 0;
           railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
         } else {
           result = 'The wrap did not go through: ' + ((r && (r.error || r.note)) || 'no answer')
@@ -4418,7 +4418,7 @@ async function handleShareCall(call) {
         if (w && w.ok) {
           shareSongLocked({ title: w.title || only.title, sub: (w.artist || only.artist || '') + (w.album ? ' · ' + w.album : ''),
             url: w.url, code: w.code, kind: w.kind, isrc: w.isrc, platforms: w.platforms, art: only.art || '' });
-          shareChoices = [];
+          shareChoices = []; shareChoicesAt = 0;
           result = 'Found it: "' + (w.title || only.title) + '"' + (only.artist || w.artist ? ' by ' + (only.artist || w.artist) : '')
             + '. The door has taken over from here and is asking him about the picture. Do not ask about the address, '
             + 'the message or the send, and do not offer anything: the sheet does that. Keep this turn to the finding alone.';
@@ -4451,7 +4451,7 @@ async function handleShareCall(call) {
         + 'Say that in one line. Do not ask about a cover here: ' + PICTURE_RULE + ' Do not ask about the '
         + 'address, the message or the send, and do not search again.';
       looked = 'sharing · ' + (r.title || 'a song');
-      shareChoices = [];
+      shareChoices = []; shareChoicesAt = 0;
       railNote('share · ' + r.found + ' · ' + (r.title || '') + (r.code ? ' · ' + r.code : ''));
     } else {
       const why = (r && (r.error || r.note)) || 'no answer';
@@ -5166,7 +5166,7 @@ function shareSongLocked(card) {
   if (same && shareStage === 'art') return;
   shareCard = card;
   shareCardTarget = card;
-  shareChoices = [];
+  shareChoices = []; shareChoicesAt = 0;
   shareStage = 'art';
   shareArt = { want: false, brief: '' };
   shareArtTries = 0;
@@ -6704,7 +6704,7 @@ function openShareSheet(card, art) {
         // and the door forgets the song it just sent, or the next "share a song" is answered with the last one
         setTimeout(() => {
           try {
-            shareCard = null; shareCardTarget = null; shareQuery = ''; shareChoices = [];
+            shareCard = null; shareCardTarget = null; shareQuery = ''; shareChoices = []; shareChoicesAt = 0;
             shareArt = { want: false, brief: '' }; shareArtTries = 0;
             shareCoverAsked = false; shareAddrOk = false;
             madeShare = null;
