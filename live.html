@@ -225,7 +225,12 @@
   .card a { text-decoration:none; color:inherit; display:block; min-width:0; }
   /* The buttons get a line of their own with air above them, so a label is read before a chip is
      pressed. margin-top:auto holds them to the bottom of the card whatever the words do. */
-  .card .acts { display:flex; align-items:center; gap:7px; margin-top:auto; padding-top:9px; }
+  /* Build 219. The badges fit INSIDE the card, they do not decide its width. A row that could not wrap plus a
+     pill that could not break its line set a minimum width the card had to grow to, and the title and the
+     second badge were pushed out and clipped. (14 Nov 16:04: "The button just moves out the text now.") So the
+     row wraps when it must, and a badge shares the line when there is room or fills it when it is alone. */
+  .card .acts { display:flex; align-items:center; gap:7px; margin-top:auto; padding-top:9px;
+                flex-wrap:wrap; row-gap:6px; min-width:0; }
   /* Build 218. The garage's two ways out, as badges rather than captions. Edwin, 14 Nov: "update the button
      badges to something palatable ... also with badges that match the intentions." A badge says what a tap
      will do before it is tapped: a return arrow and the door's own gold for putting a thing back where he can
@@ -233,14 +238,15 @@
      so the card stays a card. */
   .card .act {
     all: unset; box-sizing: border-box; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 10px 5px 9px; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    flex: 1 1 auto; min-width: 0; max-width: 100%;
+    padding: 7px 9px 7px 8px; border-radius: 999px;
     font-size: 9.5px; font-weight: 600; line-height: 1;
-    letter-spacing: .14em; text-transform: uppercase; white-space: nowrap;
+    letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
     transition: background .16s ease, border-color .16s ease, color .16s ease, transform .12s ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .card .act .gl { font-size: 11px; letter-spacing: 0; opacity: .85; line-height: 1; }
+  .card .act .gl { font-size: 10px; letter-spacing: 0; opacity: .85; line-height: 1; }
   .card .act.restore { color: var(--gold); background: rgba(176,141,47,.10); border: 1px solid rgba(176,141,47,.42); }
   .card .act.restore:hover, .card .act.restore:focus-visible {
     background: rgba(176,141,47,.18); border-color: rgba(176,141,47,.70); }
@@ -497,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T17:20';
-const BUILD_NO = 218;
+const BUILD = '2026-11-14T16:22';
+const BUILD_NO = 219;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
