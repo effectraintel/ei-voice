@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T21:05';
-const BUILD_NO = 224;
+const BUILD = '2026-11-14T21:21';
+const BUILD_NO = 225;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2716,7 +2716,7 @@ function chainBeat(beat) {
            words ring whose draft appears to predate the chain, so a device clock even a minute behind would
            have his own words refused. Measured 13 Nov 01:16: this sandbox's clock is two minutes behind the
            chain's, and the words ring said "the draft predates this chain" for words he had just spoken. */
-        const server = Date.parse(String((r && r.server_at) || ''));
+        const server = utcStamp(r && r.server_at);
         songDraft.subjectAt = Number.isFinite(server) ? server : Date.now();
         return chainAskNext(r);
       })
@@ -4182,7 +4182,7 @@ const SHARE_MEM = 'ei.lastShare';
 function rememberShare(r) {
   lastShare = r;
   try {
-    const at = typeof r.at === 'number' ? r.at : (Date.parse(r.at) || Date.now());
+    const at = typeof r.at === 'number' ? r.at : (utcStamp(r.at) || Date.now());
     localStorage.setItem(SHARE_MEM, JSON.stringify({ ...r, at: at }));
   } catch (e) {}
 }
@@ -4191,7 +4191,7 @@ function recalledShare(maxAge) {
   try {
     const d = JSON.parse(localStorage.getItem(SHARE_MEM) || 'null');
     if (!d || !d.title) return null;
-    const at = typeof d.at === 'number' ? d.at : (Date.parse(d.at) || 0);
+    const at = typeof d.at === 'number' ? d.at : (utcStamp(d.at) || 0);
     if (!at || Date.now() - at > (maxAge || 6 * 3600e3)) return null;
     return { ...d, at: at };
   } catch (e) { return null; }
@@ -6909,6 +6909,34 @@ function bringBack() {
 // delete it, and opening the door again should bring it back.
 const shelfHidden = new Set();
 function cardKey(c) { return String(c.song_id || c.code || c.url || c.title || ''); }
+
+/* Build 225. A SERVER STAMP WITH NO ZONE IS UTC, NOT LOCAL TIME.
+
+   14 Nov 2026, 21:07 to 21:11: he cleared the one store card on his shelf five times. Each time the door
+   said "put away", each time the garage refused it, and each time the card came back on the next read.
+
+   shelfCards hands a card back as when: "2026-11-14T17:18:23.575000" - the record's own UTC stamp, with
+   no Z on it. Date.parse reads a date-time with no zone as LOCAL time, and he is at UTC+2, so the card
+   that arrived at 17:18:23Z reached the garage as 15:18:23Z. That same link had been removed for good at
+   17:16:47Z, ninety-six seconds earlier, and the garage's one honest rule is that a removal covers the
+   card that was removed and never a card that arrived after it. Against a stamp two hours in the past,
+   a card that arrived after the removal looked 118 minutes older, so park() answered "already" and
+   nothing was ever parked.
+
+   Inside a function this never showed, because the server runs in UTC; only the page is shifted, and
+   only for him. So the page stops guessing about zones: every stamp it reads comes from the record, and
+   the record is UTC. Six-digit fractions are trimmed to three, because some engines refuse more than
+   three and an invalid date here fails silently as "already". */
+function utcStamp(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  let s = String(v == null ? '' : v).trim();
+  if (!s) return 0;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) s = s.replace(' ', 'T');      // sql-ish spacing
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(s)) s += 'Z'; // no zone means UTC
+  s = s.replace(/(\.\d{3})\d+/, '$1');                                        // 6 digits are not ISO
+  const n = Date.parse(s);
+  return Number.isFinite(n) ? n : 0;
+}
 function engineSpokeNow() {
   if (silenceWatch) { clearTimeout(silenceWatch); silenceWatch = null; }
 }
@@ -6990,18 +7018,23 @@ async function putInGarage(cards) {
                  // cover a card that came afterwards, but it can only apply that rule if it is told the
                  // card is newer than the removal, and the door never told it. HOME was removed on 8 Nov,
                  // its card was made on 11 Nov, and it could never be put away again. (14 Nov 12:57.)
-                 born: Date.parse(String(c.when || '')) || c.at || Date.now() }));
-  if (!items.length) return 0;
+                 // Build 225: read as UTC. Read as local time this was two hours in the past on his
+                 // phone, and the garage refused every card whose link had ever been removed.
+                 born: utcStamp(c.when) || c.at || Date.now() }));
+  if (!items.length) return { ok: true, moved: 0, skipped: 0, answered: true, empty: true };
   try {
     const r = await fetch(FNBASE + 'shelfGarage', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'store', items }),
     });
     const d = await r.json();
-    // 'moved' is parked, 'skipped' is the garage saying it already holds that card. Both are the garage
-    // doing its job; only a request that never landed is worth telling him about. (build 214)
-    return ((d && d.moved) || 0) + ((d && d.skipped) || 0);
-  } catch (e) { return 0; }
+    /* Build 225. 'moved' is parked, 'skipped' is the garage saying it already holds that card. Both are
+       the garage doing its job; only a request that never landed is worth telling him about. (build 214)
+       The counts are handed back rather than added up, because they say different things and the door now
+       says which: a card the garage has already parked is not the same as a link it refuses to hold again. */
+    return { ok: !!(d && d.ok), moved: Number((d && d.moved) || 0), skipped: Number((d && d.skipped) || 0),
+             answered: !!(d && d.ok) };
+  } catch (e) { return { ok: false, moved: 0, skipped: 0, answered: false }; }
 }
 
 async function garageAct(action, ref) {
@@ -7124,7 +7157,10 @@ async function shelfSync() {
       // left open from days ago were re-armed on every door open and every 15-second shelf sync, four
       // seconds apart, each one a paid function call: 8 Nov, the log was a wall of them and the one line
       // that mattered was buried in it.
-      const age = it.created_date ? Date.now() - Date.parse(it.created_date) : Infinity;
+      /* Build 225. Same cause, quieter: read as local time a request made a minute ago looked two hours
+         old, so the door stopped watching it and a payment in front of him stopped being watched at all. */
+      const made = utcStamp(it.created_date);
+      const age = made ? Date.now() - made : Infinity;
       if (it.status === 'open' && age < 30 * 60 * 1000) watchRequest(it.code, 6);
     }
   } catch (e) { /* a quiet shelf is not an error */ }
@@ -7765,14 +7801,21 @@ async function clearOneCard(card) {
   renderShelf();
   railNote('shelf \u00b7 put away \u00b7 ' + (gone.title || 'one card'));
   if (parkable) {
-    await putInGarage([gone]);
+    const put = await putInGarage([gone]);
     // Prove it, do not assume it: the garage has just been read back, so the truth is in `garage`, not in
     // the count the call returned. A card the garage quietly declined used to be reported as taken and
     // then reappeared with no explanation. (Build 214 learned the same lesson about 'moved' + 'skipped'.)
     await loadGarage(true);
     const ref = String(gone.song_id || gone.code || '');
     if (ref && !garage.some(g => String(g.ref) === ref)) {
-      railNote('the garage did not take it just now \u00b7 it may come back on the next read');
+      /* Build 225. Say which refusal it is. "It did not take it just now" was true and useless: the reason
+         was always one of two things, and they mean different actions.
+            skipped  -> this same link was removed for good earlier, so the garage will not hold it again.
+                        It stays on the shelf, and the honest next step is to leave it or remove it again.
+            neither  -> the rail did not answer. Nothing is known, and the next read will tell. */
+      railNote(put && put.skipped
+        ? 'the garage will not hold it \u00b7 you removed this same link for good earlier'
+        : 'the garage did not answer just now \u00b7 it may come back on the next read');
     }
   }
 }
