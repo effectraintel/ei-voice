@@ -2962,6 +2962,12 @@ function openSongBeat() {
   logLine('journey.open', 'open at ' + songDraft.askBeat, { level: 'info', target: 'music' });
 }
 
+// A route word is an answer to "where from?", never a song title. "music", "the stores", "share".
+// 14 Nov 09:50: asked "from the music stores, or create a new one?", he answered "music". That is a route,
+// and the door read it as the song itself, searched the rail for the word "music", and got three unrelated
+// songs back. It is defined once so the fork and the search can never disagree about what a route word is.
+const ROUTE_WORD_ONLY = /^(?:the\s+|a\s+)?(?:music|music stores?|stores?|store|share|sharing|song|one from (?:the )?stores?|from (?:the )?stores?)\s*[.?!]?$/i;
+
 function askSongFork() {
   songFork = Date.now(); songForkAsks = 0;
   songRoute = { pick: '', at: Date.now() };
@@ -2992,11 +2998,8 @@ function forkAnswer(heard) {
     return false;
   }
   const store = /\b(?:music stores?|the stores?|shop|spotify|apple music|deezer|itunes|amazon music|youtube music|already (?:exists|out|made)|existing)\b/.test(t)
-    // 14 Nov 09:50. He was asked "from the music stores, or create a new one?" and answered "music". That
-    // is a route, not a title: the fork read it as the song itself and searched the rail for the word
-    // "music", which returned three unrelated songs and set every later step wrong. A bare route word
-    // answers the route question and nothing else.
-    || /^(?:the\s+|a\s+)?(?:music|music stores?|stores?|store|share|sharing|song|one from (?:the )?stores?|from (?:the )?stores?)\s*[.?!]?$/.test(t);
+    // A bare route word answers the route question and nothing else: it is the stores, and it names no song.
+    || ROUTE_WORD_ONLY.test(t);
   const neg = /\b(?:not|don'?t|do not|no)\b[^.?!]{0,25}\b(?:make|making|create|creating|write|writing|compose)\b/.test(t);
   const makeWord = /\b(?:make|making|create|creating|write|writing|compose|composing)\b/.test(t) && !neg;
   const fresh = /\b(?:new|brand new|fresh|from scratch|suno)\b/.test(t);
@@ -4739,6 +4742,13 @@ function noteSongAnswer(heard) {
   // The fork owns the turn while it is open (build 169): at 07:56:49 the fork note and this arm note both
   // arrived, and the mouth answered "which song would you like to share?" instead of asking the fork.
   if (songFork && Date.now() - songFork < 90000) return;
+  // The fork takes the route, and this must not then search the same word as a title on the way past it.
+  // A route word is where a song comes from, not a song: it is never sent to the rail.
+  if (ROUTE_WORD_ONLY.test(said)) {
+    awaitSong = Date.now();
+    railNote('share · that is a route, not a title · ' + said.slice(0, 30));
+    return;
+  }
   if (SHARE_INTENT.test(said)) {
     // "share a song" alone is intent. "share a song by Ed Sheeran called I See Fire" is intent and the song,
     // and treating it as intent only is how he ended up with a fabricated "I couldn't find anything".
