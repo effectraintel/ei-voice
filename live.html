@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T19:55';
-const BUILD_NO = 222;
+const BUILD = '2026-11-14T21:10';
+const BUILD_NO = 223;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5332,7 +5332,12 @@ function noteSongAnswer(heard) {
     // an email both outlive the thing they describe, and 12 Nov 07:44 they ate four titles in a row: he
     // said "I'm walking on sunshine" four times and the rail was never asked once. A finished stage is
     // cleared here, exactly like a stale one.
-    const nothingBehind = shareStage === 'waiting' || shareStage === 'closed' || shareStage === 'sent'
+    /* Build 223. 'idle' belongs in this list, and its absence is what made the door deaf for two minutes on
+       14 Nov: the stage had been reset to idle, a leftover shareQuery kept the branch open, and every title
+       he said between 11:25:43 and 11:27:44 - "home", "Michael Buble", "anyone", "original" - was swallowed
+       by a step that was asking nothing. A stage with no question in it is not a step. */
+    const nothingBehind = shareStage === 'idle' || shareStage === 'waiting' || shareStage === 'closed'
+      || shareStage === 'sent'
       || (shareStage === 'art' && (!shareCard || shareCard.kind === 'made'));
     if (nothingBehind && !madeShare && !shareQuery) {
       shareStage = 'idle'; shareCard = null; shareCardTarget = null;
@@ -5374,8 +5379,24 @@ function noteSongAnswer(heard) {
             + 'closed, so do not mention it. Ask which song he wants instead, one short line, and nothing else.', true);
         return;
       }
-      if (shareStage === 'sheet' && !addrShaped && !msgShaped) {
-        setAsideShare('sheet set aside, his words are a song and not an address');
+      /* Build 223. The step holds ONLY the answer it is asking for. The sheet is asking for an address or a
+         message; the picture step is asking what the picture should show. Everything else is a thing he is
+         telling the door, and it is heard: the step is put down, nothing is sent, the card stays on his shelf
+         with its state, and his words go where they belong.
+         12:41:47 on 14 Nov: the picture step held "Home" - the name of the next song - and at 12:48, 12:49,
+         12:52, 12:56 and 12:57 that same step came back to life on its own. A question that can swallow the
+         next song is not a question, it is a form. */
+      const artBrief = /\b(?:picture|photo|image|drawing|cover|scene|colour|color|background|paint|sketch)\b/i.test(said);
+      const holdsForAnswer = (shareStage === 'sheet' && (addrShaped || msgShaped))
+        || (shareStage === 'art' && artBrief);
+      if (!holdsForAnswer) {
+        /* The reason names the stage it actually was. Saying "the sheet" when the stage was idle is the same
+           kind of small lie as the ones this build is about: the record has to say what happened. */
+        const finished = shareStage === 'idle' || shareStage === 'waiting' || shareStage === 'closed'
+          || shareStage === 'sent';
+        setAsideShare(finished ? 'a finished step let go, his words are not an answer to it'
+          : shareStage === 'art' ? 'picture question set aside, his words are not a picture brief'
+          : 'sheet set aside, his words are a song and not an address');
         // fall through: his words are searched
       } else {
         // A real step is open, so the title is not searched. Say so: a silent swallow is exactly how
@@ -5386,11 +5407,12 @@ function noteSongAnswer(heard) {
            was found" - so he heard two sentences that disagreed, one from the mouth and one from the guard
            that caught it afterwards. The guard can only correct what has already been spoken, so the hold
            now carries the truth with it, in the same breath the step is held. */
-        doorNote('Nothing was searched and no rail was asked anything: his words arrived while the "'
-          + shareStage + '" step is open, and they belong to that step. Do not say the rail did not answer, '
-          + 'do not say nothing was found, and do not offer versions. If that step still needs an answer, ask '
-          + 'it again in one short sentence; if it has already been asked again, say one short line that you '
-          + 'are waiting on it.', true);
+        doorNote('Nothing was searched and no rail was asked anything: his words belong to the "'
+          + shareStage + '" step, which is waiting for its own answer'
+          + (shareStage === 'art' ? ' - what the picture should show.' : ' - an address or a message.')
+          + ' Do not say the rail did not answer, do not say nothing was found, and do not offer versions. '
+          + 'Ask the step\'s one question again in a single short sentence; he can also answer it on the card '
+          + 'on his shelf, so say that once and then leave it alone.', true);
         awaitSong = 0; return;
       }
     }
