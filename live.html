@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T19:40';
-const BUILD_NO = 221;
+const BUILD = '2026-11-14T19:55';
+const BUILD_NO = 222;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -572,12 +572,16 @@ const DECLS = [{
               // was the only fact engine behind the rail, and the brief pointed at nothing else. The
               // open web is the default now; this rail keeps the weather and stands behind a search
               // that came back with nothing.
-              description: 'The measured weather rail, and the net under a fact your own search could not settle. Answers with facts and the engine that gave them. Use it for the weather and the temperature, and after your own web search has come back empty; for any other public fact, search the open web first. Never name a source you have not asked. Not for his own rooms, family, money or records: that is house.',
+              /* Build 222. This is the search. His own search inside the voice comes back with no links at
+                 all (measured: groundingChunks 0 in the live audio session), so a fact answered that way can
+                 never be shown with its source. Asked here, the rail returns the facts and the links that
+                 back them, and the door puts both on his shelf. */
+              description: 'The search rail: anything about the world outside his house. Use it FIRST for a score, a result, a price, a news event, a date, a person, or anything happening now, and for the weather. It answers with the facts and the source links behind them, and the door puts what it found on his shelf for him to open. Speak only from the facts it returns and name the source it names. Never answer a world question from memory and never name a source you were not given. Not for his own rooms, family, money or records: that is house.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
                   ask: { type: 'STRING', description: 'the question exactly as he asked it, in his own words, e.g. "what is the current weather in Ballito"' },
-                  kind: { type: 'STRING', description: 'weather = weather or temperature; fact = only after your own search returned nothing; auto when unsure' },
+                  kind: { type: 'STRING', description: 'weather = weather or temperature; web = anything else about the world (a score, news, a price, a person, a date); auto when unsure' },
                 },
                 required: ['ask'],
               },
@@ -670,14 +674,14 @@ const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send e
 const BRIEF = NO_CLAIM +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
   // Edwin, 13 Nov 2026, 23:24: "I think we always need to default to Google for now, we can expand on
-  // this later, as this is not a core function." Every fact question came back as an encyclopedia entry
-  // because the only instructed route was the world tool and Wikipedia was the only engine behind it.
-  // Google's own search is the default: search, answer from the search, name the source. The world tool
-  // keeps the weather and the net under a search that found nothing - never a shortcut past searching.
-  'For anything about the world outside his house - a price, a score, a news event, a date, who someone '
-  + 'is, anything happening now - search the open web with your own search first and answer from what '
-  + 'comes back, naming the source in a few words. Do not reach for the world tool instead of searching: '
-  + 'it is for the weather, and for a fact your own search could not settle. ' +
+  // this later, as this is not a core function." Google's search is the engine, and since build 222 the
+  // rail is where it is asked. His own search inside the voice answers without its sources: measured on
+  // 14 Nov, groundingChunks came back empty every time, so a fact answered that way could never be shown
+  // with the link he asked for. The rail returns both, and the door writes both. One search, one place.
+  'For anything about the world outside his house - a price, a score, a result, a news event, a date, who '
+  + 'someone is, anything happening now - call the world tool. It searches, and what it finds lands on his '
+  + 'shelf with the sources it came from, so say in a few words that it is on his shelf and let him open it. '
+  + 'Answer from what it returns, name the source it names, and never fill a gap with what you already knew. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
   // Edwin, 8 Nov 13:36: one Afrikaans sentence and the door carried on in Afrikaans, in another voice.
   // Edwin, 8 Nov 16:29: "it changed mid sentence to an Indian accent". A door with one speaker in it does
@@ -4090,8 +4094,14 @@ async function handleWorldCall(call) {
       logLine('world.miss', ask + ' · ' + ((r && r.trouble) ? r.trouble.join(' | ') : 'no answer'), { level: 'warn', target: 'world' });
     } else {
       const facts = (r.facts || []).join(' ');
+      const srcList = ((r && Array.isArray(r.sources)) ? r.sources : [])
+        .filter((s) => s && /^https?:\/\//i.test(String(s.url || ''))).slice(0, 4);
       result = facts
         + ' (source: ' + r.engine + ', as of ' + r.as_of + '. If you name a source, name this one and nothing else. '
+        + (srcList.length
+          ? 'The door has put this on his shelf with ' + srcList.length + ' source link'
+            + (srcList.length === 1 ? '' : 's') + ' he can tap, so say it is on his shelf. '
+          : '')
         + 'If the place or thing is not the one he meant, ask him which he meant rather than answering about it.)';
       logLine('world.look', ask + ' · ' + r.engine + ' · ' + String(facts).slice(0, 120), { level: 'info', target: 'world' });
       looked = 'the world \u00b7 ' + (r.engine || 'looked up');
@@ -4102,6 +4112,14 @@ async function handleWorldCall(call) {
       if (foundCard) {
         if (!shelfReplace(foundCard.code, foundCard)) shelfAdd(foundCard);
         keepFound(foundCard);
+        /* Build 222. Each source is its own card, with the address it came from. A link he cannot open is
+           the same as no link: he asked for "the results with links to sources", so the links land beside
+           the answer rather than inside a sentence. */
+        for (const s of (foundCard.detail && foundCard.detail.sources) || []) {
+          const sc = { kind: 'source', title: String(s.title || s.url).slice(0, 120), url: String(s.url) };
+          shelfAdd(sc);
+          keepFound(sc);
+        }
         shelfWriteAt = Date.now();
         logLine('world.card', foundCard.code + ' \u00b7 ' + foundCard.title, { level: 'info', target: 'shelf' });
       }
@@ -4574,7 +4592,12 @@ function judgeClaim() {
     // said "a payment request for 10 Rand for charity is on the shelf now waiting for you" and no
     // payRequestFromDoor call exists in the trace at all: he went to look at nothing. Same class as a rail
     // claim, same cure - hold the sentence and tell the mouth what is actually true.
-    const shelfWriteClaim = /\b(?:is|are|it'?s|its) (?:now )?on (?:the|your|his) shelf\b|\b(?:has|have) been (?:put|added|placed) (?:on|to) (?:the|your|his) shelf\b|\b(?:put|added|placed) (?:it |that |your |his )?(?:on|to) (?:the|your|his) shelf\b|\bsitting (?:on|in) (?:the|your|his) shelf\b/i;
+    /* Build 222. 14 Nov 17:33:40: "I've put those results on your shelf with links to the sources" - and no
+       row was written. The old pattern allowed only "put IT/THAT/YOUR on the shelf", so a determiner that was
+       not his ("those results") walked straight through, and the untrue sentence went out unchallenged until
+       his next question exposed it. The verb and the shelf may now have words between them, and a claim about
+       links and sources is a claim about the shelf, because that is exactly what he asked for. */
+    const shelfWriteClaim = /\b(?:is|are|it'?s|its) (?:now )?on (?:the|your|his) shelf\b|\b(?:has|have) been (?:put|added|placed|kept|saved) (?:on|to|in) (?:the|your|his) shelf\b|\b(?:put|puts|putting|added|add|adds|place|placed|placing|keep|kept|save|saved|saving|stuck)\b[^.!?]{0,48}\b(?:on|to|in|onto)\b[^.!?]{0,14}\b(?:the|your|his) shelf\b|\bshelf\b[^.!?]{0,40}\b(?:with|and)\b[^.!?]{0,20}\b(?:links?|sources?)\b|\bsitting (?:on|in) (?:the|your|his) shelf\b/i;
     // "What amount would you like to put on your shelf?" is an offer, not a claim: the same words
     // appear in both, so the asking shape is excluded rather than the whole rule weakened.
     const shelfAsk = /\?|\b(?:would you like|do you want|shall (?:i|we)|want me to|let me know)\b/i;
@@ -7216,6 +7239,29 @@ function openFact(it) {
   body.style.cssText = 'font-size:13.5px;line-height:1.6;color:#ded5c2;white-space:pre-wrap';
   body.textContent = facts.join('\n\n');
   box.appendChild(h); box.appendChild(s); box.appendChild(body);
+  /* Build 222. The sources, as links he can open. The card said "with links to sources" before there were
+     any; this is the panel that has to make the sentence true. */
+  const srcs = (Array.isArray(d.sources) ? d.sources : [])
+    .filter((x) => x && /^https?:\/\//i.test(String(x.url || '')));
+  if (srcs.length) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:15px;padding-top:12px;border-top:1px solid #2a261f';
+    const lab = document.createElement('div');
+    lab.textContent = 'sources';
+    lab.style.cssText = 'font-size:10px;letter-spacing:.13em;color:#8f8577;margin-bottom:6px';
+    wrap.appendChild(lab);
+    for (const one of srcs.slice(0, 5)) {
+      const a = document.createElement('a');
+      a.href = String(one.url);
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = String(one.title || one.url).slice(0, 90);
+      a.style.cssText = 'display:block;font-size:12.5px;line-height:1.5;color:#c9a86a;text-decoration:none;'
+        + 'border-bottom:1px solid rgba(201,168,106,.25);padding:6px 0;word-break:break-word';
+      wrap.appendChild(a);
+    }
+    box.appendChild(wrap);
+  }
   if (d.ask) {
     const q = document.createElement('div');
     q.style.cssText = 'font-size:11px;line-height:1.5;color:#8f8577;margin-top:15px;padding-top:12px;border-top:1px solid #2a261f';
@@ -7891,6 +7937,10 @@ function worldCard(ask, r) {
         facts,
         engine: String((r && r.engine) || ''),
         as_of: String((r && r.as_of) || ''),
+        // Build 222: the links the answer came from, so the card can show its working when he opens it.
+        sources: ((r && Array.isArray(r.sources)) ? r.sources : [])
+          .filter((s) => s && /^https?:\/\//i.test(String(s.url || '')))
+          .slice(0, 5).map((s) => ({ title: String(s.title || s.url).slice(0, 180), url: String(s.url) })),
       },
       note: 'what it found \u00b7 open it to read the detail',
       when: new Date().toISOString(),
