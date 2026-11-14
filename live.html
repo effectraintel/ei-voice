@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T15:10';
-const BUILD_NO = 213;
+const BUILD = '2026-11-14T15:30';
+const BUILD_NO = 214;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5095,9 +5095,22 @@ function noteSongAnswer(heard) {
     if (!carriesName) {
       awaitSong = Date.now();
       railNote('share · song expected');
-      // Build 213. He is asking for ANOTHER song while the last one's picture question is still open.
-      // The step goes down here, at the ask, not when his next word arrives and gets eaten by it.
-      if (shareStage === 'art') putShareAside('picture question set aside, he has asked for another song');
+      /* Build 214. 213 put the old picture step down here and then said NOTHING: no route question, no
+         search, no line for the mouth, which filled the silence with "the sharing rail didn't answer".
+         A fresh ask restarts the flow. The step goes down, the route question is asked, and the mouth is
+         told what to say in the same breath. */
+      if (shareStage === 'art') {
+        putShareAside('picture question set aside, he has asked for another song');
+        askSongFork();
+        return;
+      }
+      if (shareStage !== 'idle') {
+        // Any other step that is holding the start of a new one still owes the mouth the truth. A hold with
+        // no note is the silence that gets filled with a claim about a rail nobody asked.
+        putShareAside('step set aside, he has asked to share a song');
+        askSongFork();
+        return;
+      }
       return;
     }
     // fall through: armed and answered in the same breath
@@ -6719,7 +6732,12 @@ async function putInGarage(cards) {
   const items = (cards || [])
     .filter(c => c && (c.kind === 'song' || c.kind === 'store'))
     .map(c => ({ kind: c.kind, ref: c.song_id || c.code || c.url || c.title,
-                 title: c.title || 'a thing', subtitle: c.sub || '', url: c.url || '', sha: c.sha || '' }));
+                 title: c.title || 'a thing', subtitle: c.sub || '', url: c.url || '', sha: c.sha || '',
+                 // Build 214. When this card ARRIVED. The garage already refuses to let an old removal
+                 // cover a card that came afterwards, but it can only apply that rule if it is told the
+                 // card is newer than the removal, and the door never told it. HOME was removed on 8 Nov,
+                 // its card was made on 11 Nov, and it could never be put away again. (14 Nov 12:57.)
+                 born: Date.parse(String(c.when || '')) || c.at || Date.now() }));
   if (!items.length) return 0;
   try {
     const r = await fetch(FNBASE + 'shelfGarage', {
@@ -6727,7 +6745,9 @@ async function putInGarage(cards) {
       body: JSON.stringify({ action: 'store', items }),
     });
     const d = await r.json();
-    return (d && d.moved) || 0;
+    // 'moved' is parked, 'skipped' is the garage saying it already holds that card. Both are the garage
+    // doing its job; only a request that never landed is worth telling him about. (build 214)
+    return ((d && d.moved) || 0) + ((d && d.skipped) || 0);
   } catch (e) { return 0; }
 }
 
@@ -7751,6 +7771,15 @@ function sayGreeting() {
       const d = loadDraft();
       if (d && d.stage && d.stage !== 'sent' && d.stage !== 'idle') {
         shareCard = d.card; shareCardTarget = d.card; shareStage = d.stage;
+        /* Build 214. A picture question is not worth resuming fifteen minutes later. On 14 Nov the door
+           opened at 12:57 and came back holding a picture step for HOME from 12:41, which then ate the name
+           of the song he asked for next. The draft keeps two hours so a TYPED ADDRESS is not lost; a
+           question about a picture can simply be asked again next time, and the song is on his shelf. */
+        if ((d.stage === 'art' || d.stage === 'waiting') && Date.now() - (d.at || 0) > 5 * 60e3) {
+          putShareAside('old picture question dropped on open, the song is on his shelf');
+          logLine('share.resume.dropped', 'a picture question from ' + Math.round((Date.now() - (d.at || 0)) / 60000)
+            + ' minutes ago', { level: 'info', target: 'share' });
+        }
         // 'waiting' means the song had not landed when he left the page, and that watch lives in memory
         // only. The door asks about the picture again rather than holding a sheet that cannot send.
         if (shareStage === 'waiting') shareStage = 'art';
