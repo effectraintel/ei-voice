@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T21:34';
-const BUILD_NO = 226;
+const BUILD = '2026-11-14T22:20';
+const BUILD_NO = 227;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -517,6 +517,15 @@ const BUILD_NO = 226;
 let MODE = 'voice';
 try { MODE = localStorage.getItem('ei-door-mode') === 'text' ? 'text' : 'voice'; } catch (e) {}
 const typed = () => MODE === 'text';
+/* Build 227 · A REPLY BELONGS TO THE TURN IT ANSWERS.
+   14 Nov 2026, 21:56: he switched from typing to voice and the door "immediately started to answer
+   questions about the weather". Typed mode drops a reply's audio as it arrives, but a reply already
+   being generated when the microphone came back had its frames land after the switch, so its middle
+   was spoken and it sounded as if the door had answered on its own. turnBeganMuted is set once, when
+   a turn starts, and it does not change when the mode does: the sound of a muted turn stays unspoken
+   even if the door is talking again before that reply finishes. His next turn is heard normally. */
+let turnBeganMuted = false;
+const mouthMaySound = () => !typed() && !turnBeganMuted;
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -1835,6 +1844,7 @@ async function gatePost(fn, body) {
   // Only a lock counts as a write, not a search: 'find' asks the rail, 'choose' puts the card up.
   if (fn === 'payRequestFromDoor' || (fn === 'songShare' && String(askOf(body)).indexOf('choose') >= 0)) {
     shelfWriteAt = Date.now();
+    shelfWriteKind = fn === 'payRequestFromDoor' ? 'pay' : 'song';
   }
   try {
     const r = await fetch(FNBASE + fn, {
@@ -4128,6 +4138,7 @@ async function handleWorldCall(call) {
           keepFound(sc);
         }
         shelfWriteAt = Date.now();
+        shelfWriteKind = 'fact';
         logLine('world.card', foundCard.code + ' \u00b7 ' + foundCard.title, { level: 'info', target: 'shelf' });
       }
     }
@@ -4451,16 +4462,53 @@ function judgeClaim() {
        song, 'Late Night with Edwin,' is ready on your shelf" ninety seconds after a make that never happened. */
     const madeRecently = !!(makeFiredAt && Date.now() - makeFiredAt < 20 * 60 * 1000);
     const readyClaim = /\b(?:your|the|that) song\b[^.!?]{0,90}\b(?:is|it'?s|is now)\b[^.!?]{0,40}\bready\b|\bis (?:now )?ready on your shelf\b|\b(?:landed|arrived|is) on your shelf\b/i;
-    /* 12 Nov 2026, 07:57: "Walking On Sunshine" was wrapped and on his shelf — shelfCards answered "9 cards"
-       one second later — the mouth said so truthfully, and this guard told it the shelf was empty, because
+    /* 12 Nov 2026, 07:57: "Walking On Sunshine" was wrapped and on his shelf - shelfCards answered "9 cards"
+       one second later - the mouth said so truthfully, and this guard told it the shelf was empty, because
        it asks whether a TAKE exists and a song shared from the stores has no take. The mouth then apologised
        for a song that was sitting in front of him. The record is the card: if the title he named is the card
        on his shelf, the claim is backed and there is nothing to correct. */
-    if (readyClaim.test(t) && !negatedHere(t, readyClaim) && !madeRecently && !lastSongRequest && !shelfBacksClaim(t)) {
-      logLine('song.claim', t.slice(0, 160), { level: 'warn', target: 'no-take' });
-      doorCorrect('nothing has been made yet · your song is still to come',
-        'No take exists: nothing has been made and nothing is on his shelf. Correct yourself in one short line '
-        + 'and say what you are doing about it. Never name a song as ready that was not made in this conversation.', true);
+    /* Build 227 \u00b7 A FINDING IS NOT A SONG, AND ITS CARD IS ON THE SHELF.
+       14 Nov 2026, 21:55 and 21:58. The weather, then the news, each landed its card, the mouth said "is on
+       your shelf now" - true - and this guard answered "nothing has been made yet: your song is still to
+       come" and told the mouth to correct itself. It did, twice: "My apologies, Boss, the news about the
+       American president is not on your shelf. I am looking it up again..." Two true sentences denied in
+       three minutes, in front of the card.
+       The "on your shelf" half of the pattern was written when a song was the only thing that could put a
+       row there. Since build 222 every lookup puts one there, and saying so is the truth. So before judging
+       a shelf sentence the guard now asks what the last write WAS:
+         - a finding (lookup, source, link, payment request) with no song word in the sentence and no card
+           named: not this guard's business, and the shelf-write guard below still checks that a row exists;
+         - a song write inside the minute, a song word in the sentence, or a card named: the old rule, whole;
+         - nothing written: still caught, but named as a shelf claim rather than blamed on a song.
+       The cost of the rule, stated: a wrong song title claimed inside a minute of a LOOKUP is not caught
+       here. It is caught by the shelf-write guard when no row was written, and by his own eyes on the card
+       otherwise, which is a cheaper failure than denying a card he can see. */
+    const wroteJustNow = !!(shelfWriteAt && Date.now() - shelfWriteAt < 60000);
+    const wroteSong = wroteJustNow && shelfWriteKind === 'song';
+    const wroteFinding = wroteJustNow && !!shelfWriteKind && shelfWriteKind !== 'song';
+    const songWords = /\b(?:songs?|tunes?|lyrics?|melody|chorus|verses?)\b/i.test(t);
+    const findingSentence = wroteFinding && !songWords && !shelfBacksClaim(t);
+    if (findingSentence && readyClaim.test(t) && !negatedHere(t, readyClaim)) {
+      logLine('claim.finding', 'a card was written for it, so it is true: ' + t.slice(0, 120),
+        { level: 'info', target: 'claim' });
+    }
+    if (readyClaim.test(t) && !negatedHere(t, readyClaim) && !madeRecently && !lastSongRequest
+        && !shelfBacksClaim(t) && !findingSentence) {
+      /* What the correction is ABOUT, which decides its words and not whether it fires. A store song
+         on his shelf means the sentence is most likely about a song even when it names no take, and
+         a finding written in the last minute means it is most likely about that. */
+      const aboutSong = wroteSong || songWords || (!!shareCard && !wroteFinding);
+      if (aboutSong) {
+        logLine('song.claim', t.slice(0, 160), { level: 'warn', target: 'no-take' });
+        doorCorrect('nothing has been made yet \u00b7 your song is still to come',
+          'No take exists: nothing has been made and nothing is on his shelf. Correct yourself in one short line '
+          + 'and say what you are doing about it. Never name a song as ready that was not made in this conversation.', true);
+      } else {
+        logLine('claim.shelfclaim', t.slice(0, 160), { level: 'warn', target: 'no-take' });
+        doorCorrect('nothing is on your shelf \u00b7 nothing was written',
+          'Nothing was looked up and nothing was written to his shelf, so nothing of his is on it. Correct '
+          + 'yourself in one short line and say you have not looked yet. Never describe a card that was not made.', true);
+      }
       return;
     }
     /* Build 178 · A SONG IS BEING MADE ONLY WHEN THE RAIL HOLDS IT.
@@ -5072,6 +5120,11 @@ let awaitSong = 0, awaitSongNudge = null, doorSearching = false, railAnsweredAt 
 // says something IS on the shelf needs one of these behind it. (8 Nov 2026, 18:29: the door said a R10
 // payment request was on the shelf; no payRequestFromDoor call exists in the trace, and the shelf was empty.)
 let shelfWriteAt = 0;
+/* Build 227. WHICH KIND of card that write was, because a shelf sentence is only a song claim when
+   a song is what landed. 'song' (a lock or a wrap), 'fact' (a lookup), 'pay' (a request), '' (none).
+   Without it the no-take guard read "the weather is on your shelf now" as a song arriving and
+   corrected a true sentence twice in three minutes on 14 Nov. */
+let shelfWriteKind = '';
 let heldMouth = [], heldFrames = 0, hiddenHold = false, hiddenHoldUntil = 0, heldEngineLogged = 0;
 // Build 136: one utterance per turn, and the door owns the correction. See the note above doorCorrect().
 let correctedThisTurn = false;   // the door has already given the true line for this turn
@@ -5856,6 +5909,7 @@ function shareSongLocked(card) {
   // Without this the guard held "Back in Black is on your shelf now" as a lie, told the model nothing had
   // been written, and the door then told him it could not find the song it had just shelved.
   shelfWriteAt = Date.now();
+  shelfWriteKind = 'song';
   railNote('share · song locked · ' + card.title);
   // No scripted line: the tool result already tells the model to ask about the picture in its own words.
   shareCoverAsked = true;                    // one question, one answer, never a loop of the same ask
@@ -6356,7 +6410,7 @@ async function madeReady(r) {
   // carried through here so the door note cannot say "made for Laid" even on a draft written before it.)
   const forWho = songWhoClean(String(madeShare.who || '').trim(), madeShare.band || '', madeShare.feel || '');
   const landedReq = String(madeShare.request_id || '');
-  if (onShelf) shelfWriteAt = Date.now();    // it is on his shelf: the claim guard may now allow the sentence
+  if (onShelf) { shelfWriteAt = Date.now(); shelfWriteKind = 'song'; }    // it is on his shelf: the claim guard may now allow the sentence
   // Build 148: this song's own answer, never a previous song's. A held yes is paid here; no answer means the
   // descent is still open, and the question is asked below with nothing else in front of it.
   const heldArt = loadArtBrief(landedReq);
@@ -8564,7 +8618,8 @@ function handleFrame(text) {
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
       armSilenceWatch(heard);
-      replyAudible = false;                  // a new answer begins, so its first sound may be held
+      replyAudible = false;                  // a new answer begins
+      turnBeganMuted = typed();              // and it belongs to this turn, muted or not (build 227), so its first sound may be held
     }
   }
   if (sc.outputTranscription && sc.outputTranscription.text) {
@@ -8612,7 +8667,7 @@ function handleFrame(text) {
     // as audio because that is all this model produces; it just never reaches the speaker. The
     // words come from the output transcription, which this page already renders. Dropping the
     // frames here is the whole difference between a door that talks and a door that is read.
-    if (typed()) continue;
+    if (!mouthMaySound()) continue;
     const data = p.inlineData && p.inlineData.data;
     // Held, not dropped: if the door's search comes back empty the model may say so, but it may not say it
     // while the search is still open.
