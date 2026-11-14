@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-15T00:20';
-const BUILD_NO = 233;
+const BUILD_NO = 234;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -671,6 +671,36 @@ const DECLS = [{
               },
             },
             ];
+
+/* Build 234 · A DECLARED ACT IS AN ACT THE DOOR CAN DO.
+   Edwin, 15 Nov 2026, 00:15: the model called `song` make for his own subject line and the door
+   answered "no such act: song". `song` has been declared to the model in DECLS since build 211 and
+   has had a handler since before that; build 212 rewrote the dispatcher as an if-chain and simply
+   left it out, on a comment that said song "was never declared to the model" - which was untrue,
+   and nobody could see it was untrue because the list and the dispatch sat 8 000 lines apart.
+
+   They sit together now, and the table IS the dispatch, so a name cannot be declared in one place
+   and unreachable in another. The corpus case `every-act-the-door-declares-can-be-called` reads
+   DECLS and fails if any declared name has no handler here. */
+const ACT_HANDLERS = {
+  world: handleWorldCall,
+  house: handleHouseCall,
+  song: handleSongCall,
+  pay: handlePayCall,
+  wrap: handleWrapCall,
+  share: handleShareCall,
+};
+
+/* One dispatch for the model's calls, reachable by name so the harness can prove the route exists
+   without waiting for a socket. Anything not in the table is REFUSED and said so - the old last arm
+   was a bare `else` to the house reader, so an act the model invented came back as a house answer.
+   Sending is his tap on the sheet, never a tool call (10 Nov 2026). */
+function dispatchToolCall(call) {
+  const name = String((call && call.name) || '');
+  const fn = ACT_HANDLERS[name];
+  if (typeof fn !== 'function') return refuseCall(call);
+  return fn(call);
+}
 
 // Edwin's log, 8 Nov 22:13, lines 1409-1410: nothing was called, and the engine said "I have just sent
 // ... It's all taken care of." No mail left. A door that can announce a delivery it never made is worse than
@@ -2882,6 +2912,7 @@ function songHearTurn(heard) {
         songDraft.said = tail.trim();
         logLine('song.subject.heard', songDraft.said.slice(0, 120), { level: 'info', target: 'music' });
         chainBeat('hear');
+        journeyAskNext();
       } else {
         logLine('song.subject.skipped', '"' + t.slice(0, 90) + '" is the asking, not what the song is about',
           { level: 'info', target: 'music' });
@@ -2890,8 +2921,45 @@ function songHearTurn(heard) {
       songDraft.said = t;
       logLine('song.subject.heard', t.slice(0, 120), { level: 'info', target: 'music' });
       chainBeat('hear');
+      journeyAskNext();
     }
   }
+}
+
+/* Build 234 · A BEAT ANSWERED IS A BEAT THE DOOR ASKS.
+   15 Nov 2026, 00:15. He said what the song was about, the door logged it at 22:15:33 and then said
+   nothing at all, because the only thing that asks the next ring is chainAskNext and the chain lives
+   behind ?chain=1. With no note in front of it the mouth invented a move of its own, called the music
+   tool, and reached the dead route - so the journey stalled on a fault in the door.
+
+   So the door asks the next beat itself, and the sound is the next beat: it is the whole route
+   (subject, sound), the picture is the descent and the sharing is the landing. One question, an open
+   ring he can skip with "you choose", and never a second question in the same breath. When the sound
+   is already in his hand there is nothing to ask, so the make is armed instead - the route is closed
+   and the studio is the next thing, not another question. */
+function journeyAskNext() {
+  try {
+    if (!songDraft.said) return;
+    /* The subject question was the one open, and he has just answered it: a beat answered is a beat
+       closed, otherwise the door would sit on a question he has already given the answer to. */
+    if (songDraft.askBeat === 'subject') songDraft.askBeat = '';
+    if (songDraft.askBeat) return;                       // another beat is open: never two questions
+    if (soundIsReal(songDraft.sound)) { try { armMake(); } catch (e) {} return; }
+    songDraft.askBeat = 'sound';
+    songDraft.asks = (songDraft.asks || 0) + 1;
+    songDraft.at = Date.now();
+    logLine('journey.ask', 'sound \u00b7 the subject is in, so the door asks it', { level: 'info', target: 'music' });
+    railNote('journey \u00b7 sound');
+    /* Build 141's lesson, applied to this note: a brief that names a forbidden phrase puts it in the
+       mouth. So the note says where things ARE (his words are held, the sound is what the making needs
+       next) and never lists the words not to use. */
+    doorNote('He has given what the song is about, in his own words, and the door is holding it. Ask him '
+      + 'exactly one question, short, in your own voice: "What kind of music should it be? Say you choose '
+      + 'and I will pick." Offer plainly that he can say "you choose" and you will pick, because no beat is '
+      + 'a gate. Do not describe the song and do not name a style he did not give. Say only what is true '
+      + 'now: his words are held, and the sound is the next thing the making needs. Ask THAT question and '
+      + 'nothing else.', true);
+  } catch (e) {}
 }
 
 /* ---------- build 155: the route cannot wait on a call that never comes ----------
@@ -4969,8 +5037,10 @@ function refuseCall(call) {
   const name = String((call && call.name) || '?').slice(0, 40);
   logLine('tool.refused', 'no such act: ' + name, { level: 'warn', target: 'model',
     args: JSON.stringify((call && call.args) || {}).slice(0, 200) });
-  const result = 'There is no act called "' + name + '". Nothing was done. Do not claim it happened: '
-    + 'answer him with what you actually have.';
+  const result = 'There is no act called "' + name + '". Nothing was done, and this is a fault in the '
+    + 'door rather than in anything he said. Do not claim it happened, do not say the thing he asked for '
+    + 'cannot be made, and never ask him to try again with different words: his words were not the problem. '
+    + 'Say in one short line that the door is missing a step, and answer with what you actually have.';
   try {
     ws.send(JSON.stringify({
       toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
@@ -8939,19 +9009,9 @@ function handleFrame(text) {
     if (!awaitingFirstAudio && !speaking) { lastWordAt = Date.now(); awaitingFirstAudio = true; }
   }
   if (msg.toolCall && msg.toolCall.functionCalls) {
-    for (const call of msg.toolCall.functionCalls) {
-      /* Build 212. Every act is dispatched by the name the model was actually given, and anything
-         else is REFUSED. The old last arm was a bare `else` to the house reader, so an act the model
-         invented came back as a house answer. `song` and `shareTo` are handled elsewhere but never
-         declared to the model, so their branches could not fire; they are gone rather than left as a
-         promise. Sending is his tap on the sheet, never a tool call (10 Nov 2026). */
-      if (call.name === 'world') handleWorldCall(call);
-      else if (call.name === 'house') handleHouseCall(call);
-      else if (call.name === 'pay') handlePayCall(call);
-      else if (call.name === 'wrap') handleWrapCall(call);
-      else if (call.name === 'share') handleShareCall(call);
-      else refuseCall(call);
-    }
+    /* Build 234: the dispatch lives in one table beside DECLS, so an act can be declared and
+       unreachable only by breaking a corpus case that reads both. See ACT_HANDLERS. */
+    for (const call of msg.toolCall.functionCalls) dispatchToolCall(call);
     return;
   }
   if (msg.error) {
