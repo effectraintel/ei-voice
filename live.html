@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T12:18';
-const BUILD_NO = 206;
+const BUILD = '2026-11-14T13:12';
+const BUILD_NO = 207;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4231,7 +4231,14 @@ function judgeClaim() {
       }
       return;
     }
-    if (answered || doorSearching) return;
+    if (answered || doorSearching) {
+      // An excuse with no record is how the guard looked like it had fired when it had not. The line says
+      // which marker excused the claim, so the next reading takes one glance instead of an afternoon.
+      logLine('claim.excused', 'calls=' + railCallsThisTurn + ' · answered ' + (Date.now() - railAnsweredAt)
+        + 'ms ago · told ' + (Date.now() - railToldAt) + 'ms ago · searching=' + (doorSearching ? 'yes' : 'no')
+        + ' · ' + t.slice(0, 60), { level: 'info', target: 'claim' });
+      return;
+    }
     if (Date.now() - unbackedWarnedAt < 15000) return;    // one correction, not a chorus
     unbackedWarnedAt = Date.now();
     logLine('claim.unbacked', t.slice(0, 160), { level: 'warn', target: 'no-rail-call' });
@@ -5057,7 +5064,12 @@ function sendNoteNow(text, speak) {
         turnComplete: !!speak,
       },
     }));
-    if (/rail|shelf|found|song/i.test(String(text)) && speak) railToldAt = Date.now();
+    // The immunity the rail-claim guard gives the mouth belongs to a real rail OUTCOME, not to any note
+    // that happens to contain the word "song". 14 Nov 12:25: the fork note ("Do you want to share a song
+    // from the music stores, or create a new one?") stamped this, and six seconds later "The sharing rail
+    // didn't answer, Boss." was excused by it and spoken. A route question is not a rail result.
+    const railOutcome = /the rail|rail (?:did|refused|returned|answered)|the wrap|refused the link|nothing was found|not found|did not answer|no answer|could not reach/i;
+    if (railOutcome.test(String(text)) && speak) railToldAt = Date.now();
     logLine('note.sent', (speak ? 'speak: ' : 'context: ') + String(text).slice(0, 80),
       { level: 'info', target: 'note' });
     // The door's silence was waiting for exactly this: the answer is now the model's to give.
