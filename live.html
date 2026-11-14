@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T10:55';
-const BUILD_NO = 205;
+const BUILD = '2026-11-14T12:18';
+const BUILD_NO = 206;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2966,6 +2966,11 @@ function askSongFork() {
   songFork = Date.now(); songForkAsks = 0;
   songRoute = { pick: '', at: Date.now() };
   lastSongWords = '';
+  // A "which one?" list belongs to the question that produced it. 14 Nov 09:50: three songs found for the
+  // word "music" were still live when the fork asked its question 50 seconds later, and they then answered
+  // a "which one?" he had never been asked about them. The route question wipes the menu.
+  if (shareChoices.length) railNote('share · list cleared by the route question');
+  shareChoices = []; shareChoicesAt = 0;
   logLine('song.fork.ask', 'from the music stores, or a new one', { level: 'info', target: 'music' });
   doorNote('Ask exactly one question and nothing else: "Do you want to share a song from the music stores, '
     + 'or create a new song?" It is a choice between two places, and nothing has been searched or made until '
@@ -2986,7 +2991,12 @@ function forkAnswer(heard) {
     songFork = Date.now();
     return false;
   }
-  const store = /\b(?:music stores?|the stores?|shop|spotify|apple music|deezer|itunes|amazon music|youtube music|already (?:exists|out|made)|existing)\b/.test(t);
+  const store = /\b(?:music stores?|the stores?|shop|spotify|apple music|deezer|itunes|amazon music|youtube music|already (?:exists|out|made)|existing)\b/.test(t)
+    // 14 Nov 09:50. He was asked "from the music stores, or create a new one?" and answered "music". That
+    // is a route, not a title: the fork read it as the song itself and searched the rail for the word
+    // "music", which returned three unrelated songs and set every later step wrong. A bare route word
+    // answers the route question and nothing else.
+    || /^(?:the\s+|a\s+)?(?:music|music stores?|stores?|store|share|sharing|song|one from (?:the )?stores?|from (?:the )?stores?)\s*[.?!]?$/.test(t);
   const neg = /\b(?:not|don'?t|do not|no)\b[^.?!]{0,25}\b(?:make|making|create|creating|write|writing|compose)\b/.test(t);
   const makeWord = /\b(?:make|making|create|creating|write|writing|compose|composing)\b/.test(t) && !neg;
   const fresh = /\b(?:new|brand new|fresh|from scratch|suno)\b/.test(t);
@@ -2998,6 +3008,7 @@ function forkAnswer(heard) {
 
   if (store) {
     songFork = 0; songForkAsks = 0;
+    shareChoices = []; shareChoicesAt = 0;
     songRoute = { pick: 'share', at: Date.now() };
     logLine('song.fork.answer', 'share · from the stores', { level: 'info', target: 'music' });
     doorNote('The route is SHARING a song that already exists: nothing is made. Say so in one short line, '
@@ -3847,6 +3858,8 @@ function collapseChoices(list) {
 }
 
 let shareChoices = [];
+let shareChoicesAt = 0;        // when the list was offered: a menu from an old question is not an answer
+const CHOICE_TTL = 60000;      // a "which one?" list is dead after a minute, because by then he has moved on
 let shareCoverAsked = false;   // the door asks for the picture once, and does not take the model's word for it
 let shareAddrOk = false;       // set only by a known address, or by him hearing it and saying yes
 let shareAddrReadBack = '';    // the address the door read out, so a correction can be recorded as one          // what the rail offered, so his answer can be matched against it
@@ -3881,13 +3894,21 @@ function pickChoice(answer) {
   if (n >= 1 && n <= shareChoices.length) return shareChoices[n - 1];
   const q = shareTokens(a);
   if (!q.length) return null;
+  // A word every song shares is not evidence of which song he meant. 14 Nov: "eye of the tiger" was
+  // offered a list holding "Thank You for the Music", and the only thing the two have in common is "the",
+  // which was enough to lock the wrong song. Stop words are removed before anything is scored.
+  const STOP = new Set(['the', 'of', 'a', 'an', 'and', 'or', 'to', 'in', 'on', 'for', 'with', 'my', 'me',
+    'you', 'it', 'is', 'by', 'at', 'that', 'this', 'song', 'track', 'tune', 'songs', 'from', 'version',
+    'one', 'ones', 'please', 'that one']);
+  const qm = q.filter((t) => !STOP.has(t));
+  if (!qm.length) return null;
   let best = null, bestScore = 0, tie = false;
   for (const c of shareChoices) {
     const title = shareTokens(c.title || '');
     const artist = shareTokens(c.artist || '');
     const said = (c.title || '') + ' ' + (c.artist || '');
     let score = 0;
-    for (const t of q) {
+    for (const t of qm) {
       if (title.includes(t)) score += 2;
       if (artist.includes(t)) score += 3;      // "the one by Ed Sheeran" is an artist answer
     }
@@ -4187,7 +4208,12 @@ function judgeClaim() {
       }
       return;
     }
-    const claims = /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|the rail (?:is )?(?:down|not answering)|couldn'?t reach (?:the )?(?:rail|sharing rail|sharing service)|there'?s nothing on your shelf/i;
+    // 14 Nov 09:51:32. No rail call was made that turn, and the mouth said "The sharing rail didn't answer,
+    // Boss." The old pattern only knew "the rail is down" and "the rail not answering", so the word
+    // "sharing" and the verb "didn't answer" walked straight through it. Every way of saying the rail
+    // failed is caught now, because the claim is about the record and the record is the only thing that
+    // can say it.
+    const claims = /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|there(?:'?s| is| are| is not| isnt)? nothing on (?:your|the) shelf|couldn'?t reach (?:it|that|the (?:sharing |music )?rail|sharing service)|no answer from (?:the |your )?(?:sharing |music )?rail|(?:the |your )?(?:sharing |music )?rail (?:is |was |seems |must be |has been )?(?:down|not answering|not responding|unreachable|unavailable|playing up|broken)|(?:the |your )?(?:sharing |music )?rail (?:did\s*n[o'\u2019]?t|did not|does\s*n[o'\u2019]?t|does not|has\s*n[o'\u2019]?t|has not|had\s*n[o'\u2019]?t|never|won'?t|would\s*n[o'\u2019]?t|could\s*n[o'\u2019]?t) (?:answer|respond|reply|come back|come through|get back|work|find|locate|reach)/i;
     if (!claims.test(t)) return;
     const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000)
       || (Date.now() - railToldAt < 20000);
@@ -4377,6 +4403,7 @@ async function handleShareCall(call) {
           + (r.candidates.length === 1 ? '' : 's'));
       }
       shareChoices = r.candidates;
+      shareChoicesAt = Date.now();
       if (!shareChoices.length) {
         result = 'Nothing answered to that name on that artist. Ask who sings it, or for a store link, one '
           + 'short question. Nothing has been made.';
@@ -4696,12 +4723,13 @@ function doorHears(heard) {
   }
   // The door asked "which one?" - so the door takes the answer. It used to offer two songs, keep no
   // record of them, and then have nothing to lock when he chose.
-  if (!shareCard && shareChoices.length && !doorSearching) resolveChoice(said);
+  let choiceTook = false;
+  if (!shareCard && shareChoices.length && !doorSearching) choiceTook = resolveChoice(said);
   // 8 Nov 11:59: "I want to share a song." -> "Back in Black from ACDC" -> "I couldn't find that song
   // on the sharing rail. Nothing was found." There is not one songShare call in the log: the model
   // never searched and reported the failure anyway. The rail answers those exact words with the song.
   // A claim about the record has to come from the record, so the door takes the answer itself.
-  noteSongAnswer(said);
+  if (!choiceTook) noteSongAnswer(said);
 }
 
 
@@ -4877,6 +4905,7 @@ function noteSongAnswer(heard) {
         if (picks.length > 1) {
           picks = dropTributes(picks);
           shareChoices = picks;          // the door asked the question, so the door must remember the options
+          shareChoicesAt = Date.now();
           logLine('share.choice', picks.map((c) => (c.title || '') + ' · ' + (c.artist || '')).join(' | '),
             { level: 'info', target: 'songShare' });
           // let him choose: the rail answered more than one song and the door does not guess between them
@@ -5156,14 +5185,35 @@ function shareSongLocked(card) {
 function resolveChoice(heard) {
   const choice = pickChoice(heard);
   if (!choice) {
+    // Two things look alike here and must not be treated alike: he answered badly about the songs, or he
+    // has stopped answering that question and named another song. 14 Nov 09:51: a list built from the word
+    // "music" was still live 86 seconds later, so "eye of the tiger" was matched against three songs it
+    // had nothing to do with, and the rail was never asked for the song he actually wanted. A list is an
+    // answer to one question, in one moment; after that his words are a new question and belong to the rail.
+    const stale = !shareChoicesAt || (Date.now() - shareChoicesAt) > CHOICE_TTL;
+    const words = shareTokens(heard).filter((w) => w.length > 3);
+    const touches = words.some((w) => shareChoices.some((c) => {
+      const hay = shareTokens((c.title || '') + ' ' + (c.artist || ''));
+      return hay.includes(w);
+    }));
+    const numberish = /^\s*(?:the\s+)?(?:first|second|third|fourth|one|two|three|four|\d+)\b/i
+      .test(String(heard || ''));
+    if (stale || (!touches && !numberish)) {
+      shareChoices = []; shareChoicesAt = 0;
+      railNote('share · list dropped, searching his words · ' + String(heard).slice(0, 40));
+      logLine('share.choice.dropped',
+        'stale=' + (stale ? 'yes' : 'no') + ' touches=' + (touches ? 'yes' : 'no') + ' · "'
+        + String(heard).slice(0, 60) + '"', { level: 'info', target: 'share' });
+      return false;                      // his words are a new query, not an answer to the old one
+    }
     railNote('share · cannot tell which one · ' + String(heard).slice(0, 40));
     doorNote('he answered about the songs but the door cannot tell which one he meant, and it has not locked '
       + 'anything. Ask once, in one short question, listing them by name. Do not say anything is on his shelf.',
       true);
-    return;
+    return true;
   }
   const picked = choice;
-  shareChoices = [];
+  shareChoices = []; shareChoicesAt = 0;
   hiddenHold = true; hiddenHoldUntil = Date.now() + 8000;
   railNote('share · choosing · ' + (picked.title || ''));
   gatePost('songShare', { action: 'choose', candidate: picked }).then((c) => {
@@ -5200,6 +5250,7 @@ function resolveChoice(heard) {
     logLine('share.choose.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
     doorNote('the rail did not answer. Say you could not reach it, in one line, and do not guess at the song.', true);
   });
+  return true;                         // the choice did take the turn
 }
 
 // While a song is being made the door sits on the picture step for a minute or more, and he may well say
