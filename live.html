@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T01:05';
-const BUILD_NO = 204;
+const BUILD = '2026-11-14T10:55';
+const BUILD_NO = 205;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4630,6 +4630,81 @@ function resolvePending(heard) {
   return true;
 }
 
+/* Build 205. The door hears a typed line the same way it hears a spoken one.
+
+   14 Nov 10:46, in his words: "check for me why a cant share from the mtshare rail?" He had typed
+   "back in black" and then "back in black from acdc" into the door. Both times the reply was "I
+   couldn't find "Back in Black" on the sharing rail" - and neither attempt carries a single songShare
+   call in the log. That is exactly the fault repaired on 8 Nov for the voice: "the model never searched
+   and reported the failure anyway". The rail was never broken; asked the same words directly it answers
+   with the song (code trLJQYw, already on his shelf).
+
+   The difference was the path, not the rail. Everything the door does with what it HEARS lived inside
+   the input-transcription branch, so a typed line went straight to the model and skipped all of it: no
+   fork, no route, no armed song, and no door-side search when the model claimed a failure it never
+   tested. Typing is a transport, not a second door (build 184), so both paths come through here now.
+
+   Nothing new is invented: this is the same sequence, in the same order, moved into one home. */
+let engineAskAt = 0;                    // when the mouth last asked him for a song title
+const ASKED_FOR_TITLE = /\b(?:which|what)\s+(?:song|track|tune|one)\b|\bname (?:of )?the (?:song|track)\b|\bwhat(?:'s| is) it called\b|\bwho sings it\b/i;
+
+function doorHears(heard) {
+  const said = String(heard || '').trim();
+  if (!said) return;
+  // "I want to create a song and share it to somebody" is the intent that makes a made song a gift.
+  // Remembered for fifteen minutes, and only as a hint: nothing is sent without his address typed.
+  if (/\b(?:share|send)\b|\b(?:make|write|create|do)\b[^.?!]{0,40}\b(?:for|to)\s+(?:my|his|her)\b/i.test(said)) {
+    shareIntentAt = Date.now();
+  }
+  try { if (!forkAnswer(said)) songRouteGate(said); } catch (e) {}
+  try { shadowRouteNote(said, songRoute && songRoute.pick); } catch (e) {}
+  try { songHearTurn(said); } catch (e) {}
+  try { descentHear(said); } catch (e) {}
+  try { threadRemember('you', said); } catch (e) {}
+  // He was asked for a title and answered with one. 14 Nov 10:46: the door asked "which song would you
+  // like to share?", he typed "back in black from acdc", and the reply was "I couldn't find "Back in
+  // Black" on the sharing rail" - with no search behind it. A question the door itself asked is the
+  // consent for the answer to be searched, so if the mouth has just asked him for a song, the next short
+  // line that is not a question is that song and the rail is asked with his own words.
+  try {
+    if (!awaitSong && engineAskAt && Date.now() - engineAskAt < 180000
+        && !/[?]\s*$/.test(said) && said.split(/\s+/).filter(Boolean).length <= 8
+        && !/\b(?:make|create|write|compose|sing)\b/i.test(said)) {
+      awaitSong = Date.now();
+      railNote('share \u00b7 song expected (he was asked for one)');
+    }
+  } catch (e) {}
+  // If he is asking whether something went, the record answers - not the model's guess and not
+  // a denial. Only while no share is in flight, so it can never talk over an open sheet.
+  if ((shareStage === 'idle' || shareStage === 'closed') && !sharePending && isDeliveryQuestion(said)) {
+    const line = deliveryAnswer();
+    logLine('turn.record', 'answered from the delivery record: ' + line.slice(0, 100),
+      { level: 'info', target: 'record' });
+    doorNote('say exactly this, in one line, and nothing else: "' + line + '"', true);
+  }
+  // Step 2 of the share: this utterance IS the answer about the picture. The door takes it, locks it,
+  // and opens the sheet. The model is not asked, because a model asked twice answers twice.
+  if (sharePending && resolvePending(said)) { /* the name was being checked: that was the answer */ }
+  else if (shareStage === 'art' && artAnswerCandidate(said)) { shareArtAnswer(said); }
+  // The cover question may still be asked by the model rather than the door. If he answers it with a
+  // picture in mind while a song is on the shelf, that is the art step whether or not the door opened
+  // it: the answer is taken here rather than dropped on the floor.
+  else if (shareCard && !sharePending && (wantsCoverArt(said) || descentAnswer(said))) {
+    shareStage = 'art';
+    railNote('share \u00b7 art \u00b7 taken from his answer with the step not open');
+    shareArtAnswer(said);
+  }
+  // The door asked "which one?" - so the door takes the answer. It used to offer two songs, keep no
+  // record of them, and then have nothing to lock when he chose.
+  if (!shareCard && shareChoices.length && !doorSearching) resolveChoice(said);
+  // 8 Nov 11:59: "I want to share a song." -> "Back in Black from ACDC" -> "I couldn't find that song
+  // on the sharing rail. Nothing was found." There is not one songShare call in the log: the model
+  // never searched and reported the failure anyway. The rail answers those exact words with the song.
+  // A claim about the record has to come from the record, so the door takes the answer itself.
+  noteSongAnswer(said);
+}
+
+
 function noteSongAnswer(heard) {
   const said = String(heard || '').trim();
   if (!said) return;
@@ -7469,48 +7544,11 @@ function handleFrame(text) {
       silenceNudges = 0;
       correctedThisTurn = false;             // a new turn: the door may correct again if it has to
       lastHeardText = heard;
-      // "I want to create a song and share it to somebody" is the intent that makes a made song a gift.
-      // Remembered for fifteen minutes, and only as a hint: nothing is sent without his address typed.
-      if (/\b(?:share|send)\b|\b(?:make|write|create|do)\b[^.?!]{0,40}\b(?:for|to)\s+(?:my|his|her)\b/i.test(heard)) {
-        shareIntentAt = Date.now();
-      }
-      try { if (!forkAnswer(heard)) songRouteGate(heard); } catch (e) {}
-      try { shadowRouteNote(heard, songRoute && songRoute.pick); } catch (e) {}
-      try { songHearTurn(heard); } catch (e) {}
-      try { descentHear(heard); } catch (e) {}
+      doorHears(heard);
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
-      try { threadRemember('you', heard); } catch (e) {}
       armSilenceWatch(heard);
       replyAudible = false;                  // a new answer begins, so its first sound may be held
-      // If he is asking whether something went, the record answers - not the model's guess and not
-      // a denial. Only while no share is in flight, so it can never talk over an open sheet.
-      if ((shareStage === 'idle' || shareStage === 'closed') && !sharePending && isDeliveryQuestion(heard)) {
-        const line = deliveryAnswer();
-        logLine('turn.record', 'answered from the delivery record: ' + line.slice(0, 100),
-          { level: 'info', target: 'record' });
-        doorNote('say exactly this, in one line, and nothing else: "' + line + '"', true);
-      }
-      // Step 2 of the share: this utterance IS the answer about the picture. The door takes it, locks it,
-      // and opens the sheet. The model is not asked, because a model asked twice answers twice.
-      if (sharePending && resolvePending(heard)) { /* the name was being checked: that was the answer */ }
-      else if (shareStage === 'art' && artAnswerCandidate(heard)) { shareArtAnswer(heard); }
-      // The cover question may still be asked by the model rather than the door. If he answers it with a
-      // picture in mind while a song is on the shelf, that is the art step whether or not the door opened
-      // it: the answer is taken here rather than dropped on the floor.
-      else if (shareCard && !sharePending && (wantsCoverArt(heard) || descentAnswer(heard))) {
-        shareStage = 'art';
-        railNote('share · art · taken from his answer with the step not open');
-        shareArtAnswer(heard);
-      }
-      // The door asked "which one?" — so the door takes the answer. It used to offer two songs, keep no
-      // record of them, and then have nothing to lock when he chose.
-      if (!shareCard && shareChoices.length && !doorSearching) resolveChoice(heard);
-      // 8 Nov 11:59: "I want to share a song." → "Back in Black from ACDC" → "I couldn't find that song
-      // on the sharing rail. Nothing was found." There is not one songShare call in the log: the model
-      // never searched and reported the failure anyway. The rail answers those exact words with the song.
-      // A claim about the record has to come from the record, so the door takes the answer itself.
-      noteSongAnswer(heard);
     }
   }
   if (sc.outputTranscription && sc.outputTranscription.text) {
@@ -7546,7 +7584,10 @@ function handleFrame(text) {
         heldEngineLogged = Date.now();
         logLine('turn.engine.held', outText.slice(0, 120), { level: 'info', target: 'held' });
       }
-    } else if (outText) { engineSpokeNow(); appendLive('engine', outText); }
+    } else if (outText) {
+      try { if (ASKED_FOR_TITLE.test(outText)) engineAskAt = Date.now(); } catch (e) {}
+      engineSpokeNow(); appendLive('engine', outText);
+    }
   }
 
   const parts = (sc.modelTurn && sc.modelTurn.parts) || [];
@@ -8291,6 +8332,10 @@ function paintMode() {
 let pendingTyped = '';
 
 function postTyped(text) {
+  /* Build 205. The door hears a typed line on its way in, before the model sees it, exactly as it hears
+     a spoken one. Without this the model is the only reader of a typed sentence, and on 14 Nov it
+     answered "I couldn't find "Back in Black" on the sharing rail" twice without asking the rail once. */
+  try { doorHears(text); } catch (e) {}
   try {
     ws.send(JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text: text }] }], turnComplete: true } }));
     logLine('turn.you.typed', String(text).slice(0, 200), { level: 'info' });
