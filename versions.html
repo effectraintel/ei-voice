@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>the door · every version</title>
+<style>
+  :root { --ink:#e8dfcc; --dim:#8b8172; --gold:#c9a86a; --bg:#141210; --card:#1a1714; --line:#2e2a24; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         -webkit-font-smoothing:antialiased; min-height:100vh; }
+  .wrap { max-width:640px; margin:0 auto; padding:34px 20px 56px; }
+  .mark { font-size:10px; letter-spacing:.24em; text-transform:uppercase; color:var(--dim); }
+  h1 { font-family:Georgia, "DejaVu Serif", serif; font-weight:normal; font-size:26px; margin:14px 0 6px; }
+  .sub { font-size:13px; line-height:1.55; color:var(--dim); margin:0 0 22px; max-width:44ch; }
+  .now { display:flex; gap:12px; align-items:baseline; justify-content:space-between;
+         border:1px solid var(--line); border-radius:10px; background:var(--card);
+         padding:13px 15px; margin-bottom:22px; }
+  .now b { font-size:15px; font-weight:600; }
+  .now a { color:var(--gold); text-decoration:none; font-size:12.5px; letter-spacing:.04em; }
+  ol { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:baseline; gap:12px; padding:12px 2px; border-bottom:1px solid var(--line); }
+  li:last-child { border-bottom:0; }
+  .n { font-family:ui-monospace, "SF Mono", Menlo, monospace; font-size:13px; color:var(--gold);
+       min-width:3.4em; letter-spacing:.06em; }
+  .t { flex:1 1 auto; font-size:13.5px; color:var(--ink); }
+  .at { font-family:ui-monospace, "SF Mono", Menlo, monospace; font-size:11px; color:var(--dim); }
+  li a { color:var(--gold); text-decoration:none; font-size:12px; letter-spacing:.05em; padding-left:4px; }
+  li a:hover { text-decoration:underline; }
+  li.here .t::after { content:' · you are here'; color:var(--dim); font-size:11px; letter-spacing:.04em; }
+  .err { border:1px solid #4a2f22; background:#221a14; color:#e0b48a; border-radius:10px;
+         padding:12px 14px; font-size:12.5px; line-height:1.5; }
+  footer { margin-top:28px; font-size:9.5px; letter-spacing:.22em; text-transform:uppercase; color:#5f5749; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="mark">Effectra Intelligence</div>
+  <h1>Every version of the door</h1>
+  <p class="sub">Tap a build to open it. A version in the address is pinned: it stays on that build instead of
+     climbing to the newest one.</p>
+  <div id="now" class="now" hidden></div>
+  <ol id="list"></ol>
+  <div id="err" class="err" hidden></div>
+  <footer>Proof on chain. Payload in the vault.</footer>
+</div>
+<script>
+(function () {
+  var here = String(location.hostname || '');
+  var list = document.getElementById('list');
+  function fail(why) {
+    var e = document.getElementById('err');
+    e.hidden = false;
+    e.textContent = 'The list of versions could not be read just now (' + why + '). '
+      + 'The door itself still opens: door.effectra.ai';
+  }
+  fetch('versions.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+    .then(function (d) {
+      var builds = (d && Array.isArray(d.builds)) ? d.builds : [];
+      if (!builds.length) { fail('the list is empty'); return; }
+      var newest = Number(d.latest || (builds[0] && builds[0].n) || 0);
+      var row = document.getElementById('now');
+      row.hidden = false;
+      row.innerHTML = '<b>Newest: build ' + newest + '</b>'
+        + '<a href="live.html?v=' + newest + '&amp;t=' + Date.now() + '">open it</a>';
+      builds.slice().sort(function (a, b) { return Number(b.n) - Number(a.n); })
+        .forEach(function (b, i) {
+          var li = document.createElement('li');
+          if (Number(b.n) === newest && i === 0) li.className = 'here';
+          var n = document.createElement('span'); n.className = 'n'; n.textContent = 'v' + b.n;
+          var t = document.createElement('span'); t.className = 't'; t.textContent = 'build ' + b.n;
+          var at = document.createElement('span'); at.className = 'at'; at.textContent = String(b.at || '');
+          var a = document.createElement('a');
+          a.href = String(b.file || ('v' + b.n + '.html'));
+          a.textContent = 'open';
+          li.appendChild(n); li.appendChild(t); li.appendChild(at); li.appendChild(a);
+          list.appendChild(li);
+        });
+      var live = document.createElement('li');
+      var ln = document.createElement('span'); ln.className = 'n'; ln.textContent = 'live';
+      var lt = document.createElement('span'); lt.className = 't'; lt.textContent = 'whatever is newest';
+      var la = document.createElement('a'); la.href = 'live.html'; la.textContent = 'open';
+      live.appendChild(ln); live.appendChild(lt); live.appendChild(la);
+      list.appendChild(live);
+    })
+    .catch(function (e) { fail(String((e && e.message) || e)); });
+})();
+</script>
+</body>
+</html>
