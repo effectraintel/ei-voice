@@ -98,7 +98,8 @@ var BASE = 'https://solene-7ba0f3a1.base44.app/functions/eiTurnLog';
 var rows = [];              // oldest first
 var since = '-';
 var paused = false;
-var dial = Number(localStorage.getItem('ei.journey.detail'));
+var saved = localStorage.getItem('ei.journey.detail');
+var dial = saved === null ? 2 : Number(saved);   // a first visit opens at 2, not at 0
 if (!(dial >= 0 && dial <= 3)) dial = 2;
 var onlyRun = '';
 var q = '';
