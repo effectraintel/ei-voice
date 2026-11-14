@@ -61,8 +61,9 @@
   <button id="clear" title="hide everything logged so far. Nothing is deleted: the dated files and
     the stream keep every line, and this button toggles back.">clear view</button>
   <button id="purge" title="empty the log itself: every line in the stream is deleted, so the
-    console and any door reading it start from nothing. The dated files under logs/ei-voice are the
-    long history and are kept. Two taps, because this one cannot be undone.">purge</button>
+    console and any door reading it start from nothing. That includes the journey log's runs, because
+    both views read one stream. The dated files under logs/ei-voice and logs/ei-journey are the long
+    history and are kept. Two taps, because this one cannot be undone.">purge</button>
   <span class="meta" id="hits"></span>
   <span class="meta" id="cleared"></span>
   <span class="meta live" id="live">connecting</span>
@@ -107,6 +108,10 @@ function merge(list) {
 }
 
 function matches(e) {
+  // journey.* lines belong to the journey log (journey.html, 14 Nov 2026). Same collector, own
+  // namespace, own page: this one is the voice, and mixing the two is how a door fault gets lost
+  // in a rehearsal's step rows.
+  if (String(e.facility || '').indexOf('journey.') === 0) return false;
   if (clearedAt && olderOrSame(e.id, clearedAt)) return false;
   if (fac.value && e.facility !== fac.value) return false;
   if (lvl.value && e.level !== lvl.value) return false;
@@ -147,7 +152,10 @@ function paint() {
 
 function facs() {
   var seen = {}, list = [], cur = fac.value, i;
-  for (i = 0; i < rows.length; i++) if (!seen[rows[i].facility]) { seen[rows[i].facility] = 1; list.push(rows[i].facility); }
+  for (i = 0; i < rows.length; i++) {
+    if (String(rows[i].facility || '').indexOf('journey.') === 0) continue;   // the journey log owns those
+    if (!seen[rows[i].facility]) { seen[rows[i].facility] = 1; list.push(rows[i].facility); }
+  }
   list.sort();
   var html = '<option value="">all facilities</option>';
   for (i = 0; i < list.length; i++) html += '<option' + (list[i] === cur ? ' selected' : '') + '>' + esc(list[i]) + '</option>';
@@ -312,7 +320,7 @@ purgeBtn.onclick = function () {
   var now = Date.now();
   if (!purgeArmedAt || now - purgeArmedAt > 4000) {
     purgeArmedAt = now;
-    purgeLabel('purge all? tap again', true);
+    purgeLabel('purge both logs? tap again', true);
     var mine = now;
     setTimeout(function () {
       if (purgeArmedAt === mine) { purgeArmedAt = 0; purgeLabel('purge', false); }
