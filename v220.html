@@ -913,6 +913,11 @@ window.addEventListener('DOMContentLoaded', () => {
    build is published; this reads it and either takes him to the build he asked for, or says plainly that it is
    not there and offers the ones that are. No manifest, no claim: if the list cannot be read, the door opens and
    the log says why, because a guess about what is published is worse than no answer. */
+/* A page served under its own name (v219.html) is a pin. He asked for that build, so this page must not climb
+   to the newest one: without this, asking for 219 landed on it and the auto-update took him to 220 in the same
+   breath, which is the opposite of what the address asked for. live.html is the one that follows the latest. */
+const PINNED = (location.pathname.match(/\/v(\d+)\.html?$/) || [])[1] || '';
+
 async function versionGate() {
   const asked = (location.search.match(/[?&]v=(\d+)/) || [])[1];
   if (!asked) return false;
@@ -1004,6 +1009,13 @@ async function keepCurrent() {
   try {
     // Build 220: an address can ask for a build by name, so the address is answered before anything else.
     if (await versionGate()) return;
+    // A pinned page is the build he asked for. It says so and stays, whatever has been published since.
+    if (PINNED) {
+      logLine('build.pinned', 'this is build ' + PINNED + ' by name, so it does not take a newer one',
+        { level: 'info' });
+      logPageLoad();
+      return;
+    }
     const last = Number(sessionStorage.getItem('ei-build-check') || 0);
     // 14 Nov 13:12: he reloaded while testing and the footer still read 207, twice. The check ran once a
     // minute and he was reloading every few seconds, so the newer build was already published and the page
