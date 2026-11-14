@@ -2953,12 +2953,13 @@ function journeyAskNext() {
     /* Build 141's lesson, applied to this note: a brief that names a forbidden phrase puts it in the
        mouth. So the note says where things ARE (his words are held, the sound is what the making needs
        next) and never lists the words not to use. */
-    doorNote('He has given what the song is about, in his own words, and the door is holding it. Ask him '
+    doorAsk('What kind of music should it be?',
+      'He has given what the song is about, in his own words, and the door is holding it. Ask him '
       + 'exactly one question, short, in your own voice: "What kind of music should it be? Say you choose '
       + 'and I will pick." Offer plainly that he can say "you choose" and you will pick, because no beat is '
       + 'a gate. Do not describe the song and do not name a style he did not give. Say only what is true '
       + 'now: his words are held, and the sound is the next thing the making needs. Ask THAT question and '
-      + 'nothing else.', true);
+      + 'nothing else.');
   } catch (e) {}
 }
 
