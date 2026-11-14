@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T23:25';
-const BUILD_NO = 229;
+const BUILD = '2026-11-14T23:50';
+const BUILD_NO = 230;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -585,7 +585,7 @@ const DECLS = [{
                  all (measured: groundingChunks 0 in the live audio session), so a fact answered that way can
                  never be shown with its source. Asked here, the rail returns the facts and the links that
                  back them, and the door puts both on his shelf. */
-              description: 'The search rail: anything about the world outside his house. Use it FIRST for a score, a result, a price, a news event, a date, a person, or anything happening now, and for the weather. It answers with the facts and the source links behind them, and the door puts what it found on his shelf for him to open. Speak only from the facts it returns and name the source it names. Never answer a world question from memory and never name a source you were not given. Not for his own rooms, family, money or records: that is house.',
+              description: 'The search rail: anything about the world outside his house. Use it FIRST for a score, a result, a price, a news event, a date, a person, or anything happening now, and for the weather. It answers with the facts and the source links behind them, and the door puts what it found on his shelf for him to open. Speak only from the facts it returns and name the source it names. Never answer a world question from memory and never name a source you were not given. Not for his own rooms, family, money or records: that is house. Never for a question about the door itself, its rail, its shelf or why something just happened: the web knows nothing about this door, so answer from what you did, or say you do not know.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
@@ -690,7 +690,8 @@ const BRIEF = NO_CLAIM +
   'For anything about the world outside his house - a price, a score, a result, a news event, a date, who '
   + 'someone is, anything happening now - call the world tool. It searches, and what it finds lands on his '
   + 'shelf with the sources it came from, so say in a few words that it is on his shelf and let him open it. '
-  + 'Answer from what it returns, name the source it names, and never fill a gap with what you already knew. ' +
+  + 'Answer from what it returns, name the source it names, and never fill a gap with what you already knew. '
+  + 'A question about the door itself, such as why something just happened, is never a world question: do not call the world tool for it. Say only what you actually did this conversation, and if you do not know why, say you do not know. ' +
   'Address him as Boss. Warm, direct, unhurried, never ornate. ' +
   // Edwin, 8 Nov 13:36: one Afrikaans sentence and the door carried on in Afrikaans, in another voice.
   // Edwin, 8 Nov 16:29: "it changed mid sentence to an Indian accent". A door with one speaker in it does
@@ -3247,8 +3248,19 @@ function readRoute(text, opts) {
      was missing: "how/what/where/when/why/who/which" opening a sentence is him asking the door a question, not
      naming a song. "can you play ..." is excluded because that IS a request. */
   const quotedTitle = quoted;
-  const worldQuestion = /^\s*(?:how|what|where|when|why|who|whose|which|is|are|was|were|do|does|did|have|has|should)\b/i.test(raw)
-    || (/^\s*(?:can|could|would|will)\b/i.test(raw) && !/^\s*(?:can|could|would|will)\s+you\b/i.test(raw));
+  /* Build 230 - AN OPENER DOES NOT HIDE A QUESTION. 14 Nov 2026, 23:17: "So how can I get to cape town" went to
+     the song store and "how can I get from Ballito to Cape Town" did not. 228 tested the first word only, and
+     spoken sentences open with a filler ("so", "ok", "well", "right, and") far more than typed ones do. The
+     filler and its comma are stripped before the test; an interrogative clause after a comma or after "tell me",
+     "show me", "explain" counts too. "can you play ..." is still a request, and a quote, a "by <Artist>" or a
+     store name still settles a share. */
+  const FILLER_LEAD = /^\s*(?:(?:so|ok|okay|well|right|and|but|now|then|hey|um+|uh+|hmm+|yes|yeah|yep|no|nope|alright|all right|listen|look|actually|please|sorry|oh|ah)\b[\s,.\-:;!]*)+/i;
+  const bare = raw.replace(FILLER_LEAD, '');
+  const INTERROG = /^\s*(?:how|what|where|when|why|who|whose|which|is|are|was|were|do|does|did|have|has|should)\b/i;
+  const worldQuestion = INTERROG.test(bare)
+    || (/^\s*(?:can|could|would|will)\b/i.test(bare) && !/^\s*(?:can|could|would|will)\s+you\b/i.test(bare))
+    || /(?:^|[,;:.?!]\s*)(?:tell me|show me|explain|ask)\s+(?:how|what|where|when|why|who|which)\b/i.test(bare)
+    || /[,;]\s*(?:how|what|where|when|why|who|which)\s+(?:can|could|do|does|did|should|would|is|are|was|were)\b/i.test(bare);
 
   /* An act aimed at nothing is not a song act. The object may be a song word anywhere, or a pronoun
      standing in for one just after the verb ("make a new ONE"). Without either, the sentence is about
@@ -4112,12 +4124,40 @@ function houseIntent(args) {
 
 // The world, asked properly. One query, one engine, and the answer carries the engine's own name and
 // the time it was measured, so the sentence that follows can be traced to a fact rather than a voice.
+/* Build 230 - THE DOOR'S OWN WORKING IS NOT ON THE WEB. 14 Nov 2026, 23:17: after a wrong refusal he asked "Ok
+   why?", the model called the world tool with "Why did the sharing rail not find ...", and Google, which has
+   never seen this door, wrote a confident account of what happened ("the query was held locally and never
+   published") that the door then put on his shelf as a looked-up fact. A question about the door, its rail,
+   its shelf, its voice or its last turn is answered from what the door did this session, or not at all.
+   Nothing is searched and no card is written. */
+const ABOUT_THE_DOOR = /\b(?:sharing rail|the rail|your rail|the door|your door|the shelf|my shelf|your shelf|your voice|your ears|your mouth|why did you|why didn'?t you|why (?:is|was|are|were) (?:it|that|this|the (?:door|rail|shelf))|what (?:did|have) you (?:do|done|just)|what went wrong|what happened|why (?:can'?t|couldn'?t|won'?t|did(?:n'?t)?) (?:it|that|the))\b/i;
+function askIsAboutTheDoor(ask) {
+  const a = String(ask || '');
+  if (!ABOUT_THE_DOOR.test(a)) return false;
+  // a real world question that merely mentions a door or a shelf ("how do I build a shelf") is not about this door
+  if (/\b(?:build|make|buy|fit|install|paint|hang|measure)\b[^.?!]{0,30}\b(?:shelf|door)\b/i.test(a)) return false;
+  return true;
+}
+
 async function handleWorldCall(call) {
   const args = call.args || {};
   const ask = String(args.ask || lastHeardText || '').slice(0, 300).trim();
   const kind = String(args.kind || 'auto');
   let result = '';
   const t0 = Date.now();
+  if (askIsAboutTheDoor(ask) || askIsAboutTheDoor(lastHeardText)) {
+    result = 'That is a question about the door itself, and the web knows nothing about it, so nothing was searched and nothing '
+      + 'was put on his shelf. Answer only from what you actually did this conversation: which tool you called and what it '
+      + 'returned. If you did not call one, say so plainly. If you do not know why, say you do not know. Never guess a cause '
+      + 'and never name a source.';
+    logLine('world.refused', ask + ' \u00b7 about the door, not the world', { level: 'info', target: 'world' });
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch { /* the socket is gone; the turn will end on its own */ }
+    return;
+  }
   try {
     if (!ask) throw new Error('nothing was asked');
     const r = await fetch(FNBASE + 'eiWorldLookup', {
