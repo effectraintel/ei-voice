@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T13:32';
-const BUILD_NO = 209;
+const BUILD = '2026-11-14T13:31';
+const BUILD_NO = 210;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3027,8 +3027,14 @@ function forkAnswer(heard) {
     shareChoices = []; shareChoicesAt = 0;
     songRoute = { pick: 'share', at: Date.now() };
     logLine('song.fork.answer', 'share · from the stores', { level: 'info', target: 'music' });
+    /* Build 210. Nothing has been searched at this point, so there is no result and no failure to report.
+       14 Nov 13:20: handed this note, the mouth answered "The sharing rail didn't answer, Boss" with no
+       rail call behind it, and the turn was spent correcting a sentence the brief had left room for. The
+       way to stop a sentence is to leave no room for it. */
     doorNote('The route is SHARING a song that already exists: nothing is made. Say so in one short line, '
-      + 'then ask him for the title (and the artist if he has it) if he has not already said it.', true);
+      + 'then ask him for the title (and the artist if he has it) if he has not already said it. Nothing has '
+      + 'been searched yet, so there is no result and no failure: never say the rail did not answer, never '
+      + 'say nothing was found, and never say anything about his shelf. Ask which song and stop.', true);
     return true;
   }
   if (makeWord || fresh) {
@@ -4041,6 +4047,23 @@ function shelfBacksClaim(t) {
   } catch (e) { return false; }
 }
 
+/* Build 210 · A SENTENCE THAT SAYS NOTHING IS THERE IS NOT A CLAIM THAT SOMETHING IS THERE.
+   14 Nov 2026, 13:20. After "music stores" settled the route, the mouth said: "The sharing rail didn't
+   answer, Boss. Nothing was found and nothing is on your shelf." That sentence contains "is on your
+   shelf", so the no-take guard read it as a claim that a song had ARRIVED, and corrected a mouth that
+   had said the opposite. The correction had nothing he could act on, the mouth repeated itself, and
+   every repeat fired the guard again: six corrections and the same apology, twice a second, for forty
+   seconds, with a model turn paid for each one. The phrase is only a claim when nothing negates it. */
+function negatedHere(t, re) {
+  const hay = String(t || '');
+  const m = hay.match(re);
+  if (!m) return false;
+  const at = typeof m.index === 'number' ? m.index : 0;
+  const lead = hay.slice(Math.max(0, at - 26), at);
+  return /\b(?:nothing|none|no|not|never|nobody|isn'?t|aren'?t|wasn'?t|weren'?t|didn'?t|doesn'?t|hasn'?t|haven'?t|hadn'?t|without|zero|empty)\b/i.test(lead)
+    || /\bnothing\b/i.test(m[0]);
+}
+
 function judgeClaim() {
   try {
     const t = String(said.engine || '');
@@ -4054,7 +4077,7 @@ function judgeClaim() {
        it asks whether a TAKE exists and a song shared from the stores has no take. The mouth then apologised
        for a song that was sitting in front of him. The record is the card: if the title he named is the card
        on his shelf, the claim is backed and there is nothing to correct. */
-    if (readyClaim.test(t) && !madeRecently && !lastSongRequest && !shelfBacksClaim(t)) {
+    if (readyClaim.test(t) && !negatedHere(t, readyClaim) && !madeRecently && !lastSongRequest && !shelfBacksClaim(t)) {
       logLine('song.claim', t.slice(0, 160), { level: 'warn', target: 'no-take' });
       doorCorrect('nothing has been made yet · your song is still to come',
         'No take exists: nothing has been made and nothing is on his shelf. Correct yourself in one short line '
@@ -4706,9 +4729,33 @@ function resolvePending(heard) {
 let engineAskAt = 0;                    // when the mouth last asked him for a song title
 const ASKED_FOR_TITLE = /\b(?:which|what)\s+(?:song|track|tune|one)\b|\bname (?:of )?the (?:song|track)\b|\bwhat(?:'s| is) it called\b|\bwho sings it\b/i;
 
+/* Build 210 · "STOP" IS AN INSTRUCTION AND NEVER A TITLE.
+   14 Nov 2026, 13:21: caught in the loop above, he typed "stop". The door searched the music stores for a
+   song called "stop" and offered him four of them. A word that ends a step ends it: the fork closes, the
+   list closes, nothing is searched, nothing is made, and the door says one short line so he knows it heard
+   him. Bare "no" and "wait" are not in this list: the door asks yes/no questions, and a no is an answer. */
+const STOP_WORD_ONLY = /^(?:(?:please|just|ok|okay|hey|no)[, ]+)?(?:(?:no[, ]+)?(?:stop|cancel|quit|never ?mind|forget it|forget about it|leave it|leave that|drop it|drop that|enough|shut up|pack it in)(?:\s+(?:it|that|this|now|please|searching|search|looking|the\s+(?:song|track|tune|music|search|searching|sharing)))*(?:,?\s*please)?)\s*[.?!]*$/i;
+
+function heardStop(said) {
+  if (!STOP_WORD_ONLY.test(String(said || '').trim())) return false;
+  songFork = 0; songForkAsks = 0;
+  shareChoices = []; shareChoicesAt = 0;
+  awaitSong = 0;
+  songRoute = { pick: '', at: Date.now() };
+  if (shareStage === 'art' && !shareCard) shareStage = 'closed';
+  logLine('door.stop', 'he stopped the step: ' + String(said).slice(0, 40), { level: 'info', target: 'stop' });
+  railNote('stopped');
+  doorNote('He has stopped you. Say one short line that you have stopped and that nothing was searched or '
+    + 'made, then wait for what he wants next. Do not ask him for a song title and do not mention a rail.', true);
+  return true;
+}
+
 function doorHears(heard) {
   const said = String(heard || '').trim();
   if (!said) return;
+  // A new thing said is a new chance to be corrected: the mute above belongs to the fault, not to him.
+  correctMuted = '';
+  if (heardStop(said)) return;
   // "I want to create a song and share it to somebody" is the intent that makes a made song a gift.
   // Remembered for fifteen minutes, and only as a hint: nothing is sent without his address typed.
   if (/\b(?:share|send)\b|\b(?:make|write|create|do)\b[^.?!]{0,40}\b(?:for|to)\s+(?:my|his|her)\b/i.test(said)) {
@@ -5219,7 +5266,27 @@ function doorNote(text, speak) {
    model reliably decorated it with a closer. Three of those in one turn is what he heard on 10 Nov.
    So the truth is now the door's line: it goes on screen, it is logged, and the mouth is asked for
    nothing. A line already spoken cannot be unsaid, but it is never repeated back at him. */
+/* Build 210 · A CORRECTION IS ISSUED ONCE, NOT ON A LOOP.
+   14 Nov 2026, 13:20, the same forty seconds as above. The guard above corrected the mouth, the mouth
+   repeated itself word for word, the guard corrected it again, and the only thing that ended it was him
+   shutting the door. A guard arguing with a mouth that cannot satisfy it is a loop with a reason, not a
+   loop with a bug, and it costs him a model turn every six seconds. So the same fault may be corrected
+   once inside a minute. After that it is muted: the truth stays on screen from the first correction and
+   the model is not asked again, which is what stops the loop, because a note is the only thing that
+   makes the mouth speak again. */
+let lastCorrectKey = '', lastCorrectAt = 0, correctMuted = '';
 function doorCorrect(display, note, needsMouth) {
+  const key = String(display || '').slice(0, 70);
+  const now = Date.now();
+  const again = (key === correctMuted) || (key === lastCorrectKey && now - lastCorrectAt < 60000);
+  lastCorrectKey = key; lastCorrectAt = now;
+  if (again) {
+    correctMuted = key;
+    logLine('door.correct.muted', 'the same fault twice inside a minute: the mouth is not asked again · ' + key,
+      { level: 'warn', target: 'correct' });
+    return;
+  }
+  correctMuted = '';
   correctedThisTurn = true;
   hiddenHold = true; hiddenHoldUntil = Date.now() + 1200;
   try { railNote(display); } catch (e) {}
