@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T14:35';
-const BUILD_NO = 212;
+const BUILD = '2026-11-14T15:10';
+const BUILD_NO = 213;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4521,7 +4521,9 @@ async function handleWrapCall(call) {
       code: String(d.code || ''),
     };
     shelfAdd(card);
-    keepFound(card);                    // the record catches up behind the card, as it does for a found page
+    /* No keepFound here: shelfKeep keeps source, link and note cards and refuses a store card by design,
+       and mtShareWrap already wrote this row. Asking it anyway logged a rejected "not kept" line for every
+       wrap, which read like a card that had gone missing when nothing had. (build 213) */
     railNote('wrap \u00b7 ' + title + (artist ? ' \u00b7 ' + artist : ''));
     looked = 'the store link \u00b7 ' + title;
     result = 'One universal link is made and it is on his shelf: ' + title
@@ -4799,6 +4801,18 @@ let shareDraft = null;
 // closes before the next opens, and the send is the door's alone.
 let shareCard = null;                        // the song the door has locked, and the card it put down
 let shareStage = 'idle';                     // idle → art → waiting → sheet → sent. One step open at a time.
+
+/* Build 213. ONE place that puts a share step down, because the reset was written inline in four places
+   and the picture step was the one nobody reset: it outlived its song, and at 12:41 on 14 Nov it ate the
+   name of the song he had just asked for. A step belongs to one song. */
+function putShareAside(why) {
+  const was = (shareCard && shareCard.title) ? shareCard.title : '';
+  shareStage = 'idle'; shareCard = null; shareCardTarget = null; shareQuery = '';
+  shareArt = { want: false, brief: '' }; shareArtTries = 0;
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  logLine('share.setaside', why + (was ? ' \u00b7 ' + was + ' stays on his shelf' : ''),
+    { level: 'warn', target: 'share' });
+}
 /* Build 125. A song made here is a song he may want to send, and the make path used to end in his own
    shelf: nothing asked who it was for, the picture answer had no step to live in, and the sheet could
    never open. (Edwin, 10 Nov 08:41: "I want to create a song and share it to somebody" then, when the
@@ -5081,6 +5095,9 @@ function noteSongAnswer(heard) {
     if (!carriesName) {
       awaitSong = Date.now();
       railNote('share · song expected');
+      // Build 213. He is asking for ANOTHER song while the last one's picture question is still open.
+      // The step goes down here, at the ask, not when his next word arrives and gets eaten by it.
+      if (shareStage === 'art') putShareAside('picture question set aside, he has asked for another song');
       return;
     }
     // fall through: armed and answered in the same breath
@@ -5120,13 +5137,20 @@ function noteSongAnswer(heard) {
         logLine('share.setaside', why + ' · "' + String(said).slice(0, 40) + '" · nothing was sent, '
           + was + ' stays on his shelf', { level: 'warn', target: 'share' });
       };
-      if (shareStage === 'sheet' && anotherSong) {
+      if ((shareStage === 'sheet' || shareStage === 'art') && anotherSong) {
         // "another song" is not a title, so it is not searched for one. It is a request for the song he
-        // wants instead, and the honest answer is to ask which one.
-        setAsideShare('sheet set aside, he wants another song');
+        // wants instead, and the honest answer is to ask which one. Build 213: the picture step is put down
+        // by it too, which is the fault he reported at 12:41 on 14 Nov.
+        const wasStage = shareStage;
+        setAsideShare((wasStage === 'art' ? 'picture question set aside' : 'sheet set aside')
+          + ', he wants another song');
         awaitSong = Date.now();
-        doorNote('He has put that share aside and wants a different song. Nothing was sent and the sheet is '
-          + 'closed, so do not mention it. Ask which song he wants instead, one short line, and nothing else.', true);
+        doorNote(wasStage === 'art'
+          ? 'He has put the picture question aside and wants a different song. Nothing was sent, no picture '
+            + 'was drawn, and that song is still on his shelf, so do not mention any of it. Ask which song he '
+            + 'wants instead, one short line, and nothing else.'
+          : 'He has put that share aside and wants a different song. Nothing was sent and the sheet is '
+            + 'closed, so do not mention it. Ask which song he wants instead, one short line, and nothing else.', true);
         return;
       }
       if (shareStage === 'sheet' && !addrShaped && !msgShaped) {
@@ -5136,6 +5160,16 @@ function noteSongAnswer(heard) {
         // A real step is open, so the title is not searched. Say so: a silent swallow is exactly how
         // 12 Nov 07:44 became invisible in the log, where four titles left no trace at all.
         logLine('share.held', 'a step is open (' + shareStage + '), so "' + String(said).slice(0, 60) + '" was not searched', { level: 'warn', target: 'share' });
+        /* Build 213. A hold is not a silence. On 14 Nov 12:41 the picture step held his "Home", nothing was
+           asked of any rail, and the mouth filled the quiet with "The sharing rail didn't answer, so nothing
+           was found" - so he heard two sentences that disagreed, one from the mouth and one from the guard
+           that caught it afterwards. The guard can only correct what has already been spoken, so the hold
+           now carries the truth with it, in the same breath the step is held. */
+        doorNote('Nothing was searched and no rail was asked anything: his words arrived while the "'
+          + shareStage + '" step is open, and they belong to that step. Do not say the rail did not answer, '
+          + 'do not say nothing was found, and do not offer versions. If that step still needs an answer, ask '
+          + 'it again in one short sentence; if it has already been asked again, say one short line that you '
+          + 'are waiting on it.', true);
         awaitSong = 0; return;
       }
     }
@@ -5743,8 +5777,10 @@ function shareArtAnswer(heard) {
       shareArtTries++;
       railNote('share · art too thin · asking again');
       logLine('share.art.thin', clean, { level: 'warn' });
-      doorNote('his description of the picture arrived cut off, so nothing is locked yet. Ask him once, '
-        + 'in one short sentence, for a few words about the picture, or whether he would rather skip it.', true);
+      doorNote('his description of the picture arrived cut off, so nothing is locked yet. Nothing was '
+        + 'searched and no rail was asked anything. Ask him once, in one short sentence, for a few words about '
+        + 'the picture, or whether he would rather skip it. Do not say the rail did not answer, do not say '
+        + 'nothing was found, and do not offer versions.', true);
       return;                                  // still on the art step, nothing locked
     }
     shareArt = { want: true, brief: thin ? '' : clean };   // empty brief = the song's own scene
