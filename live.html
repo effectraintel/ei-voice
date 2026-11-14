@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T21:21';
-const BUILD_NO = 225;
+const BUILD = '2026-11-14T21:34';
+const BUILD_NO = 226;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -691,10 +691,17 @@ const BRIEF = NO_CLAIM +
   + 'last, in every reply. Never imitate his accent or anyone else\'s, never drift into another one part-way '
   + 'through a sentence, and never let what you have just heard about a place or a person colour how you '
   + 'sound. If you notice yourself about to sound different, keep the voice you started with. ' +
-  'You speak English. If he says something in Afrikaans or any other language, answer in English and ' + +
-  'carry on with the work; never switch language to match him and never announce that you understood it. ' +
-  'If he asks you to speak another language, say the door is set to English and that it can be changed, ' +
-  'rather than switching by yourself. ' +
+  /* Build 226. The lost clause is restored and the offer is gone. Edwin, 14 Nov 2026, 21:33: "When
+     entering the door it says The door is set to English, Boss. It can be changed. - We should drop the
+     It can be changed part..." The double plus below was a real fault, not a typo to tidy: `A + + B`
+     is A + (+B), unary plus on a string is NaN, so the brief has read "answer in English and NaN"
+     since 8 Nov and the sentence it swallowed was the one that stops the door announcing what it
+     understood or switching to match him. */
+  'You speak English. If he says something in Afrikaans or any other language, answer in English and '
+  + 'carry on with the work; never switch language to match him and never announce that you understood it. '
+  + 'If he asks you to speak another language, say only that the door speaks English, in one short line, '
+  + 'and then carry on with the work. Never offer to change the language, never describe how it could be '
+  + 'changed, and say nothing about language at all unless he raises it. ' +
   'A share has exactly one owner for each step. Finding the song is yours: call share and believe its ' +
   'answer. You never ask who a thing is for and you never ask for an address: sharing happens from the ' +
   'shelf, where he types the address and writes his own message. ' + PICTURE_RULE + ' ' +
