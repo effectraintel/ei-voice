@@ -225,7 +225,29 @@
   .card a { text-decoration:none; color:inherit; display:block; min-width:0; }
   /* The buttons get a line of their own with air above them, so a label is read before a chip is
      pressed. margin-top:auto holds them to the bottom of the card whatever the words do. */
-  .card .acts { display:flex; align-items:center; gap:6px; margin-top:auto; padding-top:9px; }
+  .card .acts { display:flex; align-items:center; gap:7px; margin-top:auto; padding-top:9px; }
+  /* Build 218. The garage's two ways out, as badges rather than captions. Edwin, 14 Nov: "update the button
+     badges to something palatable ... also with badges that match the intentions." A badge says what a tap
+     will do before it is tapped: a return arrow and the door's own gold for putting a thing back where he can
+     see it, a cross and a muted brick for the one that ends it. Both are quiet at rest and answer on touch,
+     so the card stays a card. */
+  .card .act {
+    all: unset; box-sizing: border-box; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px 5px 9px; border-radius: 999px;
+    font-size: 9.5px; font-weight: 600; line-height: 1;
+    letter-spacing: .14em; text-transform: uppercase; white-space: nowrap;
+    transition: background .16s ease, border-color .16s ease, color .16s ease, transform .12s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card .act .gl { font-size: 11px; letter-spacing: 0; opacity: .85; line-height: 1; }
+  .card .act.restore { color: var(--gold); background: rgba(176,141,47,.10); border: 1px solid rgba(176,141,47,.42); }
+  .card .act.restore:hover, .card .act.restore:focus-visible {
+    background: rgba(176,141,47,.18); border-color: rgba(176,141,47,.70); }
+  .card .act.destroy { color: #c4837a; background: rgba(158,72,60,.10); border: 1px solid rgba(158,72,60,.40); }
+  .card .act.destroy:hover, .card .act.destroy:focus-visible {
+    color: #e3a79d; background: rgba(158,72,60,.20); border-color: rgba(178,88,74,.68); }
+  .card .act:active { transform: scale(.97); }
   .card .copy { background:none; border:1px solid #3a352d; color:#9b9182; font-size:10px;
                 letter-spacing:.08em; border-radius:6px; padding:3px 7px; line-height:1; }
   .card .copy:active { background:#2b271f; color:#e8dfcc; }
@@ -447,13 +469,13 @@
 <div id="gate" class="shut" role="dialog" aria-label="the door">
   <div class="gcard">
     <div class="gtitle">the door</div>
-    <p class="gtext" id="gtext">This door opens for one phone, with a fingerprint. One finger opens this tab for thirty minutes; nothing behind it moves until the phone has been read.</p>
+    <p class="gtext" id="gtext">This door opens for a device you have set up, with a fingerprint or your device's own unlock. One touch opens this tab for thirty minutes; nothing behind it moves until the device has been read.</p>
     <div id="gcode" class="ghidden">
       <label class="glabel" for="code">the one-time code</label>
       <input id="code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" placeholder="XXXX-XXXX-XXXX">
     </div>
     <button id="gbtn" class="gbtn" type="button">open the door</button>
-    <button id="galt" class="galt" type="button">set this phone up instead</button>
+    <button id="galt" class="galt" type="button">set this device up instead</button>
     <button id="glater" class="galt ghidden" type="button">not now</button>
     <div class="gmsg" id="gmsg"></div>
     <div class="gnote" id="gnote"></div>
@@ -475,8 +497,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T16:40';
-const BUILD_NO = 217;
+const BUILD = '2026-11-14T17:20';
+const BUILD_NO = 218;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -844,7 +866,7 @@ window.addEventListener('DOMContentLoaded', () => {
       leaveArmedAt = Date.now();
       leaveBtn.textContent = 'leave?';
       leaveBtn.classList.add('armed');
-      hint('tap leave once more to close the door on this phone');
+      hint('tap leave once more to close the door on this device');
       if (leaveTimer) clearTimeout(leaveTimer);
       leaveTimer = setTimeout(disarmLeave, 4100);
       return;
@@ -858,9 +880,9 @@ window.addEventListener('DOMContentLoaded', () => {
     try { sessionStorage.removeItem('ei-door-session'); } catch (e) {}
     try { sessionStorage.removeItem(SILENCED); } catch (e) {}
     if (logEl) logEl.innerHTML = '';
-    try { showGate(''); gateSay('you have left the house. one fingerprint opens this tab again.'); } catch (e) {}
+    try { showGate(''); gateSay('you have left the house. one touch opens this tab again.'); } catch (e) {}
     setState('the door is locked');
-    hint('one fingerprint opens this tab, for thirty minutes');
+    hint('one touch opens this tab, for thirty minutes');
     logLine('door.leave', 'left from the top right', { level: 'info' });
     measureHead();
   };
@@ -1739,12 +1761,12 @@ async function unlockWithFingerprint(mode, enrolCode) {
 async function unlockFingerprint(mode, enrolCode) {
   gBtn.disabled = true;
   gAlt.disabled = true;
-  gateSay(mode === 'register' ? 'asking the phone to make a key' : 'asking the phone for your fingerprint');
+  gateSay(mode === 'register' ? 'asking this device to make a key' : 'asking this device for your fingerprint');
 
   const begin = await gatePost('doorKeyBegin', { mode, device_label: deviceLabel() });
 
   if (mode === 'unlock' && !begin.has_keys) {
-    throw new Error('this phone is not a key to this door yet');
+    throw new Error('this device is not a key to this door yet');
   }
   if (mode === 'register' && begin.has_keys && !enrolCode) {
     // still allowed: a second device may be enrolled, but it must present the code
@@ -1777,12 +1799,12 @@ async function unlockFingerprint(mode, enrolCode) {
     const why = (e && e.name) || 'error';
     if (why === 'NotAllowedError') {
       throw new Error(mode === 'register'
-        ? 'the phone did not create the key. if it offered a passcode instead of a fingerprint, that passcode is the device, not the door.'
+        ? 'the device did not create the key. if it offered a passcode instead of a fingerprint, that passcode is the device, not the door.'
         : 'no fingerprint was given, so the door stayed shut.');
     }
-    throw new Error('the phone refused: ' + why);
+    throw new Error('the device refused: ' + why);
   }
-  if (!cred) throw new Error('the phone returned nothing');
+  if (!cred) throw new Error('the device returned nothing');
 
   const res = cred.response;
   const payload = {
@@ -1806,7 +1828,7 @@ async function unlockFingerprint(mode, enrolCode) {
 
   const done = await gatePost('doorKeyFinish', payload);
   if (mode === 'register') {
-    gateSay('this phone is now a key. asking for the fingerprint to open');
+    gateSay('this device is now a key. asking for the fingerprint to open');
     gBtn.disabled = false; gAlt.disabled = false;
     return unlockWithFingerprint('unlock', null);
   }
@@ -1828,12 +1850,12 @@ function showGate(reason) {
   gCode.classList.add('ghidden');
   gBtn.textContent = 'open the door';
   gBtn.onclick = onUnlockTap;
-  gAlt.textContent = 'set this phone up instead';
+  gAlt.textContent = 'set this device up instead';
   gAlt.onclick = () => {
     gCode.classList.remove('ghidden');
-    gBtn.textContent = 'enrol this phone';
+    gBtn.textContent = 'enrol this device';
     gBtn.onclick = onEnrolTap;
-    gNote.textContent = 'A one-time code, from My Authorised Devices on a phone that is already in the door. It works once and lasts ten minutes. With no device left, ask the engine for one. After that the phone alone is enough.';
+    gNote.textContent = 'A one-time code, from My Authorised Devices on a device that is already in the door. It works once and lasts ten minutes. With no device left, ask the engine for one. After that the device alone is enough.';
     document.getElementById('code').focus();
   };
   gateSay(reason || '');
@@ -1846,10 +1868,10 @@ function showGate(reason) {
 function gatePassed() { gateEl.classList.add('open'); }
 
 async function onUnlockTap() {
-  gateSay('waiting for the phone');
+  gateSay('waiting for the device');
   try {
     const done = await unlockWithFingerprint('unlock', null);
-    gateSay('fingerprint verified · open for thirty minutes · ' + (done.device_label || 'this phone'));
+    gateSay('fingerprint verified · open for thirty minutes · ' + (done.device_label || 'this device'));
     setTimeout(() => {
       gatePassed();
       /* Build 201: if the room never went away - the clock ran out while he sat in it - there is nothing to
@@ -1866,10 +1888,10 @@ async function onUnlockTap() {
 async function onEnrolTap() {
   const code = document.getElementById('code').value.trim();
   if (!code) { gateSay('the enrolment code is needed once', 'bad'); return; }
-  gateSay('asking the phone to make a key');
+  gateSay('asking this device to make a key');
   try {
     await unlockWithFingerprint('register', code);
-    gateSay('this phone is a key to this door');
+    gateSay('this device is a key to this door');
     setTimeout(() => { gatePassed(); setState('opening the voice'); startChannel('unlock'); }, 120);
   } catch (e) {
     gateSay(String(e.message || e), 'bad');
@@ -1885,7 +1907,7 @@ if (doorSession()) {
 } else {
   showGate('');
   setState('the door is locked');
-  hint('one fingerprint opens this tab, for thirty minutes');
+  hint('one touch opens this tab, for thirty minutes');
 }
 
 /* ---------- the door ---------- */
@@ -2110,13 +2132,13 @@ async function openDoor() {
     // to go out and back again?") A reload should never be the price of coming back.
     let session = doorSession();
     if (!session) {
-      hint('the thirty minutes are up · one fingerprint opens it again');
+      hint('the thirty minutes are up · one touch opens it again');
       try {
         await unlockWithFingerprint('unlock', null);
         gatePassed();
       } catch (e) {
         const why = String((e && e.message) || e);
-        showGate(/not a key/.test(why) ? 'this phone is not a key to this door yet' : why);
+        showGate(/not a key/.test(why) ? 'this device is not a key to this door yet' : why);
         throw new Error(/no fingerprint/.test(why) ? 'the door stayed shut: no fingerprint was given' : why);
       }
       session = doorSession();
@@ -6822,8 +6844,9 @@ async function garageAct(action, ref) {
     });
     const d = await r.json();
     await loadGarage(true);
-    if (action === 'restore') { railNote('garage · put back · ' + ((d && d.title) || 'one thing')); refreshCards(true); }
-    if (action === 'remove') railNote('garage · removed · ' + ((d && d.title) || 'one thing'));
+    // Build 218: the log uses the words on the badges, so a line of the record and a tap on the glass agree.
+    if (action === 'restore') { railNote('garage · restored · ' + ((d && d.title) || 'one thing')); refreshCards(true); }
+    if (action === 'remove') railNote('garage · destroyed · ' + ((d && d.title) || 'one thing'));
     return d;
   } catch (e) { return { ok: false }; }
 }
@@ -6854,17 +6877,21 @@ function renderGarage(el) {
     d.textContent = (it.kind === 'song' ? 'a song you made' : 'a wrapped link') + (it.subtitle ? ' \u00b7 ' + it.subtitle : '');
     body.appendChild(t); body.appendChild(d);
     const row = document.createElement('div'); row.className = 'acts';
+    /* Build 218. Two badges, each wearing its intention: RESTORE puts the card back where he can see it,
+       DESTROY ends it for good. Both say what they do, so nothing here has to be guessed at a glance. */
     const back = document.createElement('button');
     back.type = 'button';
-    back.style.cssText = 'all:unset;cursor:pointer;color:var(--gold);padding-right:12px;font-size:10.5px';
-    back.textContent = 'put back';
+    back.className = 'act restore';
+    back.setAttribute('aria-label', 'Restore ' + (it.title || 'this') + ' to the shelf');
+    back.innerHTML = '<span class="gl" aria-hidden="true">\u21ba</span><span>Restore</span>';
     back.onclick = () => garageAct('restore', it.ref);
     const gone = document.createElement('button');
     gone.type = 'button';
-    gone.style.cssText = 'all:unset;cursor:pointer;color:#8a7f76';
-    gone.textContent = 'remove for good';
+    gone.className = 'act destroy';
+    gone.setAttribute('aria-label', 'Destroy ' + (it.title || 'this') + ' for good');
+    gone.innerHTML = '<span class="gl" aria-hidden="true">\u2715</span><span>Destroy</span>';
     gone.onclick = () => {
-      if (!confirm('Remove "' + (it.title || 'this') + '" for good?\n\nThe card goes for good. A song\'s recording stays in the vault, because its proof lives there.')) return;
+      if (!confirm('Destroy "' + (it.title || 'this') + '"?\n\nThis ends the card for good and there is no undo. A song\'s recording stays in the vault, because its proof lives there.')) return;
       garageAct('remove', it.ref);
     };
     row.appendChild(back); row.appendChild(gone);
