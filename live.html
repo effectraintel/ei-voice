@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T00:05';
-const BUILD_NO = 231;
+const BUILD = '2026-11-15T00:20';
+const BUILD_NO = 232;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6977,6 +6977,11 @@ async function handlePayCall(call) {
 // a shelf that empties when the door session ends looks like the request vanished. Neither is
 // a display nicety: one sends him to an error, the other makes him doubt the record.
 
+// Build 232. The code a money card carries, whichever field it arrived in.
+function it_code(c) {
+  return String((c && (c.code || c.ref)) || '');
+}
+
 function payCard(it) {
   const amt = 'R' + Number(it.amount || 0).toFixed(2);
   if (String(it.status) === 'paid') {
@@ -7336,6 +7341,8 @@ async function shelfSync() {
       logLine('call.back', 'payRequestShelf \u2192 ' + digest(d), { target: 'payRequestShelf', ms: Date.now() - st0, shelf: '1', changed: '1' });
     }
     if (!d || !d.ok || !Array.isArray(d.requests)) return;
+    // Build 232: what the record still offers, kept for the prune at the end of this read.
+    const offeredCodes = new Set(d.requests.map((x) => String((x && x.code) || '')));
     for (const it of d.requests.slice().reverse()) {
       // Build 37: the card itself remembers being cleared, so a reload, a fresh door or a
       // clock in a different timezone cannot bring back what he put away.
@@ -7356,6 +7363,27 @@ async function shelfSync() {
       const made = utcStamp(it.created_date);
       const age = made ? Date.now() - made : Infinity;
       if (it.status === 'open' && age < 30 * 60 * 1000) watchRequest(it.code, 6);
+    }
+    /* Build 232. THE SHELF MUST NOT KEEP WHAT THE RECORD NO LONGER OFFERS.
+       14 Nov 2026, 23:54: "I created to payment requests, I clear them from the shelf but they keep coming
+       back?" The reader now stops offering a card he cleared or destroyed, and that alone was not enough:
+       this array only ever grew, so the two cards stayed in front of him until a reload, and a reload is a
+       thing he has to know to do. The money cards are the one class this read covers completely - it names
+       every request the shelf still holds - so they are the one class it may prune. Songs and links are read
+       with a limit and a cut, and pruning those here would drop a card that is merely further down a page. */
+    let dropped = 0;
+    for (let i = shelf.length - 1; i >= 0; i--) {
+      const c = shelf[i];
+      if (!c || !c.code) continue;
+      if (['pay', 'paid', 'notpaid'].indexOf(String(c.kind)) < 0) continue;
+      if (String(it_code(c)) && offeredCodes.has(String(it_code(c)))) continue;
+      shelf.splice(i, 1);
+      dropped++;
+    }
+    if (dropped) {
+      renderShelf();
+      logLine('pay.drop', dropped + ' card' + (dropped === 1 ? '' : 's') + ' the record no longer offers',
+        { target: 'payRequestShelf' });
     }
   } catch (e) { /* a quiet shelf is not an error */ }
 }
