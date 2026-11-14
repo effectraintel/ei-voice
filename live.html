@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-15T00:20';
-const BUILD_NO = 232;
+const BUILD_NO = 233;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2869,11 +2869,28 @@ function songHearTurn(heard) {
       return;
     }
   }
-  // A substantive sentence is the subject when the draft has none, whatever the mouth does with it.
+  /* Build 233 · THE ASKING IS NOT THE SUBJECT.
+     15 Nov 2026, 00:02: he typed "Ok then let me create a song before I retire" and the door stored that
+     sentence as what the song should be about. The next take would have been a song about making a song.
+     A sentence that IS the route ask cannot also be its subject; only an "about ..." tail inside it can be.
+     The same one decider answers both questions, so the two cannot disagree. */
   if (!songDraft.said && words.length >= 3 && songConcrete(t) >= 3) {
-    songDraft.said = t;
-    logLine('song.subject.heard', t.slice(0, 120), { level: 'info', target: 'music' });
-    chainBeat('hear');
+    const asRoute = readRoute(t, {});
+    if (asRoute.route !== 'none') {
+      const tail = (t.match(/\babout\s+(.+)$/i) || [])[1] || '';
+      if (tail.trim().length >= 3 && songConcrete(tail) >= 2) {
+        songDraft.said = tail.trim();
+        logLine('song.subject.heard', songDraft.said.slice(0, 120), { level: 'info', target: 'music' });
+        chainBeat('hear');
+      } else {
+        logLine('song.subject.skipped', '"' + t.slice(0, 90) + '" is the asking, not what the song is about',
+          { level: 'info', target: 'music' });
+      }
+    } else {
+      songDraft.said = t;
+      logLine('song.subject.heard', t.slice(0, 120), { level: 'info', target: 'music' });
+      chainBeat('hear');
+    }
   }
 }
 
@@ -3397,8 +3414,19 @@ function forkAnswer(heard) {
     songRoute = { pick: 'make', at: Date.now() };
     openSongBeat();
     logLine('song.fork.answer', 'make · a new song', { level: 'info', target: 'music' });
-    doorNote('The route is a NEW song, made here. Say so in one short line, then ask what it should say if '
-      + 'he has not given you the words. Do not search the stores for anything.', true);
+    /* Build 233: the route's first question is the door's, not a suggestion. "if he has not given you the
+       words" was the door leaving the asking optional, and on 15 Nov a mouth that had been given a subject
+       it should never have taken chose not to ask at all. */
+    const forkBeat = openJourneyBeat();
+    if (forkBeat) {
+      doorAsk('A new one, then. ' + forkBeat,
+        'The route is a NEW song, made here. Say in one short line that it is a new one, then ask him: "'
+        + forkBeat + '" Nothing has been made yet. Do not search the stores for anything and do not '
+        + 'describe the song.');
+    } else {
+      doorNote('The route is a NEW song, made here. Say so in one short line. Do not search the stores '
+        + 'for anything.', true);
+    }
     return true;
   }
   if (defer) {
@@ -3461,8 +3489,19 @@ function songRouteGate(heard) {
   } else if (wantMake) {
     songRoute = { pick: 'make', at: Date.now() };
     openSongBeat();
-    doorNote('The route is a NEW song. Say so in one short line ("a new one, then"), and ask what it should '
-      + 'say if you do not already have his words. Do not search for an existing song.', true);
+    /* Build 233 · THE FIRST QUESTION OF THE JOURNEY IS THE DOOR'S, AND IT IS ASKED WHATEVER THE MOUTH DOES.
+       15 Nov 2026, 00:02: this note went out and nothing came back - no words, no sound, no end of turn -
+       and the note's own instruction was conditional ("ask what it should say if you do not already have his
+       words"). The door now names the question and watches that it is asked. */
+    const beatLine = openJourneyBeat();
+    if (beatLine) {
+      doorAsk('A new one, then. ' + beatLine,
+        'The route is a NEW song, made here. Say in one short line that this is a new one, then ask him: "'
+        + beatLine + '" Nothing has been made yet. Do not search for an existing song and do not describe '
+        + 'the song.');
+    } else {
+      doorNote('The route is a NEW song. Say so in one short line. Do not search for an existing song.', true);
+    }
   } else if (wantShare) {
     // 12 Nov 2026: "I want to share a song" names no origin, so the door asks the fork rather than deciding
     // that sharing means the stores. A title, a quoted name, or "the music stores" settles it without asking.
@@ -4558,6 +4597,24 @@ function judgeClaim() {
   try {
     const t = String(said.engine || '');
     if (!t) return;
+    /* Build 233 · THE DOOR DOES NOT LOSE WHAT IT IS HOLDING.
+       15 Nov 2026, 00:03: "My apologies, Boss. I hold only this session, so could you please repeat what you
+       asked for earlier?" Nothing had been lost - his ask was on the record and the subject question was
+       still open - but the mouth apologised for an amnesia it does not have, and made him carry the fault.
+       A claim about memory is a claim about the record, so the record answers it, and the question he is
+       still holding is put back to him instead of a request to repeat himself. */
+    const amnesia = /\bi\s+(?:only\s+)?(?:hold|keep|have)\s+(?:only\s+)?this\s+session\b|\bi\s+(?:do\s+not|don'?t)\s+(?:hold|keep|retain)\s+(?:any\s+)?(?:memory|record)\b|\bi\s+(?:can'?t|cannot)\s+(?:see|access|recall)\s+(?:your|the|any)\s+(?:earlier|previous|prior|last)\b|\bcould\s+you\s+(?:please\s+)?(?:repeat|say\s+that\s+again)\b/i;
+    if (amnesia.test(t)) {
+      const beat = openJourneyBeat();
+      if (beat) {
+        const lead = (songRoute && songRoute.pick === 'make' && !songDraft.said) ? 'A new one, then. ' : '';
+        const line = lead + beat;
+        logLine('claim.amnesia', 'the mouth said it could not remember, and the record says otherwise · '
+          + t.slice(0, 110), { level: 'warn', target: 'claim' });
+        doorCorrect(line, '', false);
+        return;
+      }
+    }
     /* Build 155: a song that was never made is not on his shelf. At 21:33:17 on 10 Nov the mouth said "Your
        song, 'Late Night with Edwin,' is ready on your shelf" ninety seconds after a make that never happened. */
     const madeRecently = !!(makeFiredAt && Date.now() - makeFiredAt < 20 * 60 * 1000);
@@ -5233,6 +5290,9 @@ let fillerCuts = 0;              // how many closers were cut before they were s
 // quiet on him. (Edwin, 8 Nov 2026: after a share closed, "Okay, done." was transcribed at 16:46:51
 // and no engine turn followed.) Short waits are fine; silence after he has spoken is not.
 let silenceWatch = null, silenceAt = 0, silenceNudges = 0;
+// Build 233: when the mouth last said anything at all - words or sound. The door's own question watch
+// reads it, because a note that asked something and got nothing is a question nobody is holding.
+let mouthSpokeAt = 0;
 // His own record answers questions about a send. A door that says "I cannot see that" while the
 // delivery record sits on the shelf is worse than no answer at all. (8 Nov 2026, 17:05: the door
 // told him it could not see a send that had gone at 17:04:27, and he had to say it three times.)
@@ -5405,6 +5465,30 @@ function doorHears(heard) {
         && !/\b(?:make|create|write|compose|sing)\b/i.test(said)) {
       awaitSong = Date.now();
       railNote('share \u00b7 song expected (he was asked for one)');
+    }
+  } catch (e) {}
+  /* Build 233 · HE ASKED IF THE DOOR WAS STILL THERE, AND THE DOOR ANSWERS WITH WHAT IS STILL OPEN.
+     15 Nov 2026, 00:02-00:03: the route had just opened on a new song, the mouth had gone silent, "You
+     there?" got "Still here, Boss.", and "You ignored my previous request" got an apology that claimed the
+     door "holds only this session" and asked him to repeat himself. The door held his ask the whole time and
+     one question was still open, so the answer is the record's: put the open question back to him, as the
+     door's line, and never ask him to say it twice. */
+  try {
+    if ((shareStage === 'idle' || shareStage === 'closed') && !sharePending && isCheckIn(said)) {
+      const beat = openJourneyBeat();
+      if (beat) {
+        const lead = (songRoute && songRoute.pick === 'make' && !songDraft.said) ? 'A new one, then. ' : '';
+        const line = lead + beat;
+        logLine('journey.reask', 'he is checking the door is there · still open at '
+          + (songDraft.askBeat || 'a beat') + ' · ' + line.slice(0, 90),
+          { level: 'info', target: 'music' });
+        railNote(line);
+        doorNote('He is checking that you are still here, and the record says his song is waiting on one '
+          + 'question that he has not answered. Say exactly this in one short line and nothing else: "'
+          + line + '" Do not apologise, never say you cannot remember, and never ask him to repeat what he '
+          + 'asked for: the door holds it.', false);
+        armAskWatch(Date.now(), line);
+      }
     }
   } catch (e) {}
   // If he is asking whether something went, the record answers - not the model's guess and not
@@ -5837,15 +5921,38 @@ function isCloserOnly(t) {
   return CLOSER_ONLY.test(raw) && stripClosers(raw).replace(/[.?!,\s]+$/g, '').length < 6;
 }
 
+/* Build 233 · A NOTE MAY NOT FORBID WHAT IT ASKS FOR.
+
+   15 Nov 2026, 00:02. He typed "Ok then let me create a song before I retire". The door opened the journey
+   and put the route question to the mouth as a spoken note. The mouth said NOTHING AT ALL: no words, no
+   sound, no end of turn, and the door sat there until he asked "You there?" forty seconds later. Measured
+   over the whole day, that was the only one of 84 spoken notes left unanswered.
+
+   Its payload asked him something ("ask what it should say"), while its wrapper ended "no question back",
+   and its head offered a way out ("If you have already said what it says, say nothing at all"). A mouth
+   handed a contradiction takes the safe branch, and silence is the safest branch there is. The words a note
+   hands the model were asserted nowhere, which is the same fault as the "NaN" in the brief six days ago.
+
+   So the envelope is one function. It never offers silence as an option, and its tail is chosen by whether
+   the note asks him anything: a note that asks a question may not forbid a question. */
+function noteEnvelope(text, speak) {
+  const body = String(text || '').replace(/\s+/g, ' ').trim();
+  const head = '(Door note, not from Edwin. Do not read this note aloud and do not answer it as a question: '
+    + 'it is what the door has already decided for your next turn. Say only what it tells you to say, in your '
+    + 'own voice, in one short line.) ';
+  if (!speak) return head + body;
+  const asks = /\bask\b|\bwhat should\b|\bwhich (?:one|song)\b|[?]\s*["')\]]*$/.test(body);
+  return head + body + (asks
+    ? ' Then stop: one short line, no sign-off and no offer. The question it names is the only one you ask.'
+    : ' Then stop: one short line, no sign-off, no offer and no question back.');
+}
+
 function sendNoteNow(text, speak) {
   try {
     if (!ws) return;
     ws.send(JSON.stringify({
       clientContent: {
-        turns: [{ role: 'user', parts: [{ text: '(Door note, not from Edwin — never read it aloud, and never '
-          + 'reply to it: it is context for your next turn only. If you have already said what it says, say '
-          + 'nothing at all.) ' + String(text).replace(/\s+/g, ' ')
-          + (speak ? ' Then stop: one short line, no sign-off, no offer, and no question back.' : '') }] }],
+        turns: [{ role: 'user', parts: [{ text: noteEnvelope(text, speak) }] }],
         turnComplete: !!speak,
       },
     }));
@@ -5950,6 +6057,63 @@ function doorNote(text, speak) {
     return;
   }
   sendNoteNow(t, speak);
+}
+
+/* Build 233 · A QUESTION THE MOUTH NEVER ASKS IS STILL THE DOOR'S TO ASK.
+
+   The same forty seconds as the note above. The note went out asking for the route to be named and the
+   subject to be asked, and then nothing arrived: no transcription, no sound, and no end of turn either, so
+   the door's other silence watch (which nudges when HE has spoken and nothing answered) never judged it,
+   because that watch only runs in voice mode and this one never ends its turn.
+
+   So a note that asks him something carries the line the door wants said, and the door watches it: if the
+   mouth has said nothing nine seconds later, the line goes on screen itself and the note is sent once more.
+   One retry, never a loop, and never when the mouth has already spoken. The screen line is the part that
+   cannot fail - whatever the mouth does, the question is in front of him. */
+let askWatch = null, askWatchAt = 0, askWatchLine = '';
+function armAskWatch(askedAt, line) {
+  const q = String(line || '').trim();
+  if (!q) return;
+  askWatchLine = q;
+  askWatchAt = askedAt || Date.now();
+  if (askWatch) { clearTimeout(askWatch); askWatch = null; }
+  askWatch = setTimeout(() => {
+    askWatch = null;
+    if (mouthSpokeAt > askWatchAt) return;                        // it answered: nothing to do
+    if (typeof ws === 'undefined' || !ws || ws.readyState !== 1) return;
+    logLine('mouth.silent', 'nothing was said for ' + Math.round((Date.now() - askWatchAt) / 1000)
+      + 's · the door puts its own question up: ' + q.slice(0, 100), { level: 'warn', target: 'mouth' });
+    railNote(q);
+    try {
+      ws.send(JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text:
+        noteEnvelope('say exactly this, in one line, and nothing else: "' + q + '"', true) }] }],
+        turnComplete: true } }));
+    } catch (e) { /* the line is on screen either way */ }
+  }, 9000);
+  try { if (askWatch && askWatch.unref) askWatch.unref(); } catch (e) {}
+}
+/* A question the door itself holds: the line he should get, and the note that gets it said. */
+function doorAsk(line, note) {
+  const q = String(line || '').trim();
+  if (!q) { doorNote(note, true); return; }
+  armAskWatch(Date.now(), q);
+  doorNote(note || ('say exactly this, in one line, and nothing else: "' + q + '"'), true);
+}
+
+/* Build 233 · A CHECK-IN IS NOT A NEW SUBJECT.
+   15 Nov 2026, 00:03. The route had opened, the mouth had gone quiet, and when he checked that the door was
+   still there the answer was "Still here, Boss." Then, told plainly "You ignored my previous request", the
+   door apologised, said it "holds only this session", and asked him to repeat himself. Nothing had been
+   lost: his ask was on the record and one question was still open. A record that is not consulted is worse
+   than no record, because it turns a fault into an apology he has to argue with.
+   So a check on the door, or a complaint about it, is answered from the record: the question that is still
+   open is put back to him, and it is the door's line, not the mouth's guess. */
+const CHECK_IN = /^(?:\s*(?:you|u)\s+(?:there|still\s+there|awake|listening|with\s+me)\b|\s*are\s+you\s+there\b|\s*(?:hi|hello|hey)\b[\s.?!]*$|\s*anyone\s+there\b)/i;
+const CHECK_COMPLAINT = /\byou\s+(?:ignored|missed|skipped|forgot)\b|\byou\s+did\s*n[o']?t\s+(?:answer|do|act|hear|make)\b|\byou\s+never\s+(?:answered|did|made|replied)\b|\bi\s+(?:already\s+said|just\s+asked|told\s+you)\b|\bnothing\s+(?:has\s+)?happened\b|\bare\s+you\s+listening\b/i;
+function isCheckIn(said) {
+  const t = String(said || '').trim();
+  if (!t || t.length > 140) return false;
+  return CHECK_IN.test(t) || CHECK_COMPLAINT.test(t);
 }
 
 /* The door's own correction. When a guard catches a sentence the mouth should not have said, the fix
@@ -7138,6 +7302,7 @@ function utcStamp(v) {
 }
 function engineSpokeNow() {
   if (silenceWatch) { clearTimeout(silenceWatch); silenceWatch = null; }
+  mouthSpokeAt = Date.now();
 }
 
 function armSilenceWatch(heard) {
@@ -8882,6 +9047,7 @@ function handleFrame(text) {
     // Held, not dropped: if the door's search comes back empty the model may say so, but it may not say it
     // while the search is still open.
     if (data) {
+      engineSpokeNow();          // build 233: a sound is an answer, even while the door is holding it
       if (doorSearching || (hiddenHold && !replyAudible)) { heldFrames++; }
       else { replyAudible = true; playPcm(data, p.inlineData.mimeType); }
     }
