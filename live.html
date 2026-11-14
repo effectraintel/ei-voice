@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T14:10';
-const BUILD_NO = 211;
+const BUILD = '2026-11-14T14:35';
+const BUILD_NO = 212;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4483,6 +4483,81 @@ function looksLikeQuestion(q) {
   return resolveAnswer('title', q).kind !== 'value';
 }
 
+/* -------------------------------------------------------------------------------------------
+   The MTShare rail, spoken to. Edwin, 7 Nov 2026: "I want to specify a song on the commercial
+   music stores and then it needs to be wrapped in a MTShare line and also land on my shelf."
+
+   This handler was declared to the model on that day and never written. Build 212 writes it. It
+   does one thing: hand the link he gave to mtShareWrap, the rail's one home, and put the card it
+   returns on his shelf. It never pays, never posts, never sends: the link is made and it is where
+   he can see it, and sharing it stays his tap on the sheet.
+
+   Two refusals are real and both are said in one line rather than dressed up: a thing that is not
+   a link, and a rail that will not wrap it. Nothing on his shelf is ever claimed unless the rail
+   returned a code.
+   ------------------------------------------------------------------------------------------- */
+async function handleWrapCall(call) {
+  const link = String((call.args && call.args.url) || '').trim();
+  let result = '';
+  const t0 = Date.now();
+  try {
+    if (!/^https?:\/\//i.test(link)) throw new Error('that is not a link');
+    const r = await withTimeout(fetch(FNBASE + 'mtShareWrap', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: link }),
+    }), 30000, 'the wrap rail did not answer in time');
+    const d = await r.json().catch(() => ({}));
+    if (!d || !d.ok || !d.universal_url) {
+      throw new Error(String((d && (d.error || d.message)) || 'the rail would not wrap that link').slice(0, 120));
+    }
+    const title = String(d.title || 'that song');
+    const artist = String(d.artist || '');
+    const card = {
+      kind: 'store',
+      title: title + (artist ? ' \u00b7 ' + artist : ''),
+      sub: String(d.code || ''),
+      url: String(d.universal_url),
+      code: String(d.code || ''),
+    };
+    shelfAdd(card);
+    keepFound(card);                    // the record catches up behind the card, as it does for a found page
+    railNote('wrap \u00b7 ' + title + (artist ? ' \u00b7 ' + artist : ''));
+    looked = 'the store link \u00b7 ' + title;
+    result = 'One universal link is made and it is on his shelf: ' + title
+      + (artist ? ' by ' + artist : '')
+      + '. It opens on whichever service the listener uses. Say that in one short line. Nothing was sent, '
+      + 'and nothing goes anywhere until he shares it from the shelf.';
+  } catch (e) {
+    result = 'The wrap did not happen: ' + ((e && e.message) ? e.message : String(e))
+      + '. Nothing is on his shelf. Say it in one line and never say the link exists.';
+    logLine('wrap.refused', link.slice(0, 120), { level: 'warn', target: 'mtShareWrap' });
+  }
+  logLine('tool.wrap', result.slice(0, 160), { ms: Date.now() - t0, target: 'mtShareWrap', level: result.indexOf('did not happen') === 0 ? 'warn' : 'info' });
+  try {
+    ws.send(JSON.stringify({
+      toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+    }));
+  } catch { /* the socket is gone; the turn ends on its own */ }
+}
+
+/* An act the door does not have is a refusal, not a house read. Before build 212 the last arm of the
+   dispatcher was a bare `else` to handleHouseCall, so a name the model invented returned a plausible
+   house answer and the door looked like it had done something. One line back, and a warn in the log,
+   because an invented act is a fact about the model worth seeing. */
+function refuseCall(call) {
+  const name = String((call && call.name) || '?').slice(0, 40);
+  logLine('tool.refused', 'no such act: ' + name, { level: 'warn', target: 'model',
+    args: JSON.stringify((call && call.args) || {}).slice(0, 200) });
+  const result = 'There is no act called "' + name + '". Nothing was done. Do not claim it happened: '
+    + 'answer him with what you actually have.';
+  try {
+    ws.send(JSON.stringify({
+      toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+    }));
+  } catch { /* the socket is gone; the turn ends on its own */ }
+}
+
 async function handleShareCall(call) {
   const s = doorSession();
   let result = '';
@@ -7863,13 +7938,17 @@ function handleFrame(text) {
   }
   if (msg.toolCall && msg.toolCall.functionCalls) {
     for (const call of msg.toolCall.functionCalls) {
+      /* Build 212. Every act is dispatched by the name the model was actually given, and anything
+         else is REFUSED. The old last arm was a bare `else` to the house reader, so an act the model
+         invented came back as a house answer. `song` and `shareTo` are handled elsewhere but never
+         declared to the model, so their branches could not fire; they are gone rather than left as a
+         promise. Sending is his tap on the sheet, never a tool call (10 Nov 2026). */
       if (call.name === 'world') handleWorldCall(call);
-      else if (call.name === 'song') handleSongCall(call);
+      else if (call.name === 'house') handleHouseCall(call);
       else if (call.name === 'pay') handlePayCall(call);
       else if (call.name === 'wrap') handleWrapCall(call);
       else if (call.name === 'share') handleShareCall(call);
-      else if (call.name === 'shareTo') handleShareToCall(call);
-      else handleHouseCall(call);
+      else refuseCall(call);
     }
     return;
   }
