@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T16:22';
-const BUILD_NO = 219;
+const BUILD = '2026-11-14T16:40';
+const BUILD_NO = 220;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -906,11 +906,104 @@ window.addEventListener('DOMContentLoaded', () => {
   keepCurrent();
 });
 
+/* Build 220. Edwin, 14 Nov 2026 16:20: "When specifying https://door.effectra.ai/live.html?v=220 it still loads
+   219... If 220 isn't available it should tell me and give me the links to the versions of the door that is
+   available." A version in the address is a request, and a page that quietly serves a different build is lying
+   about what is in front of him. The site says what it holds in one small file (versions.json), written when a
+   build is published; this reads it and either takes him to the build he asked for, or says plainly that it is
+   not there and offers the ones that are. No manifest, no claim: if the list cannot be read, the door opens and
+   the log says why, because a guess about what is published is worse than no answer. */
+async function versionGate() {
+  const asked = (location.search.match(/[?&]v=(\d+)/) || [])[1];
+  if (!asked) return false;
+  const want = Number(asked);
+  if (want === BUILD_NO) return false;              // this IS the build he asked for
+  let man = null;
+  try {
+    const r = await fetch('versions.json?fresh=' + Date.now(), { cache: 'no-store' });
+    if (r.ok) man = await r.json();
+  } catch (e) { man = null; }
+  if (!man || !Array.isArray(man.builds)) {
+    logLine('build.versions', 'the list of published builds could not be read, so the address is not judged',
+      { level: 'warn' });
+    return false;
+  }
+  const builds = man.builds.filter((b) => b && b.n && b.file);
+  const exact = builds.find((b) => Number(b.n) === want);
+  if (exact) {
+    logLine('build.take', 'build ' + want + ' is on the site: taking ' + exact.file, { level: 'info' });
+    location.replace(exact.file);
+    return true;
+  }
+  showVersionNotice(want, builds, Number(man.latest || 0));
+  return true;
+}
+
+// What he sees when the build he named is not there: the truth, and the ones that are.
+function showVersionNotice(want, builds, latest) {
+  try {
+    const el = document.createElement('div');
+    el.id = 'versionnotice';
+    el.style.cssText = 'position:fixed;inset:0;z-index:90;background:rgba(12,11,9,.97);display:flex;'
+      + 'align-items:flex-start;justify-content:center;padding:9vh 18px 24px;overflow-y:auto;'
+      + '-webkit-overflow-scrolling:touch;touch-action:manipulation;font-family:inherit;color:#e8dfcc';
+    const box = document.createElement('div');
+    box.style.cssText = 'width:100%;max-width:440px;background:#191713;border:1px solid #3a352d;'
+      + 'border-radius:14px;padding:20px';
+    const h = document.createElement('div');
+    h.textContent = 'build ' + want + ' is not on the site';
+    h.style.cssText = 'font-size:16px;line-height:1.32';
+    const p = document.createElement('div');
+    p.style.cssText = 'font-size:13px;line-height:1.6;color:#ded5c2;margin-top:8px';
+    p.textContent = 'this door is build ' + BUILD_NO
+      + (latest ? ', and the newest on the site is build ' + latest : '') + '.';
+    box.appendChild(h); box.appendChild(p);
+
+    const newest = builds.slice().sort((a, b) => Number(b.n) - Number(a.n));
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;'
+      + 'color:#c9a86a;margin:20px 0 9px';
+    label.textContent = newest.length ? 'the versions that are there' : 'no other version is listed';
+    box.appendChild(label);
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px';
+    for (const b of newest) {
+      const a = document.createElement('a');
+      a.href = b.file;
+      a.textContent = 'build ' + Number(b.n) + (b.at ? ' · ' + String(b.at).slice(11, 16) : '');
+      a.style.cssText = 'text-decoration:none;color:#e8dfcc;border:1px solid #3a352d;border-radius:999px;'
+        + 'padding:8px 13px;font-size:11.5px;letter-spacing:.02em;white-space:nowrap';
+      list.appendChild(a);
+    }
+    box.appendChild(list);
+
+    const open = document.createElement('a');
+    open.href = 'live.html';
+    open.textContent = 'open the door as it stands (build ' + BUILD_NO + ')';
+    open.style.cssText = 'display:inline-block;margin-top:20px;text-decoration:none;background:#c9a86a;'
+      + 'color:#191713;border-radius:999px;padding:11px 18px;font-size:10.5px;font-weight:700;'
+      + 'letter-spacing:.12em;text-transform:uppercase';
+    box.appendChild(open);
+
+    const foot = document.createElement('div');
+    foot.style.cssText = 'font-size:10.5px;line-height:1.6;color:#8f8577;margin-top:16px';
+    foot.textContent = 'a version in the address is answered by the site, not by the page it happened to serve.';
+    box.appendChild(foot);
+
+    el.appendChild(box);
+    document.body.appendChild(el);
+    logLine('build.nothere', 'asked for build ' + want + ', this door is ' + BUILD_NO + ', offering '
+      + newest.map((b) => b.n).join(', '), { level: 'warn' });
+  } catch (e) { /* a notice that cannot be drawn must not stand in the way of the door */ }
+}
+
 // One quiet check per load: if the published build is newer than the one running, take it.
 // Guarded so a stale CDN edge can never turn this into a reload loop, and never done while
 // a conversation is open.
 async function keepCurrent() {
   try {
+    // Build 220: an address can ask for a build by name, so the address is answered before anything else.
+    if (await versionGate()) return;
     const last = Number(sessionStorage.getItem('ei-build-check') || 0);
     // 14 Nov 13:12: he reloaded while testing and the footer still read 207, twice. The check ran once a
     // minute and he was reloading every few seconds, so the newer build was already published and the page
@@ -3989,7 +4082,17 @@ async function handleWorldCall(call) {
         + ' (source: ' + r.engine + ', as of ' + r.as_of + '. If you name a source, name this one and nothing else. '
         + 'If the place or thing is not the one he meant, ask him which he meant rather than answering about it.)';
       logLine('world.look', ask + ' · ' + r.engine + ' · ' + String(facts).slice(0, 120), { level: 'info', target: 'world' });
-      looked = 'the world · ' + (r.engine || 'looked up');
+      looked = 'the world \u00b7 ' + (r.engine || 'looked up');
+      /* Build 220. A lookup is a finding, so it lands like one. shelfWriteAt is set because a row really was
+         written: the shelf-write guard must not correct a true sentence, which is exactly what it did at 16:13
+         today, out loud, as a second reply. */
+      const foundCard = worldCard(ask, r);
+      if (foundCard) {
+        if (!shelfReplace(foundCard.code, foundCard)) shelfAdd(foundCard);
+        keepFound(foundCard);
+        shelfWriteAt = Date.now();
+        logLine('world.card', foundCard.code + ' \u00b7 ' + foundCard.title, { level: 'info', target: 'shelf' });
+      }
     }
   } catch (e) {
     result = 'the world lookup could not run: ' + ((e && e.message) ? e.message : String(e))
@@ -7066,6 +7169,57 @@ function openSheet(url, heading) {
   try { localStorage.setItem(SHELF_TOLD, String(Date.now())); } catch (e) {}
 }
 
+/* Build 220. What a looked-up card opens: the short answer stays on the shelf, and the whole measured answer,
+   the engine that measured it and when, are here. No network, no frame: the record already holds it, so the
+   panel cannot show something different from the card that opened it. */
+function openFact(it) {
+  const was = document.getElementById('factview');
+  try { if (was) was.remove(); } catch (e) { /* no panel open: nothing to replace */ }
+  const d = (it && it.detail) || {};
+  const facts = Array.isArray(d.facts) ? d.facts : (d.facts ? [String(d.facts)] : []);
+  const el = document.createElement('div');
+  el.id = 'factview';
+  el.style.cssText = 'position:fixed;inset:0;z-index:76;background:rgba(12,11,9,.94);display:flex;'
+    + 'align-items:flex-start;justify-content:center;padding:8vh 16px 24px;overflow-y:auto;'
+    + '-webkit-overflow-scrolling:touch;touch-action:manipulation;font-family:inherit;color:#e8dfcc';
+  const box = document.createElement('div');
+  box.style.cssText = 'width:100%;max-width:460px;background:#191713;border:1px solid #3a352d;'
+    + 'border-radius:14px;padding:18px';
+  const h = document.createElement('div');
+  h.textContent = (it && it.title) || 'what the door found';
+  h.style.cssText = 'font-size:16px;line-height:1.32';
+  const s = document.createElement('div');
+  s.style.cssText = 'font-size:10.5px;letter-spacing:.09em;color:#c9a86a;text-transform:lowercase;margin:5px 0 15px';
+  s.textContent = [d.engine || '', d.as_of ? 'measured ' + whenAt(d.as_of) : ''].filter(Boolean).join(' \u00b7 ');
+  const body = document.createElement('div');
+  body.style.cssText = 'font-size:13.5px;line-height:1.6;color:#ded5c2;white-space:pre-wrap';
+  body.textContent = facts.join('\n\n');
+  box.appendChild(h); box.appendChild(s); box.appendChild(body);
+  if (d.ask) {
+    const q = document.createElement('div');
+    q.style.cssText = 'font-size:11px;line-height:1.5;color:#8f8577;margin-top:15px;padding-top:12px;border-top:1px solid #2a261f';
+    q.textContent = 'you asked: ' + d.ask;
+    box.appendChild(q);
+  }
+  const close = document.createElement('button');
+  close.type = 'button'; close.textContent = 'close';
+  close.style.cssText = 'all:unset;display:inline-block;margin-top:18px;padding:9px 18px;border-radius:999px;'
+    + 'border:1px solid #3a352d;font-size:10px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;'
+    + 'color:#e8dfcc;cursor:pointer';
+  const shut = () => {
+    el.remove();
+    // Back from a card is a gesture: the platform may have suspended audio while he was in there.
+    try { ensureAudio(); } catch (e) {}
+    if (sessionUp && !listening && !greeting) openListening();
+  };
+  close.onclick = shut;
+  box.appendChild(close);
+  el.appendChild(box);
+  el.onclick = (e) => { if (e.target === el) shut(); };
+  document.body.appendChild(el);
+  railNote('shelf \u00b7 opened \u00b7 ' + String((it && it.title) || '').slice(0, 60));
+}
+
 
 /* Sending a card on, by hand (build 60). The same rail the voice uses: this only decides who, which
    way and what it says, and the answer comes back in the sheet rather than being announced. */
@@ -7580,7 +7734,7 @@ function cardShell(it, label) {
 function drawCards(el) {
   el.innerHTML = '';
   shelf.forEach((it) => {
-    const k = it.kind === 'thought' ? 'thinking about' : (it.kind || 'link');
+    const k = it.kind === 'thought' ? 'thinking about' : (it.kind === 'fact' ? 'looked up' : (it.kind || 'link'));
     const { card, body } = cardShell(it, k);
     const t = document.createElement('span'); t.className = 't'; t.textContent = it.title;
     const d = document.createElement('span'); d.className = 'd';
@@ -7619,13 +7773,29 @@ function drawCards(el) {
       acts.appendChild(clearChip(it));
       body.appendChild(acts);
     } else {
-      body.appendChild(t);
-      if (it.note) { d.textContent = it.note; body.appendChild(d); }
+      /* Build 220. A card that carries detail opens on a tap of its own words, the same way a sheet card does:
+         he should not have to find a badge to read what the door found. The badge is still there, because an
+         affordance he can see is what stops "I see it but I tap it and nothing happens". */
+      if (it.detail && (it.detail.facts || it.detail.ask)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.style.cssText = 'all:unset;display:block;cursor:pointer;min-width:0';
+        b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openFact(it); };
+        b.appendChild(t); body.appendChild(b);
+      } else body.appendChild(t);
+      if (it.sub) { d.textContent = it.sub; body.appendChild(d); }
+      else if (it.note) { d.textContent = it.note; body.appendChild(d); }
       // Build 154, Edwin 21:39: "Not coming through on the shelf..." The share chip was only drawn for a card
       // that had a url, and a song made here has no store link - so the one card that most needs the sheet, the
       // song he just made, had no way to open it. Every card can be shared now, and a song opens the sheet with
       // the cover question on it.
       const acts = document.createElement('div'); acts.className = 'acts';
+      if (it.detail && (it.detail.facts || it.detail.ask)) {
+        const read = document.createElement('button');
+        read.className = 'copy read'; read.type = 'button'; read.textContent = 'read';
+        read.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openFact(it); };
+        acts.appendChild(read);
+      }
       const share = document.createElement('button');
       share.className = 'copy share'; share.type = 'button'; share.textContent = 'share';
       share.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openShareSheet(it); };
@@ -7645,21 +7815,86 @@ function drawCards(el) {
    deduped on the address). The local add stays so the card lands at once, and the record catches up behind
    it. A refusal is logged once and never retried in a loop: a card that will not be kept must never delay
    the answer he is waiting for. */
+/* Build 220 (Edwin, 14 Nov 2026 16:18): "Weather or searches also lands on shelf as it it needs to open if a
+   user wants to read more detail." A search already puts a page on the shelf and the page IS the detail. A
+   lookup had nothing, so the answer was spoken and thrown away, which is also why the mouth kept claiming the
+   details were on his shelf while the shelf-write guard kept catching it. A lookup is a finding like any other
+   now: the short answer is the card's face, the measured facts sit behind it, and the engine and the time they
+   were measured travel with it.
+   The code is computed HERE as well as on the record, because a card that lands without the code the record
+   will answer with lands twice (the build 217 lesson, one rail over). */
+function factCode(ask) {
+  const norm = String(ask || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  let a = 0x811c9dc5, b = 0x9e3779b9;
+  for (let i = 0; i < norm.length; i++) { a ^= norm.charCodeAt(i); a = Math.imul(a, 0x01000193) >>> 0; }
+  for (let i = norm.length - 1; i >= 0; i--) { b ^= norm.charCodeAt(i); b = Math.imul(b, 0x85ebca6b) >>> 0; }
+  return 'fct-' + (a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')).slice(0, 10);
+}
+
+// His own question, worn as the card's title: "What is the weather in ballito now" is "Weather in ballito".
+function worldTitle(ask) {
+  let t = String(ask || '').replace(/\s+/g, ' ').trim();
+  t = t.replace(/^(?:please\s+)?(?:what(?:'s| is)\s+(?:the\s+)?|how(?:'s| is)\s+(?:the\s+)?|fetch\s+(?:me\s+)?(?:the\s+)?|tell\s+me\s+(?:the\s+)?|give\s+me\s+(?:the\s+)?|the\s+(?:latest|current)\s+)/i, '');
+  t = t.replace(/\b(?:now|today|right now|currently|at the moment|please|latest|current)\b/gi, ' ')
+       .replace(/\s+/g, ' ').replace(/[\s?.!,]+$/, '').trim();
+  if (!t) t = 'a look at the world';
+  return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 90);
+}
+
+// Which engine, by its own name, short enough to sit on a card. The detail carries the full name.
+function engineShort(e) { return String(e || 'a lookup').split(' (')[0].slice(0, 40); }
+
+function clockNow() {
+  try { return new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false }); }
+  catch (e) { return ''; }
+}
+function whenAt(iso) {
+  try { return new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false }); }
+  catch (e) { return String(iso || ''); }
+}
+
+function worldCard(ask, r) {
+  try {
+    const facts = ((r && r.facts) || []).map(String).filter(Boolean);
+    if (!facts.length) return null;
+    return {
+      kind: 'fact',
+      title: worldTitle(ask),
+      sub: engineShort(r.engine) + ' \u00b7 ' + clockNow(),
+      code: factCode(ask),
+      detail: {
+        ask: String(ask || ''),
+        facts,
+        engine: String((r && r.engine) || ''),
+        as_of: String((r && r.as_of) || ''),
+      },
+      note: 'what it found \u00b7 open it to read the detail',
+      when: new Date().toISOString(),
+    };
+  } catch (e) { return null; }
+}
+
 function keepFound(it) {
   try {
+    const kind = String((it && it.kind) || 'source');
     const url = String((it && it.url) || '').trim();
-    if (!/^https?:\/\//i.test(url)) return;
+    // Build 220: a looked-up fact has no address to open, so it is kept by its question and carries the facts
+    // behind it. Everything else still needs a real address, because the address is what a source card opens.
+    if (kind !== 'fact' && !/^https?:\/\//i.test(url)) return;
+    const what = url || String((it && it.title) || '');
     fetch(FNBASE + 'shelfKeep', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        kind: it.kind || 'source',
-        title: String(it.title || url).slice(0, 220),
-        url, sub: String(it.sub || '').slice(0, 160),
+        kind,
+        title: String((it && it.title) || url).slice(0, 220),
+        url, sub: String((it && it.sub) || '').slice(0, 160),
+        code: String((it && it.code) || ''),
+        detail: (it && it.detail) || null,
       }),
     }).then(r => r.json()).then(d => {
-      logLine('shelf.keep', (d && d.ok ? (d.already ? 'already kept ' : 'kept ') : 'not kept ') + url.slice(0, 90),
+      logLine('shelf.keep', (d && d.ok ? (d.already ? 'already kept ' : 'kept ') : 'not kept ') + what.slice(0, 90),
         { level: d && d.ok ? 'info' : 'warn', target: 'shelfKeep' });
-    }).catch(() => logLine('shelf.keep', 'the keep call did not answer: ' + url.slice(0, 90),
+    }).catch(() => logLine('shelf.keep', 'the keep call did not answer: ' + what.slice(0, 90),
       { level: 'warn', target: 'shelfKeep' }));
   } catch (e) { /* a shelf that keeps nothing is still a shelf */ }
 }
