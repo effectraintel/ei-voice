@@ -475,8 +475,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T15:30';
-const BUILD_NO = 214;
+const BUILD = '2026-11-14T15:55';
+const BUILD_NO = 215;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3856,20 +3856,38 @@ function withTimeout(p, ms, why) {
 
 // One quiet line in the transcript when the rail was actually touched, so "it said it made
 // a song" and "a song was asked for" can never be confused on screen.
+/* Build 215. THE CHAT IS FOR HIM AND THE ENGINE, NOT FOR THE DOOR'S WORKING.
+
+   Edwin, 14 Nov 2026, after a clean share: "the thinking out loud noise that is coming through in the chat".
+   Every rail note was appended into the same stream as the turns, so his screen read
+
+     you     music stores
+             share · that is a route, not a title · music stores
+     engine  The sharing rail didn't answer, so nothing was found...
+
+   The record still keeps every line: logLine sends it and shelf.note carries it. The screen keeps ONE
+   status line that replaces itself, sits below the newest turn and fades after a few seconds, so the
+   door's bookkeeping reads as a line under the conversation and never as part of it. */
+let railStripTimer = 0;
 function railNote(text) {
   try {
     logLine('shelf.note', text);
-    // The same line twice in a row says nothing the first one did not. Seen 7 Nov: four
-    // "paid · EI-RC-T0006" lines for one payment, because four watchers each reported the
-    // same settlement. (Edwin: "check the multiple paid confirmation at the bottom.")
-    const chips = logEl.querySelectorAll('.lat.chip');
-    const last = chips[chips.length - 1];
-    if (last && last.textContent === text) return;
-    const d = document.createElement('div');
-    d.className = 'lat chip';
-    d.textContent = text;
-    logEl.appendChild(d);
+    let strip = document.getElementById('railstrip');
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.id = 'railstrip';
+      strip.className = 'lat railstrip';
+      strip.style.cssText = 'font-size:11px;letter-spacing:.02em;color:#c9a86a;text-align:right;'
+        + 'padding:2px 8px;opacity:0;transition:opacity .6s;pointer-events:none;';
+      logEl.appendChild(strip);
+    }
+    // Re-appending moves it under the newest turn, the way a status line should sit.
+    strip.textContent = text;
+    strip.style.opacity = '.5';
+    logEl.appendChild(strip);
     logEl.scrollTop = logEl.scrollHeight;
+    clearTimeout(railStripTimer);
+    railStripTimer = setTimeout(() => { try { strip.style.opacity = '0'; } catch (e) {} }, 4000);
   } catch (e) {}
 }
 
@@ -4203,7 +4221,13 @@ function stripRequestFrame(q) {
 
 // The record is the only thing allowed to report on the record. A sentence that claims a search, an error, or
 // an empty shelf with no rail call behind it is corrected at once — not just written down for later.
-let unbackedWarnedAt = 0, railToldAt = 0;
+/* Build 215. railCallsThisTurn was USED and never DECLARED (two uses: the increment at the rail call site
+   and the reset in judgeClaim's finally block, both of which only ASSIGN it). In a browser the first
+   assignment creates a global, so the guard worked in any session that had already called a rail - and in a
+   session that had not, reading it threw a ReferenceError that judgeClaim's own try/catch swallowed, so the
+   guard did nothing at all and said nothing about it. That is the worst shape a guard can have. Declared
+   here now, so the rail-claim check runs on the first turn of a session as well as the tenth. */
+let unbackedWarnedAt = 0, railToldAt = 0, railCallsThisTurn = 0;
 /* Build 171: ONE test for "is this claim backed by the card on his shelf", because three separate guards
    were each deciding it their own way and two of them said the shelf was empty. 12 Nov, 08:43: "Cruel
    Summer by Bananarama is on your shelf now" was true, the wrap had just written code u6B7qmU, and the
@@ -4214,7 +4238,23 @@ function shelfBacksClaim(t) {
     const cardTitle = flat(shareCard && shareCard.title);
     if (!cardTitle || cardTitle.length < 3) return false;
     if (!(shareCard.url || shareCard.code || shareCard.link)) return false;
-    return flat(t).includes(cardTitle);
+    const said = flat(t);
+    if (said.includes(cardTitle)) return true;
+    /* Build 215. The whole-title rule denied a true thing. 14 Nov 13:12:55: the wrap put
+       "Lust for Life (feat. The Weeknd)" on his shelf, the mouth said "Lust for Life by Lana Del Rey is on
+       your shelf now", and the no-take guard corrected it to "nothing has been made yet", because the card's
+       title carries a credit he had no reason to say. What identifies a card is the title's own words: a
+       featuring credit, a remaster or a version suffix is not part of the name. */
+    const core = cardTitle
+      .replace(/\b(?:feat|featuring|ft|with|the|a|an|of)\b/g, ' ')
+      .replace(/\b(?:remaster|remastered|remix|edit|version|deluxe|single|album|radio|explicit)\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+    if (core.length < 3) return false;
+    if (said.includes(core)) return true;
+    const words = core.split(' ').filter((w) => w.length > 2);
+    if (!words.length) return false;
+    const hit = words.filter((w) => said.includes(w)).length;
+    return hit >= Math.max(2, Math.ceil(words.length * 0.75));
   } catch (e) { return false; }
 }
 
@@ -5461,7 +5501,13 @@ function sendNoteNow(text, speak) {
     // that happens to contain the word "song". 14 Nov 12:25: the fork note ("Do you want to share a song
     // from the music stores, or create a new one?") stamped this, and six seconds later "The sharing rail
     // didn't answer, Boss." was excused by it and spoken. A route question is not a rail result.
-    const railOutcome = /the rail|rail (?:did|refused|returned|answered)|the wrap|refused the link|nothing was found|not found|did not answer|no answer|could not reach/i;
+    /* Build 215. The immunity belongs to a rail RESULT, and the old marker matched any note that used the
+       words. 14 Nov 13:12:04 the mouth said "The sharing rail didn't answer..." and the guard excused it:
+       "told 7614ms ago". What told it was the route note, whose own last sentence is "never say the rail did
+       not answer" - a prohibition that names the phrase it forbids, poisoning the marker meant to catch it.
+       A result has a shape: the rail answered with, returned, refused, or the door put a card on the shelf.
+       Anything else is the door talking about the work, and the mouth gets no immunity from it. */
+    const railOutcome = /\bthe rail (?:answered|returned|refused|said)\b|\bthe door has put\b|\bwrapped it\b|\bthe wrap (?:returned|refused|answered)\b|\brefused the link\b/i;
     if (railOutcome.test(String(text)) && speak) railToldAt = Date.now();
     logLine('note.sent', (speak ? 'speak: ' : 'context: ') + String(text).slice(0, 80),
       { level: 'info', target: 'note' });
