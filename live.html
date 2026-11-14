@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-14T16:40';
-const BUILD_NO = 220;
+const BUILD = '2026-11-14T19:40';
+const BUILD_NO = 221;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6936,7 +6936,9 @@ async function putInGarage(cards) {
        idea the page had been cleared, so it handed it straight back on the next read. 14 Nov: he cleared the
        Kimberley forecast at 13:21:29 and again at 13:22:04. A payment request stays out of this on purpose:
        it is not a card on a shelf, it is a live thing with a status, and it is cleared by watching it. */
-    .filter(c => c && c.kind !== 'pay' && (c.song_id || c.code || c.url))
+    /* Build 221. A payment request IS parkable now. Excluding it here is what made a cleared request
+       immortal: clearOneCard saw a code, called this, this refused it, and nothing remembered the clear. */
+    .filter(c => c && (c.song_id || c.code || c.url))
     .map(c => ({ kind: c.kind, ref: c.song_id || c.code || c.url || c.title,
                  title: c.title || 'a thing', subtitle: c.sub || '', url: c.url || '', sha: c.sha || '',
                  // Build 214. When this card ARRIVED. The garage already refuses to let an old removal
@@ -6995,7 +6997,9 @@ function renderGarage(el) {
     const { card, body } = cardShell(it, 'garage');
     const t = document.createElement('span'); t.className = 't'; t.textContent = it.title || 'a thing';
     const d = document.createElement('span'); d.className = 'd';
-    d.textContent = (it.kind === 'song' ? 'a song you made' : 'a wrapped link') + (it.subtitle ? ' \u00b7 ' + it.subtitle : '');
+    d.textContent = (it.kind === 'song' ? 'a song you made'
+                   : it.kind === 'pay' ? 'a payment request you put away'
+                   : 'a wrapped link') + (it.subtitle ? ' \u00b7 ' + it.subtitle : '');
     body.appendChild(t); body.appendChild(d);
     const row = document.createElement('div'); row.className = 'acts';
     /* Build 218. Two badges, each wearing its intention: RESTORE puts the card back where he can see it,
@@ -7049,7 +7053,9 @@ async function refreshCards(force) {
 async function shelfSync() {
   try {
     const st0 = Date.now();
-    const r = await fetch(FNBASE + 'payRequestShelf?json=1&hours=6');
+    /* Build 221. The cache buster is not superstition: the money shelf is the one read whose answer says
+       whether something exists, so it must never be answered from a browser or proxy cache. */
+    const r = await fetch(FNBASE + 'payRequestShelf?json=1&hours=6&t=' + Date.now(), { cache: 'no-store' });
     const d = await r.json();
     // Same rule as the card poll: only a shelf that actually moved is worth a line.
     const sig = 'pay:' + JSON.stringify((d && d.requests ? d.requests : []).map(x => (x.code || '') + ':' + (x.status || '')));
@@ -7062,7 +7068,10 @@ async function shelfSync() {
       // Build 37: the card itself remembers being cleared, so a reload, a fresh door or a
       // clock in a different timezone cannot bring back what he put away.
       // (Edwin, 7 Nov: "when I clear the shelve, the shelve items just comes again when i enter.")
+      /* Build 221. The record outranks the browser: if the garage holds this request, he put it away on some
+         device and it stays away here too. */
       if (stillCleared(it)) continue;
+      if (it.code && garage.some(g => String(g.ref) === String(it.code))) continue;
       const card = payCard(it);
       if (!card) continue;
       if (!shelfReplace(it.code, card)) shelfAdd(card);
@@ -7680,7 +7689,10 @@ async function clearOneCard(card) {
      link and a found page (ShelfLink). A payment request has no shelf row of its own, so it keeps the
      browser memory until the money rail settles it. Everything else is now parked, which is why a cleared
      page finally stays cleared. */
-  const parkable = !!(gone.code || gone.song_id);
+  /* Build 221. Decided by KIND, not by whether a code exists. "It has a code" was true of the one kind
+     that must not be parked, so a cleared payment request was remembered nowhere and returned fifteen
+     seconds later. (14 Nov 19:24: "a payment request on my shelf that keeps on coming out of nowhere?") */
+  const parkable = gone.kind !== 'pay' ? !!(gone.code || gone.song_id) : true;
   if (!parkable) rememberCleared([gone.code].filter(Boolean));
   renderShelf();
   railNote('shelf \u00b7 put away \u00b7 ' + (gone.title || 'one card'));
