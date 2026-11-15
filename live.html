@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T21:05';
-const BUILD_NO = 240;
+const BUILD = '2026-11-15T22:05';
+const BUILD_NO = 242;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -516,6 +516,10 @@ const BUILD_NO = 240;
    session that can only speak. Default stays voice: nothing changes for anyone who never taps. */
 let MODE = 'voice';
 try { MODE = localStorage.getItem('ei-door-mode') === 'text' ? 'text' : 'voice'; } catch (e) {}
+/* Build 242. A device that still holds the old thread from before this build is cleaned the moment the page
+   loads, so the very next open has nothing from a past conversation to draw or to hand over. */
+try { localStorage.removeItem('ei.door.thread'); } catch (e) {}
+
 const typed = () => MODE === 'text';
 /* Build 227 · A REPLY BELONGS TO THE TURN IT ANSWERS.
    14 Nov 2026, 21:56: he switched from typing to voice and the door "immediately started to answer
@@ -5584,7 +5588,6 @@ function doorHears(heard) {
   try { shadowRouteNote(said, songRoute && songRoute.pick); } catch (e) {}
   try { songHearTurn(said); } catch (e) {}
   try { descentHear(said); } catch (e) {}
-  try { threadRemember('you', said); } catch (e) {}
   // He was asked for a title and answered with one. 14 Nov 10:46: the door asked "which song would you
   // like to share?", he typed "back in black from acdc", and the reply was "I couldn't find "Back in
   // Black" on the sharing rail" - with no search behind it. A question the door itself asked is the
@@ -8680,72 +8683,6 @@ let lastGreetAt = 0;
    AI Studio at https://ai.studio/spend to manage your projec" - a sentence truncated by the server, delivered
    verbatim to the screen, followed by the door inviting him to tap a circle that could not possibly work.
    A refusal is not a fault to retry. It is a fact to state, in words a person can act on. */
-const THREAD_KEY = 'ei.door.thread';
-const THREAD_MAX = 10;                 // exchanges kept, oldest dropped
-const THREAD_TTL = 12 * 3600e3;        // half a day: older than that is another day's conversation
-const THREAD_WARM = 3 * 3600e3;        // inside this, the door resumes rather than greets
-
-function threadLoad() {
-  try {
-    const th = JSON.parse(localStorage.getItem(THREAD_KEY) || 'null');
-    if (!th || !Array.isArray(th.turns) || !th.turns.length) return null;
-    if (!th.at || Date.now() - th.at > THREAD_TTL) return null;
-    return th;
-  } catch (e) { return null; }
-}
-function threadClear() { try { localStorage.removeItem(THREAD_KEY); } catch (e) {} }
-function threadAgo(at) {
-  const m = Math.round((Date.now() - (at || 0)) / 60000);
-  if (!m || m < 1) return 'a moment ago';
-  if (m < 60) return m + ' min ago';
-  const h = Math.round(m / 60);
-  return h + (h === 1 ? ' hour ago' : ' hours ago');
-}
-function threadRemember(who, text) {
-  const t = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!t) return;
-  if (who === 'you' && isNoise(t)) return;        // a cough or a thinking noise is not context
-  try {
-    const th = threadLoad() || { turns: [] };
-    th.turns.push({ who: who === 'you' ? 'you' : 'engine', text: t.slice(0, 240), at: Date.now() });
-    if (th.turns.length > THREAD_MAX) th.turns = th.turns.slice(-THREAD_MAX);
-    th.at = Date.now();
-    th.ask = (songDraft && songDraft.at && Date.now() - songDraft.at < 20 * 60 * 1000) ? (openJourneyBeat() || '') : '';
-    let made = null;
-    try { made = madeLoad(); } catch (e) {}
-    th.made = (made && made.request_id)
-      ? { request_id: made.request_id, title: made.title || '', said: made.said || '', who: made.who || '' }
-      : null;
-    localStorage.setItem(THREAD_KEY, JSON.stringify(th));
-  } catch (e) { /* private mode: the thread simply cannot be kept, and the door says nothing false about it */ }
-}
-function threadRecap(th) {
-  return (th.turns || []).slice(-6)
-    .map((x) => (x.who === 'you' ? 'he said' : 'you answered') + ': "' + String(x.text).slice(0, 180) + '"')
-    .join('  |  ');
-}
-/* What was said is put back on the screen, muted and labelled as earlier, because a transcript restored with
-   no door open reads as the engine replaying an old conversation (seen 7 Nov). This one says when. */
-function threadRestoreOnScreen(th) {
-  try {
-    const keep = (th.turns || []).slice(-4);
-    if (!keep.length) return;
-    const mark = document.createElement('div');
-    mark.className = 'turn';
-    const s = document.createElement('div');
-    s.className = 'said';
-    s.style.color = '#7d7566';
-    s.textContent = '\u00b7 earlier on this door \u00b7 ' + threadAgo(th.at);
-    mark.appendChild(s);
-    logEl.appendChild(mark);
-    for (const x of keep) {
-      const row = addTurn(x.who, x.text);
-      try { row.querySelector('.said').style.opacity = '0.55'; } catch (e) {}
-    }
-    resetTurns();          // a restored bubble is history; nothing new is appended into it
-  } catch (e) {}
-}
-
 /* A refusal: what is wrong, whose it is, and what actually lifts it. Only the kind goes on the screen in our
    own words; the server's sentence is kept once, in the log, for the record. */
 const REFUSALS = [
@@ -8919,40 +8856,14 @@ function sayGreeting() {
       startMadeWatch();
     }
   } catch (e) {}
-  /* ---- Build 149: a door that comes back to a conversation it was already having ----
-     Everything above this line has already claimed the opening if it had a better claim: a share mid-flight,
-     an open question of the route, a take still being made. Nothing has, so the question is whether there is a
-     recent thread on this device. If there is, the new session is handed it before it speaks a word, so it
-     arrives already knowing where it was. A renewal is skipped: sessionResumption already carries the thread,
-     and handing it again would say it twice. */
-  try {
-    const th = (!renewing && !resumeHandle) ? threadLoad() : null;
-    if (th && th.turns.length) {
-      const warm = (Date.now() - th.at) <= THREAD_WARM;
-      threadRestoreOnScreen(th);
-      const where = 'He is back at a door he was already using, ' + threadAgo(th.at) + '. Where the '
-        + 'conversation was, for your context only: ' + threadRecap(th) + '. '
-        + (th.made && th.made.request_id
-          ? 'A song he asked for is still being made ("' + String(th.made.title || th.made.said || 'a song').slice(0, 60) + '"). '
-          : '')
-        + (th.ask ? 'The door had one question open: ' + th.ask + ' ' : '')
-        + 'Nothing was lost, and nothing needs asking again. Do not repeat any of this back to him and do not '
-        + 'offer anything he did not ask for.';
-      if (warm) {
-        lastGreetAt = Date.now();
-        resumeSpeak = ''; resumeNote = ''; resumeLine = '';
-        sessionOpenedAt = Date.now();
-        logLine('thread.resume', th.turns.length + ' turns · ' + threadAgo(th.at),
-          { level: 'info', target: 'thread' });
-        sendOpeningLine('Still here, Boss.', where + ' Do not greet him again and do not start over: carry on '
-          + 'from where it was, in one short line, and let him speak.');
-        return;
-      }
-      logLine('thread.recall', th.turns.length + ' turns · ' + threadAgo(th.at),
-        { level: 'info', target: 'thread' });
-      doorNote(where + ' That was hours ago, so greet him normally and let him lead.', false);
-    }
-  } catch (e) {}
+  /* ---- Build 242: THE DOOR OPENS ON THE RECORD, NOT ON THE LAST CONVERSATION ----
+     15 Nov 2026, 21:59, over a screenshot of his own chat: "There is still some echo or ghost from past
+     conversations coming into my chats." He was reading a paid payment request being announced again and
+     the old "what amount should it be for" question asked again, in a session he had only just opened.
+     Build 149 did that on purpose: it drew the last four turns on screen and told the model to carry on
+     from where it was. A chat is not a record. What survives a session resumes from the RECORD above this
+     point - a locked share, a live picture question, a song beat with no answer, a take still being made -
+     and nothing resumes from a transcript. So the transcript is not kept, not drawn, and not handed over. */
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
   // Reopening the door a minute later is the same conversation, not a new arrival: it gets no greeting.
@@ -9227,8 +9138,6 @@ function handleFrame(text) {
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
       greeting: greeting ? '1' : '',
     });
-    // A greeting is not something the conversation said, so it is not kept as context.
-    if (!greeting) { try { threadRemember('engine', said.engine); } catch (e) {} }
     // A claim about the world with no lookup behind it. 9 Nov 2026, 20:38: he asked for the weather in
     // "Belito" and the door answered "According to AccuWeather, it's around 21 degrees Celsius in
     // Ballitoville right now, mostly sunny" with nothing in the log between the question and the answer.
