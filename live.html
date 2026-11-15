@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T22:05';
-const BUILD_NO = 242;
+const BUILD = '2026-11-15T22:32';
+const BUILD_NO = 243;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6840,7 +6840,9 @@ async function madeReady(r) {
         if (/\b(?:picture|cover|artwork|image)\b/i.test(toldNow) && /\?/.test(toldNow)) return;
         logLine('made.descent.retry', 'the picture question was not asked · asking once more',
           { level: 'warn', target: 'coverDraw' });
-        doorNote('Ask the last question of the making now, in one short line: would he like a picture to go '
+        descentAskedAt = Date.now();       // the question is live again the moment it is said
+        doorAsk('Would you like a picture to go with "' + landedTitle + '"? What should it show?',
+          'Ask the last question of the making now, in one short line: would he like a picture to go '
           + 'with "' + landedTitle + '", and what should it show. Nothing has been drawn and nothing has '
           + 'been sent.', true);
       } catch (e) {}
@@ -6872,7 +6874,14 @@ async function madeReady(r) {
   // Build 148: when the picture has not been answered, the question is the FIRST thing in the note and the
   // shelf line follows it. On 10 Nov 17:05 the shelf line came first, the model said it and stopped, and the
   // descent was silently skipped.
-  doorNote((!artHeld ? artLine + ' ' : '') + (onShelf
+  /* Build 243 (Edwin, 15 Nov 2026, 22:27: "we don't have the option to create a cover when it is just made
+     only when sharing"). He was right, and the log says why: at 22:22:36 the door opened the descent ("asking,
+     once") and twenty seconds later its retry fired, "the picture question was not asked". The door had asked
+     into the mouth's ear and the mouth never said it, so the only place the picture was ever offered was the
+     share sheet. The question is now the door's own line as well: it goes on screen if the mouth stays silent,
+     and the note still carries it so the mouth can say it in his own voice first. */
+  doorAsk(!artHeld ? ('Would you like a picture to go with "' + landedTitle + '"? What should it show?') : '',
+    (!artHeld ? artLine + ' ' : '') + (onShelf
       ? '"' + landedTitle + '" has landed and it is on his shelf' + (forWho ? ', made for ' + forWho : '')
         + '. Say one short line: the title once, plainly, that it is on his shelf, and that he can share it '
         + 'from there whenever he wants. '
@@ -7474,6 +7483,26 @@ function armSilenceWatch(heard) {
   }, 2500);
 }
 
+/* Build 241. What the shelf reader offered, against what the page is holding. Only cards whose kind comes
+   from this reader may be pruned, so a payment card, a gift in the address or anything the page added for
+   itself is never taken away by a shelf read that simply did not mention it. */
+const READER_KINDS = new Set(['song', 'store', 'source', 'fact', 'map', 'world', 'link', 'note', 'made']);
+function pruneShelfGone(offeredKeys, offeredCount) {
+  if (!Array.isArray(offeredKeys)) return 0;
+  if (!(offeredCount < 6)) return 0;            // at the cap the reader may have held more than it said
+  const offered = new Set(offeredKeys);
+  let gone = 0;
+  for (let i = shelf.length - 1; i >= 0; i--) {
+    const c = shelf[i] || {};
+    if (!READER_KINDS.has(String(c.kind || '').toLowerCase())) continue;
+    if (offered.has(cardKey(c))) continue;
+    shelf.splice(i, 1);
+    gone++;
+  }
+  if (gone) renderShelf();
+  return gone;
+}
+
 function mergeCard(c) {
   if (!c || !c.title) return;
   const k = cardKey(c);
@@ -7635,6 +7664,15 @@ async function refreshCards(force) {
       if (/^cover$/i.test(String((c && c.kind) || ''))) continue;
       mergeCard(c);
     }
+    /* Build 241 (Edwin, 15 Nov 2026, 21:25: "still there i did refresh it"). Two cards had been deleted from
+       the record and stayed on his shelf for ever, across a refresh, because this poll merged what the record
+       offered and never removed what it had stopped offering. The page had quietly become the authority on
+       what he owned, which is the one thing the shelf may never be. When the reader answers with fewer cards
+       than the cap it has told us everything it holds, so a card on screen it no longer offers is gone. At the
+       cap we cannot tell what was left behind, so the shelf is left alone rather than cutting a card the
+       reader simply did not return. Payment cards are never pruned by this read: they come from their own
+       reader. */
+    pruneShelfGone(d.cards.map(cardKey), d.cards.length);
     return d;
   } catch (e) { /* a shelf that cannot be read is quiet, not an error */ }
 }
