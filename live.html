@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T17:35';
-const BUILD_NO = 237;
+const BUILD = '2026-11-15T17:55';
+const BUILD_NO = 238;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -533,6 +533,12 @@ const typed = () => MODE === 'text';
    already started the gift's clock, and this only names it back. If it cannot be read the gate stays quiet,
    because a wrong reason is worse than none.
    Declared up here with the other session state, because the gate is wired long before the block below runs. */
+/* Build 238. Where the door reads a gift. The landing proved this route from this very origin: the app's own
+   host answers a plain browser fetch with CORS open. FNBASE - base44.app/api/apps/... - is the authed admin
+   path this page uses for its token, and it answers curl, but it never came back to the page: 237 shipped with
+   the gift read through FNBASE and the gate stayed silent in a real browser while the harness, which stubs the
+   network, stayed green. A stub cannot tell a public route from a private one. */
+const GIFT_FN = 'https://solene-7ba0f3a1.base44.app/functions/songListenCard';
 const GIFT_CODE = (() => {
   // Read with a regex, the way this page reads every other thing out of its address: URLSearchParams is not
   // there in a headless replay, and an address that only works in a browser cannot be proved.
@@ -2669,7 +2675,7 @@ const CHAIN_ON = (() => { try { return new URLSearchParams(location.search).get(
 async function readGiftArrival() {
   if (!GIFT_CODE) return null;
   try {
-    const r = await fetch(FNBASE + 'songListenCard?c=' + encodeURIComponent(GIFT_CODE), { cache: 'no-store' });
+    const r = await fetch(GIFT_FN + '?c=' + encodeURIComponent(GIFT_CODE), { cache: 'no-store' });
     const d = await r.json();
     if (!d || !d.title) return null;
     giftArrival = {
