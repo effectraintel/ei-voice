@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T17:05';
-const BUILD_NO = 236;
+const BUILD = '2026-11-15T17:35';
+const BUILD_NO = 237;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -10101,24 +10101,35 @@ window.addEventListener('beforeunload', () => {
   closeMic();
 });
 
-/* Build 236: the reason, read at once and put on the gate only while the gate is still asking for a touch.
-   A status line from the passkey flow is never overwritten, and the code is kept for the turn that will one
-   day claim the gift. This sits at the end of the script rather than in the boot handler so that a headless
-   replay can prove it without pretending to be a browser. */
+/* Build 237 · THE ARRIVAL LINE IS NOT BLOCKED BY THE DOOR'S OWN IDLE LINE.
+   236 was proved with a stubbed reader and then failed in a real browser, because the gate already says
+   "tap the circle to open the door" and the guard read that idle sentence as something worth keeping. So the
+   test is inverted: the arrival line is written UNLESS the gate is carrying a line the PASSKEY FLOW put
+   there. That list is closed, it is the door's own words, and a new idle sentence can never silence a gift. */
+const PASSKEY_LINE = /^(?:\s*)(?:waiting for the device|asking this device|this device is now a key|fingerprint verified|the door stayed shut|the enrolment code is needed|your pass ran out|the thirty minutes|this device is not a key|one touch opens this tab)/i;
+
+function applyArrival(g) {
+  if (!g) return false;
+  try {
+    if (!gateEl || gateEl.classList.contains('open')) return false;
+    const now = String(gMsg.textContent || '').trim();
+    if (now && PASSKEY_LINE.test(now)) return false;
+    gateSay(arrivalNote || arrivalLine(g));
+    return true;
+  } catch (e) { return false; }
+}
+
+/* The reason, read the moment the page is parsed and put on the gate. Kept for the turn that will one day
+   claim the gift. It sits at the end of the script rather than in the boot handler so a headless replay can
+   prove it without pretending to be a browser. */
 if (GIFT_CODE) {
   readGiftArrival().then((g) => {
     if (!g) return;
-    arrivalNote = arrivalLine(g);
+    try { arrivalNote = arrivalLine(g); } catch (e) { return; }
     try { sessionStorage.setItem('ei-gift-code', g.code); } catch (e) {}
-    logLine('door.gift', 'arrived for ' + g.title + ' · ' + g.state, { level: 'info' });
-    try {
-      if (gateEl && !gateEl.classList.contains('open')) {
-        const now = String(gMsg.textContent || '').trim();
-        const stillAsking = !now || /open the door|one touch|not a key|pass ran|minutes are up|code is needed/i.test(now);
-        if (stillAsking) gateSay(arrivalNote);
-      }
-    } catch (e) {}
-  });
+    applyArrival(g);
+    try { logLine('door.gift', 'arrived for ' + g.title + ' · ' + g.state, { level: 'info' }); } catch (e) {}
+  }).catch(() => {});
 }
 </script>
 </body>
