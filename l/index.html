@@ -179,7 +179,7 @@
         + '<p>The thirty days for this gift have been and gone, so it is resting rather than playing. '
         + 'It is <b>not lost</b>: it is held whole, with its picture and its proof, waiting for you.</p></div>';
     } else {
-      html += '<audio id="player" controls preload="none" src="' + esc(d.stream) + '"></audio>';
+      html += '<audio id="player" controls preload="metadata" src="' + esc(d.stream) + '"></audio>';
       html += '<p class="from">' + fromLine + '</p>';
       html += '<hr class="hair" />';
       html += '<p class="stamp">Sealed <b>' + when(d.sealed_at) + '</b>';
