@@ -149,6 +149,14 @@
 
   function short(sha) { return sha ? sha.slice(0, 16) + '…' : ''; }
 
+  // Edwin, 15 Nov 2026: "When you access the door and you don't have an understanding why and what you will
+  // just be a stranger wandering into a house with no purpose." So the door is not handed a bare front page:
+  // the gift code rides along, and the door says on its gate what this person came for before it asks for a
+  // fingerprint. Nothing to install, nothing to explain.
+  function giftAddr(d) {
+    return d && d.code ? '/?gift=' + encodeURIComponent(d.code) : '/';
+  }
+
   function fail(why) {
     load.className = 'load';
     load.textContent = why || 'This one does not open anything.';
@@ -204,13 +212,13 @@
       html += '<div class="keep"><h2>Want it back?</h2>'
         + '<p>A gift is kept whole until it is claimed. Open an account at the door and everything sent to you '
         + 'comes with it, proof and picture included.</p>'
-        + '<a href="' + DOOR + '">Open the door</a></div>';
+        + '<a href="' + DOOR + giftAddr(d) + '">Open the door</a></div>';
     } else {
       html += '<div class="keep"><h2>This is yours to keep.</h2>'
         + '<p>It plays in full here for ' + (claimed ? 'good' : (d.days_left === 1 ? 'the rest of today' : (d.days_left + ' more days')))
         + '. Keeping it means a handle at the door: the song then lives in your own vault, with this proof, '
         + 'and it is yours for good.</p>'
-        + '<a href="' + DOOR + '">Keep it</a></div>';
+        + '<a href="' + DOOR + giftAddr(d) + '">Keep it</a></div>';
     }
 
     if (d.words) {
