@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>A song, sealed</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2314110f'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%23b08d2f' stroke-width='2.5'/%3E%3Ctext x='32' y='41' font-family='Georgia,serif' font-size='22' font-weight='700' fill='%23b08d2f' text-anchor='middle'%3EEI%3C/text%3E%3C/svg%3E" />
+<style>
+  :root{
+    --gold:#b08d2f; --gold-soft:rgba(176,141,47,.42); --gold-faint:rgba(176,141,47,.16);
+    --char:#14110f; --surface:#1a1613; --surface-2:#1f1a16; --border:#322b22;
+    --ink:#efe9df; --dim:#9a9184; --dimmer:#6f675c;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--char);color:var(--ink)}
+  body{
+    font-family:var(--sans); -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:flex; flex-direction:column;
+    padding:26px 20px calc(24px + env(safe-area-inset-bottom));
+  }
+  .top{ display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:34px; }
+  .mark{
+    font-family:var(--serif); font-size:15px; letter-spacing:.16em; color:var(--gold);
+    border:1px solid var(--gold-soft); border-radius:5px; padding:3px 7px 4px; line-height:1;
+  }
+  .wordmark{
+    font-size:11px; letter-spacing:.34em; text-transform:uppercase; color:var(--gold); white-space:nowrap;
+  }
+  main{ flex:1; width:100%; max-width:430px; margin:0 auto; }
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:18px;
+    padding:18px 18px 22px; box-shadow:0 24px 60px -34px rgba(0,0,0,.9);
+  }
+  .art{
+    width:100%; aspect-ratio:1/1; border-radius:12px; overflow:hidden; background:var(--surface-2);
+    border:1px solid rgba(255,255,255,.045); display:flex; align-items:center; justify-content:center;
+  }
+  .art img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .art .none{ font-family:var(--serif); font-size:13px; letter-spacing:.28em; color:var(--gold-faint); text-transform:uppercase; }
+  .for{
+    margin:20px 0 0; font-size:10.5px; letter-spacing:.24em; text-transform:uppercase; color:var(--gold);
+  }
+  h1{
+    font-family:var(--serif); font-weight:400; font-size:30px; line-height:1.16;
+    letter-spacing:-.01em; margin:8px 0 0; color:var(--ink);
+  }
+  .note{
+    font-family:var(--serif); font-style:italic; font-size:16px; line-height:1.55; color:#cdc4b6;
+    margin:12px 0 0; white-space:pre-wrap;
+  }
+  .from{ margin:12px 0 0; font-size:13px; color:var(--dim); }
+  .from b{ font-weight:500; color:#c9c0b2; }
+  audio{ width:100%; margin:20px 0 0; height:38px; filter:saturate(0) contrast(.94) brightness(1.06); }
+  .hair{ height:1px; background:var(--border); margin:20px 0 0; border:0; }
+  .stamp{ margin:14px 0 0; font-size:12px; color:var(--dim); letter-spacing:.01em; }
+  .stamp b{ color:#c9c0b2; font-weight:500 }
+  details{ margin:14px 0 0; }
+  summary{
+    list-style:none; cursor:pointer; font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--gold); display:flex; align-items:center; gap:8px; user-select:none;
+  }
+  summary::-webkit-details-marker{ display:none }
+  summary .p{ font-size:14px; letter-spacing:0; line-height:1; color:var(--gold-soft) }
+  .proof{ margin:14px 0 0; display:grid; grid-template-columns:74px 1fr; gap:9px 12px; font-size:11.5px; }
+  .proof dt{ color:var(--dimmer); letter-spacing:.06em; }
+  .proof dd{ margin:0; color:#c4bbae; word-break:break-all; font-variant-numeric:tabular-nums; line-height:1.45 }
+  .proves{ margin:14px 0 0; font-size:11.5px; line-height:1.6; color:var(--dimmer); }
+  .keep{
+    margin:22px 0 0; padding:18px 18px 20px; border:1px solid var(--gold-faint); border-radius:16px;
+    background:linear-gradient(180deg, rgba(176,141,47,.055), rgba(176,141,47,.015));
+  }
+  .keep h2{ font-family:var(--serif); font-weight:400; font-size:19px; margin:0; color:var(--ink); }
+  .keep p{ margin:7px 0 0; font-size:12.5px; line-height:1.6; color:var(--dim); }
+  .keep a{
+    display:inline-block; margin:14px 0 0; padding:11px 18px; border-radius:9px;
+    background:var(--gold); color:#15110c; font-size:12.5px; font-weight:600; letter-spacing:.04em;
+    text-decoration:none;
+  }
+  .quiet{ margin:20px 0 0; font-size:12.5px; line-height:1.65; color:var(--dim); }
+  .quiet b{ color:#c9c0b2; font-weight:500 }
+  .held{ text-align:center; padding:6px 4px 2px }
+  .held .lbl{ font-size:10.5px; letter-spacing:.26em; text-transform:uppercase; color:var(--gold) }
+  .held p{ font-size:13.5px; line-height:1.7; color:var(--dim); margin:12px 0 0 }
+  .held p b{ color:#cec5b7; font-weight:500 }
+  footer{
+    margin:30px auto 0; width:100%; max-width:430px; text-align:center;
+    font-size:9.5px; letter-spacing:.2em; text-transform:uppercase; line-height:2.1; color:var(--dimmer);
+  }
+  footer .l2{ letter-spacing:.06em; text-transform:none; font-size:10.5px; color:#5d564d }
+  .load{ font-family:var(--serif); font-size:15px; color:var(--dim); text-align:center; padding:52px 0 }
+  .hide{ display:none !important }
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="mark">L0B</span>
+    <span class="wordmark">Effectra&nbsp;Intelligence</span>
+  </div>
+
+  <main>
+    <div id="load" class="load">Opening it…</div>
+    <div id="gift" class="hide"></div>
+  </main>
+
+  <footer id="foot" class="hide">
+    <div>Powered by Effectra Intelligence</div>
+    <div class="l2">Proof on chain. Payload in the vault.</div>
+    <div class="l2">© 2026 Effectra Intelligence</div>
+  </footer>
+
+<script>
+(function () {
+  // The engine app. One constant: the address can move without this page caring.
+  var ENGINE = 'https://solene-7ba0f3a1.base44.app';
+  var DOOR = 'https://door.effectra.ai';
+
+  var gift = document.getElementById('gift');
+  var load = document.getElementById('load');
+  var foot = document.getElementById('foot');
+
+  function code() {
+    var q = new URLSearchParams(location.search);
+    var c = (q.get('c') || q.get('code') || '').trim();
+    if (c) return c;
+    var m = location.pathname.match(/\/l\/([A-Za-z0-9]{4,20})\/?$/);
+    return m ? m[1] : '';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function when(iso, withTime) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    var day = d.getUTCDate(), mon = ['January','February','March','April','May','June','July','August','September','October','November','December'][d.getUTCMonth()];
+    var s = day + ' ' + mon + ' ' + d.getUTCFullYear();
+    if (withTime) {
+      s += ', ' + String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + ' UTC';
+    }
+    return s;
+  }
+
+  function short(sha) { return sha ? sha.slice(0, 16) + '…' : ''; }
+
+  function fail(why) {
+    load.className = 'load';
+    load.textContent = why || 'This one does not open anything.';
+    foot.className = '';
+  }
+
+  function draw(d) {
+    load.className = 'hide';
+    gift.className = '';
+    foot.className = '';
+
+    var held = d.state === 'held';
+    var claimed = d.state === 'claimed';
+    var forLine = d.for_name ? ('For ' + esc(d.for_name)) : 'A song, sealed';
+    var fromLine = 'sealed and given by <b>' + esc(d.sender || 'Edwin') + '</b>';
+
+    var html = '<div class="card">';
+    html += '<div class="art">' + (d.cover
+      ? '<img src="' + esc(d.cover) + '" alt="" referrerpolicy="no-referrer" />'
+      : '<span class="none">sealed</span>') + '</div>';
+    html += '<p class="for">' + forLine + '</p>';
+    html += '<h1>' + esc(d.title || 'a song') + '</h1>';
+    if (d.gift_note) html += '<p class="note">' + esc(d.gift_note) + '</p>';
+
+    if (held) {
+      html += '<hr class="hair" />';
+      html += '<div class="held"><span class="lbl">Kept for you</span>'
+        + '<p>The thirty days for this gift have been and gone, so it is resting rather than playing. '
+        + 'It is <b>not lost</b>: it is held whole, with its picture and its proof, waiting for you.</p></div>';
+    } else {
+      html += '<audio id="player" controls preload="none" src="' + esc(d.stream) + '"></audio>';
+      html += '<p class="from">' + fromLine + '</p>';
+      html += '<hr class="hair" />';
+      html += '<p class="stamp">Sealed <b>' + when(d.sealed_at) + '</b>';
+      if (claimed) html += ' &middot; yours to keep';
+      html += '</p>';
+    }
+
+    html += '<details><summary><span class="p">+</span> Proof</summary><dl class="proof">';
+    if (d.code) html += '<dt>ref</dt><dd>' + esc(d.code) + '</dd>';
+    if (d.sha) html += '<dt>sha256</dt><dd>' + esc(d.sha) + '</dd>';
+    if (d.sealed_at) html += '<dt>sealed</dt><dd>' + when(d.sealed_at, true) + '</dd>';
+    if (d.opened_at) html += '<dt>opened</dt><dd>' + when(d.opened_at, true) + '</dd>';
+    if (d.window_ends_at && !held) html += '<dt>open to</dt><dd>' + when(d.window_ends_at) + '</dd>';
+    if (d.window_ends_at && held) html += '<dt>window</dt><dd>closed ' + when(d.window_ends_at) + '</dd>';
+    html += '</dl><p class="proves">That sha256 is of the recording itself, measured when it was sealed. '
+      + 'If a single byte of the file changes, the hash stops matching. Anyone can send you an mp3. '
+      + 'This one carries the measurement.</p></details>';
+    html += '</div>';
+
+    // The ask, once, and never before the song. Full play is the gift; keeping it is the only thing on offer.
+    if (held) {
+      html += '<div class="keep"><h2>Want it back?</h2>'
+        + '<p>A gift is kept whole until it is claimed. Open an account at the door and everything sent to you '
+        + 'comes with it, proof and picture included.</p>'
+        + '<a href="' + DOOR + '">Open the door</a></div>';
+    } else {
+      html += '<div class="keep"><h2>This is yours to keep.</h2>'
+        + '<p>It plays in full here for ' + (claimed ? 'good' : (d.days_left === 1 ? 'the rest of today' : (d.days_left + ' more days')))
+        + '. Keeping it means a handle at the door: the song then lives in your own vault, with this proof, '
+        + 'and it is yours for good.</p>'
+        + '<a href="' + DOOR + '">Keep it</a></div>';
+    }
+
+    if (d.words) {
+      html += '<details><summary style="margin-top:18px"><span class="p">+</span> The words</summary>'
+        + '<p class="note" style="font-style:normal; font-size:14.5px; line-height:1.75; color:#c3bab0">'
+        + esc(d.words) + '</p></details>';
+    }
+
+    gift.innerHTML = html;
+
+    var player = document.getElementById('player');
+    if (player) {
+      player.addEventListener('ended', function () {
+        var keep = gift.querySelector('.keep');
+        if (keep) keep.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  }
+
+  var c = code();
+  if (!c) { fail('There is no gift in this address.'); return; }
+
+  fetch(ENGINE + '/functions/songListenCard?c=' + encodeURIComponent(c), { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || (d.state === 'closed')) { fail(d && (d.why || d.reason) ? d.why || d.reason : ''); return; }
+      if (!d.title) { fail('This one does not open anything.'); return; }
+      draw(d);
+    })
+    .catch(function () { fail('The door did not answer. Try again in a moment.'); });
+})();
+</script>
+</body>
+</html>
