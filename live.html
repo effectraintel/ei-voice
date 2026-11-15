@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T22:32';
-const BUILD_NO = 243;
+const BUILD = '2026-11-15T22:41';
+const BUILD_NO = 244;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5997,6 +5997,12 @@ function loadDraft() {
 let shareArt = { want: false, brief: '' };   // his description, locked, and never invented by the model
 let shareArtTries = 0;                       // one re-ask when the description arrives cut off
 let descentAskedAt = 0;                      // when the door asked the last question of the making
+/* Build 244, 15 Nov 2026 22:34. "Like a Long River" landed at 22:33:44 and the mouth asked the picture
+   question eighteen seconds later, at 22:33:50 - correctly. Then the door's own twenty-second retry fired
+   anyway and asked it a second time, because that retry only ever looked at one variable and could not see
+   that the mouth had already said it. A question asked twice teaches him to ignore the question. This stamp
+   is written the moment a picture question is actually spoken or put on screen, and the retry respects it. */
+let pictureSpokenAt = 0;
 
 /* Build 137, change 3: the brief survives a give-up. Releasing the step throws the page's memory away by
    design, so a description he gave while the song was still being made was lost with it - that is exactly
@@ -6230,6 +6236,7 @@ function armAskWatch(askedAt, line) {
 function doorAsk(line, note) {
   const q = String(line || '').trim();
   if (!q) { doorNote(note, true); return; }
+  if (/\b(?:picture|cover|artwork|image)\b/i.test(q)) pictureSpokenAt = Date.now();   // build 244
   armAskWatch(Date.now(), q);
   doorNote(note || ('say exactly this, in one line, and nothing else: "' + q + '"'), true);
 }
@@ -6836,6 +6843,8 @@ async function madeReady(r) {
     setTimeout(() => {
       try {
         if (!artOpen || artOpen.request_id !== landedReq) return;   // he answered, or another song opened it
+        // Build 244: the question may already be on his screen, or already spoken. Then it is not asked again.
+        if (Date.now() - pictureSpokenAt < 20000) return;
         const toldNow = String((typeof said !== 'undefined' && said && said.engine) || '');
         if (/\b(?:picture|cover|artwork|image)\b/i.test(toldNow) && /\?/.test(toldNow)) return;
         logLine('made.descent.retry', 'the picture question was not asked · asking once more',
@@ -9176,6 +9185,11 @@ function handleFrame(text) {
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
       greeting: greeting ? '1' : '',
     });
+    // Build 244: the mouth asked about a picture, so the door's retry must not ask it again.
+    try {
+      const spoke = String(said.engine || '');
+      if (/\b(?:picture|cover|artwork|image)\b/i.test(spoke) && /\?/.test(spoke)) pictureSpokenAt = Date.now();
+    } catch (e) {}
     // A claim about the world with no lookup behind it. 9 Nov 2026, 20:38: he asked for the weather in
     // "Belito" and the door answered "According to AccuWeather, it's around 21 degrees Celsius in
     // Ballitoville right now, mostly sunny" with nothing in the log between the question and the answer.
