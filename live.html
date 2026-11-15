@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T00:20';
-const BUILD_NO = 235;
+const BUILD = '2026-11-15T17:05';
+const BUILD_NO = 236;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -524,6 +524,23 @@ const typed = () => MODE === 'text';
    was spoken and it sounded as if the door had answered on its own. turnBeganMuted is set once, when
    a turn starts, and it does not change when the mode does: the sound of a muted turn stays unspoken
    even if the door is talking again before that reply finishes. His next turn is heard normally. */
+/* Build 236 · THE DOOR KNOWS WHY SOMEONE IS HERE.
+   15 Nov 2026, 16:52, Edwin: "When you access the door and you don't have an understanding why and what you
+   will just be a stranger wandering into a house with no purpose..."
+   The reason travels in the address rather than being asked for at the door: the gift landing hands over
+   ?gift=<code>, the door reads that gift through songListenCard (the one reader a code has) and says on the
+   gate what the person came for before it asks for a fingerprint. Reading writes nothing - the landing
+   already started the gift's clock, and this only names it back. If it cannot be read the gate stays quiet,
+   because a wrong reason is worse than none.
+   Declared up here with the other session state, because the gate is wired long before the block below runs. */
+const GIFT_CODE = (() => {
+  // Read with a regex, the way this page reads every other thing out of its address: URLSearchParams is not
+  // there in a headless replay, and an address that only works in a browser cannot be proved.
+  try { return decodeURIComponent(String((location.search.match(/[?&]gift=([^&#]*)/) || [])[1] || '').trim()); } catch (e) { return ''; }
+})();
+let giftArrival = null;
+let arrivalNote = '';
+
 let turnBeganMuted = false;
 const mouthMaySound = () => !typed() && !turnBeganMuted;
 
@@ -2022,10 +2039,10 @@ function showGate(reason) {
     gNote.textContent = 'A one-time code, from My Authorised Devices on a device that is already in the door. It works once and lasts ten minutes. With no device left, ask the engine for one. After that the device alone is enough.';
     document.getElementById('code').focus();
   };
-  gateSay(reason || '');
+  gateSay(reason || arrivalNote);
   gNote.textContent = gNote.textContent || '';
-  if (!doorSession()) {
-    gateSay('');
+  if (!doorSession() && !reason) {
+    gateSay(arrivalNote || '');
   }
 }
 
@@ -2647,6 +2664,30 @@ let songFork = 0, songForkAsks = 0;
    Rollout: `?chain=1` turns it on. Without the flag every function below returns immediately, so
    this build behaves exactly like 174. */
 const CHAIN_ON = (() => { try { return new URLSearchParams(location.search).get('chain') === '1'; } catch (e) { return false; } })();
+
+/* Build 236, the reading half: one gift in, one line out. */
+async function readGiftArrival() {
+  if (!GIFT_CODE) return null;
+  try {
+    const r = await fetch(FNBASE + 'songListenCard?c=' + encodeURIComponent(GIFT_CODE), { cache: 'no-store' });
+    const d = await r.json();
+    if (!d || !d.title) return null;
+    giftArrival = {
+      code: GIFT_CODE, title: String(d.title), sender: String(d.sender || ''),
+      state: String(d.state || 'open'), days_left: Number(d.days_left || 0),
+    };
+    return giftArrival;
+  } catch (e) { return null; }
+}
+
+// One line, in the door's own voice: what this is, then what one touch does. Never the recipient's name.
+function arrivalLine(g) {
+  const from = g.sender ? ' from ' + g.sender : '';
+  const what = /^[aeiou]/i.test(g.title) ? 'an' : 'a';
+  if (g.state === 'held') return 'you came for a gift' + from + ': ' + g.title + '. it is kept for you; one touch opens this door.';
+  if (g.state === 'claimed') return 'you came for ' + g.title + from + '. it is already yours; one touch opens this door.';
+  return 'you came for ' + what + ' gift' + from + ': ' + g.title + '. one touch opens this door, and it is yours to keep.';
+}
 const CHAIN_LINKS = [
   { class: 'free', name: 'hear', predicate: 'the subject is his, in his own words', requires: {} },
   { class: 'free', name: 'sound', predicate: 'a sound was chosen, not a phrase that answers something else', requires: { said: 'string' } },
@@ -10059,6 +10100,26 @@ window.addEventListener('beforeunload', () => {
   try { ws && ws.close(); } catch {}
   closeMic();
 });
+
+/* Build 236: the reason, read at once and put on the gate only while the gate is still asking for a touch.
+   A status line from the passkey flow is never overwritten, and the code is kept for the turn that will one
+   day claim the gift. This sits at the end of the script rather than in the boot handler so that a headless
+   replay can prove it without pretending to be a browser. */
+if (GIFT_CODE) {
+  readGiftArrival().then((g) => {
+    if (!g) return;
+    arrivalNote = arrivalLine(g);
+    try { sessionStorage.setItem('ei-gift-code', g.code); } catch (e) {}
+    logLine('door.gift', 'arrived for ' + g.title + ' · ' + g.state, { level: 'info' });
+    try {
+      if (gateEl && !gateEl.classList.contains('open')) {
+        const now = String(gMsg.textContent || '').trim();
+        const stillAsking = !now || /open the door|one touch|not a key|pass ran|minutes are up|code is needed/i.test(now);
+        if (stillAsking) gateSay(arrivalNote);
+      }
+    } catch (e) {}
+  });
+}
 </script>
 </body>
 </html>
