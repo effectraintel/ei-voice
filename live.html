@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-15T22:48';
-const BUILD_NO = 245;
+const BUILD_NO = 246;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5573,6 +5573,40 @@ function heardStop(said) {
   return true;
 }
 
+/* Build 246 · WHAT THE DOOR JUST ASKED OUTRANKS WHAT A READER GUESSES.
+   15 Nov 2026, 22:57. He typed "I want to make a song", the door asked "What should the song be about?",
+   and he answered: "Looking forward to a new week filled with excitement and thrills". That sentence has
+   no verb, so the route reader called it a SHARE ask, the 233 guard discarded it as "the asking, not what
+   the song is about", and the door went off and searched the music stores for his own words. Nothing was
+   made; he was told nothing was found.
+
+   The rule that fixes it is the one the door already lives by: a question the door asked is a question it
+   owes an answer to. While the subject question stands open and he has given no words yet, his next line
+   IS the subject, whatever a word list makes of it - unless it plainly starts a different act (share, send,
+   keep, mail, pay, stop, or a question of his own). One decider, and it runs before the gate, so the two
+   can never disagree again. */
+const SUBJECT_OTHER_ACT = /^(?:please\s+)?(?:share|send|keep|mail|email|pay|buy|order|stop|cancel|no\b|nope|never\s*mind|forget|that'?s\s*all|what|who|why|when|where|how|which|is\b|are\b|can\s+you\s+(?:share|send|play))/i;
+function subjectAnswerOpen() {
+  try {
+    if (songDraft.said) return false;
+    if (String(songDraft.askBeat || '') !== 'subject') return false;
+    if (!songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000) return false;
+    return true;
+  } catch (e) { return false; }
+}
+function doorTakesSubject(t) {
+  if (!subjectAnswerOpen()) return false;
+  if (SUBJECT_OTHER_ACT.test(t)) return false;
+  if (songConcrete(t) < 2) return false;          // nothing to sing about
+  songDraft.said = t;
+  songDraft.askBeat = '';
+  songRoute = { pick: 'make', at: Date.now() };
+  logLine('song.subject.answered', t.slice(0, 120), { level: 'info', target: 'music' });
+  try { chainBeat('hear'); } catch (e) {}
+  try { journeyAskNext(); } catch (e) {}
+  return true;
+}
+
 function doorHears(heard) {
   const said = String(heard || '').trim();
   if (!said) return;
@@ -5584,6 +5618,8 @@ function doorHears(heard) {
   if (/\b(?:share|send)\b|\b(?:make|write|create|do)\b[^.?!]{0,40}\b(?:for|to)\s+(?:my|his|her)\b/i.test(said)) {
     shareIntentAt = Date.now();
   }
+  /* Build 246: the question the door asked comes first. A subject he has just given is not a route. */
+  if (doorTakesSubject(said)) { try { descentHear(said); } catch (e) {} return; }
   try { if (!forkAnswer(said)) songRouteGate(said); } catch (e) {}
   try { shadowRouteNote(said, songRoute && songRoute.pick); } catch (e) {}
   try { songHearTurn(said); } catch (e) {}
