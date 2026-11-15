@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T22:41';
-const BUILD_NO = 244;
+const BUILD = '2026-11-15T22:48';
+const BUILD_NO = 245;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6889,8 +6889,13 @@ async function madeReady(r) {
      into the mouth's ear and the mouth never said it, so the only place the picture was ever offered was the
      share sheet. The question is now the door's own line as well: it goes on screen if the mouth stays silent,
      and the note still carries it so the mouth can say it in his own voice first. */
-  doorAsk(!artHeld ? ('Would you like a picture to go with "' + landedTitle + '"? What should it show?') : '',
-    (!artHeld ? artLine + ' ' : '') + (onShelf
+  /* Build 245, from Edwin at 22:38: "Nope still prompt to add a picture in the typing session." In a typing
+     session the mouth's line and any line the door draws both appear as text, so build 243's belt-and-braces
+     (note AND own line) could show the same question twice, and did. So the door asks it ONE way at the
+     landing: the note, spoken by the mouth. If the mouth stays silent, the retry twenty seconds later puts
+     the line on the screen instead - which is the fallback that was missing on 15 Nov at 22:22. A question
+     asked twice teaches a member to ignore the question. */
+  doorNote((!artHeld ? artLine + ' ' : '') + (onShelf
       ? '"' + landedTitle + '" has landed and it is on his shelf' + (forWho ? ', made for ' + forWho : '')
         + '. Say one short line: the title once, plainly, that it is on his shelf, and that he can share it '
         + 'from there whenever he wants. '
