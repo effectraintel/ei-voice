@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T17:55';
-const BUILD_NO = 238;
+const BUILD = '2026-11-15T18:10';
+const BUILD_NO = 239;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2683,7 +2683,7 @@ async function readGiftArrival() {
       state: String(d.state || 'open'), days_left: Number(d.days_left || 0),
     };
     return giftArrival;
-  } catch (e) { return null; }
+  } catch (e) { try { setState('gift: ' + String(e && e.message || e)); } catch (x) {} return null; }
 }
 
 // One line, in the door's own voice: what this is, then what one touch does. Never the recipient's name.
@@ -10129,7 +10129,9 @@ function applyArrival(g) {
    claim the gift. It sits at the end of the script rather than in the boot handler so a headless replay can
    prove it without pretending to be a browser. */
 if (GIFT_CODE) {
+  setState('gift: code ' + GIFT_CODE);
   readGiftArrival().then((g) => {
+    setState('gift: read -> ' + (g ? g.state + ' ' + g.title : 'nothing'));
     if (!g) return;
     try { arrivalNote = arrivalLine(g); } catch (e) { return; }
     try { sessionStorage.setItem('ei-gift-code', g.code); } catch (e) {}
