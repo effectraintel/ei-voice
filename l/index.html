@@ -116,6 +116,9 @@
   // The engine app. One constant: the address can move without this page caring.
   var ENGINE = 'https://solene-7ba0f3a1.base44.app';
   var DOOR = 'https://door.effectra.ai';
+  // Keeping a gift is not the door's job: the postbox hands over, and claiming is where a handle
+  // (a key) is minted. That lives on the channel host, at one public address.
+  var CLAIM = 'https://matrix.effectra.ai/_ei/claim';
 
   var gift = document.getElementById('gift');
   var load = document.getElementById('load');
@@ -210,15 +213,15 @@
     // The ask, once, and never before the song. Full play is the gift; keeping it is the only thing on offer.
     if (held) {
       html += '<div class="keep"><h2>Want it back?</h2>'
-        + '<p>A gift is kept whole until it is claimed. Open an account at the door and everything sent to you '
-        + 'comes with it, proof and picture included.</p>'
-        + '<a href="' + DOOR + giftAddr(d) + '">Open the door</a></div>';
+        + '<p>A gift is kept whole until it is claimed, and claiming never expires. Keep it and everything sent '
+        + 'to you comes with it: the recording, its proof, the picture, and a handle of your own.</p>'
+        + '<a href="' + CLAIM + '?c=' + encodeURIComponent(d.code) + '">Keep it now</a></div>';
     } else {
       html += '<div class="keep"><h2>This is yours to keep.</h2>'
         + '<p>It plays in full here for ' + (claimed ? 'good' : (d.days_left === 1 ? 'the rest of today' : (d.days_left + ' more days')))
         + '. Keeping it means a handle at the door: the song then lives in your own vault, with this proof, '
         + 'and it is yours for good.</p>'
-        + '<a href="' + DOOR + giftAddr(d) + '">Keep it</a></div>';
+        + '<a href="' + CLAIM + '?c=' + encodeURIComponent(d.code) + '">Keep it</a></div>';
     }
 
     if (d.words) {
