@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-16T23:45';
-const BUILD_NO = 247;
+const BUILD = '2026-11-16T23:58';
+const BUILD_NO = 248;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2361,8 +2361,11 @@ async function openDoor() {
     if (!session) {
       hint('the thirty minutes are up · one touch opens it again');
       try {
+        /* BUILD 248. The gate does not pass here any more. A fingerprint proves who is at the door; it does
+           not prove the room is his. Passing the gate at this line is what let the iPhone stand inside a
+           house whose room was held by the Android on 16 Nov 2026 - the refusal arrived after the wall had
+           already moved. The gate passes below, once the door has actually opened. */
         await unlockWithFingerprint('unlock', null);
-        gatePassed();
       } catch (e) {
         const why = String((e && e.message) || e);
         showGate(/not a key/.test(why) ? 'this device is not a key to this door yet' : why);
@@ -2405,6 +2408,15 @@ async function openDoor() {
       hint('close it in My Authorised Devices, then tap here again');
       try { warn(String(d.error || '')); } catch (e) {}
       logLine('room.busy', 'refused: ' + who + ' holds the room', { level: 'warn', target: 'session' });
+      /* BUILD 248. The gate goes back up, because the door did not open. Saying "the room is open on
+         Android" while standing in the house is the worst of both: he is told and let in anyway.
+         One touch tries again and needs no fingerprint, because the pass he opened with was never spent. */
+      try {
+        showGate('the room is open on ' + who + (since ? ' since ' + since : '')
+          + '. Close it on that device, then tap try again. Your pass is still good, so it will not ask for your fingerprint again.');
+        gBtn.textContent = 'try again';
+        gBtn.onclick = () => { autoStarted = false; gateSay('asking the room'); startChannel('retry the room'); };
+      } catch (e) {}
       return;
     }
     if (!d.ok) {
@@ -2414,6 +2426,10 @@ async function openDoor() {
       }
       throw new Error(d.error || 'the door did not open');
     }
+
+    /* BUILD 248. The room is his and the door is open, so only now does the gate pass. Everything above this
+       line can refuse; nothing above it may show him the house. */
+    gatePassed();
 
     // The corridor's first slice (card #167): facts from the session record, built
     // server-side, handed to the voice before the socket opens. If it cannot be had,
