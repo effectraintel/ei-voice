@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-15T22:48';
-const BUILD_NO = 246;
+const BUILD = '2026-11-16T23:45';
+const BUILD_NO = 247;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1731,15 +1731,22 @@ document.addEventListener('visibilitychange', () => {
   setTimeout(() => { try { keepCurrent(); } catch (e) {} }, 1200);
 });
 
-/* A pass can run out while the page sits there doing nothing. Half a minute is often enough to
-   notice, and never often enough to be a nuisance. If the page is inside and its session is gone,
-   the front door is where it belongs. */
+/* A pass can run out while the page sits there doing nothing, and a door that only admits it when he
+   tries to act is a door that lied to him. Half a minute is often enough to notice, and never often
+   enough to be a nuisance.
+   Build 247, 16 Nov 2026 23:39, in his words: "When I close the session on the phone then it doesn't
+   close automatically, only when I try and do something." The old line here stood down whenever the
+   room was up or the mic was open, so a pass that died mid-conversation left the door looking open and
+   the first he heard of it was a refusal in the middle of an act. That guard is gone. A pass that has
+   gone closes the door over the room and keeps his place (build 201); with no room up, the front door
+   is where it belongs. */
 setInterval(() => {
   try {
-    if (sessionUp || listening || busy) return;
-    if (!gateEl.classList.contains('open')) return;
-    const s = doorSession();
-    if (!s) backToFrontDoor('your pass ran out; open the door again');
+    if (busy) return;                                   // a turn in flight closes its own door when it fails
+    if (!gateEl.classList.contains('open')) return;     // the gate is already up over this page
+    if (doorSession()) return;                          // the pass is still good
+    if (sessionUp || listening) { passRanOut(); return; }
+    backToFrontDoor('your pass ran out; open the door again');
   } catch (e) { /* a check that cannot run must never close a working page */ }
 }, 30000);
 
@@ -1812,6 +1819,22 @@ function passLater() {
   logLine('pass.later', 'not now \u00b7 the room stays as it is', { level: 'info', target: 'door' });
   try { gateEl.classList.add('open'); } catch (e) {}
   setState('the pass has run out; talk freely, and touch the key when you want to make or send');
+}
+
+/* Build 247. The clock closing the door by itself, in plain words, over the room rather than instead
+   of it. Nothing is thrown away: the room, the thread and the draft all stay, and "not now" leaves them
+   alone. This is the same overlay build 201 puts up when a rail refuses; the difference is that nobody
+   has to ask for it. */
+function passRanOut() {
+  if (!gateEl.classList.contains('open')) return;   // the gate is already up over this page
+  try {
+    logLine('pass.clock', 'the pass ran out on the clock \u00b7 closing the door', { level: 'info', target: 'door' });
+    showGate('your pass has run out. One touch opens the door again, and nothing was lost.');
+    const gl = document.getElementById('glater');
+    if (gl) { gl.classList.remove('ghidden'); gl.onclick = passLater; }
+    setState('the door is shut \u00b7 one touch opens it again');
+    hint('one touch opens this tab, for thirty minutes');
+  } catch (e) {}
 }
 
 function passBack() {
