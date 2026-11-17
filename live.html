@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 272;
+const BUILD_NO = 273;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -578,9 +578,12 @@ const mouthMaySound = () => !typed() && !turnBeganMuted;
    this rule kept saying "a TAP, not a sentence", which is a rule the theatre had already left. It also predated the
    words question he added the same evening. So the rule is now what the theatre is: the door issues each question as
    its own note, one at a time, and the mouth asks only for the note it was given. */
-const PICTURE_RULE = 'THE DOOR HOLDS THE SCRIPT AND YOU DO NOT. It has four asks - what the song should say, whether '
-  + 'to build around his words, what kind of music, whether he wants a cover picture - and each one arrives as its own '
-  + 'note, one at a time. THIS LIST IS NOT A CHECKLIST TO RECITE: ask only the question named in the note in front of '
+/* BUILD 273: the script is three asks, not four. The words question is retired, so a mouth still carrying it would
+   put a question in front of him that the door no longer has an answer slot for. */
+const PICTURE_RULE = 'THE DOOR HOLDS THE SCRIPT AND YOU DO NOT. It has three asks - what the song should say, what '
+  + 'kind of music, whether he wants a cover picture - and each one arrives as its own note, one at a time. His words '
+  + 'are always the subject of the song and the door always builds the rest of it around them, so never ask him '
+  + 'whether to build around them or leave them as they are. THIS LIST IS NOT A CHECKLIST TO RECITE: ask only the question named in the note in front of '
   + 'you, in one short line, and say nothing about any other line of the script. Never two questions in the same '
   + 'breath, never one before the door asks for it, never a question of your own. '
   /* BUILD 271. 17 Nov 2026, 18:15. The note asked for the kind of music and the mouth said "What kind of music,
@@ -3162,6 +3165,16 @@ function songHearTurn(heard) {
       const phrased = real ? (soundPhrase(t) || real) : '';
       if (!real) {
         const near = soundNear(t);
+        if (!songDraft.saidSoundNote && OLD_WORDS_ANSWER.test(t)) {
+          songDraft.saidSoundNote = true;
+          logLine('song.journey.sound', 'an answer about his words, not about the music \u00b7 the door builds around them either way',
+            { level: 'info', target: 'music' });
+          doorNote('Say one short line that his words are the song and the door builds the rest around them, then ask '
+            + 'the one question still open, word for word: "What kind of music should it be? Say you choose and I will '
+            + 'pick." Ask nothing else.', true);
+          railNote('journey \u00b7 sound \u00b7 still open');
+          return;
+        }
         songDraft.soundTries = (songDraft.soundTries || 0) + 1;
         songDraft.askBeat = 'sound';
         songDraft.guess = near || '';
@@ -3223,6 +3236,8 @@ function songHearTurn(heard) {
       return;
     }
     /* ---- BUILD 267: THE WORDS BEAT. Built around, or left exactly as he said them. ---- */
+    /* BUILD 273: has no beat of its own now - kept only for a session that was already at it when the door
+       changed, so an answer given to the old question is taken as "build around" and the sound is asked next. */
     if (beat === 'build') {
       /* BUILD 272. 17 Nov 2026, 18:33. The mouth offered a third path the door does not have - "or make up something
          new that captures the feeling" - and he took it: "Make up something new." The door read it as unclear, then as
@@ -3403,26 +3418,17 @@ function journeyAskNext() {
       try { armMake(); } catch (e) {}
       return;
     }
-    /* BUILD 267. THE WORDS CAN BE BUILT AROUND.
-       17 Nov 2026, after hearing "Cell phones are empty devices" (1:08): "It's short, so we need to extrapolate
-       the wording a bit. So we need to ask the question. Do you want me to build around your words or just leave
-       it as is..." His words stay the song; the question is whether the door may make more room for them. It is
-       the door's line, asked in words, and it is asked right after his words because that is what it is about. */
+    /* BUILD 273. THE FIFTH ASK IS RETIRED, BY HIM.
+       17 Nov 2026, 18:44: "Should I build the song around those words, or make up something new that captures the
+       feeling? It is really the same thing and the result was still a few lines of words literally 5 lines playing
+       only 75 seconds so it was awesome but it lack depth and length of the actual songs." He is right that the two
+       answers were the same question asked twice, and that the choice was never the problem: a three-line answer
+       became a whole song because the script allowed it. So the question is gone. His words are the subject, the
+       door always builds the full song around them, and depth and length are now the door's job, not his answer. */
     if (!songDraft.build) {
-      songDraft.askBeat = 'build';
-      songDraft.buildTries = 0;
-      songDraft.at = Date.now();
-      logLine('journey.ask', 'build \u00b7 his words are in, so the door asks whether to build around them',
+      songDraft.build = 'around';
+      logLine('song.journey.build', 'around \u00b7 his words are the subject and the door writes the rest of the song',
         { level: 'info', target: 'music' });
-      railNote('journey \u00b7 build');
-      doorAsk('Do you want me to build around your words, or just leave it as it is?',
-        'His words are held and the door is asking one thing about them. Say this line word for word and add nothing '
-        + 'to it: "Do you want me to build around your words, or just leave it as it is?" These are the only two '
-        + 'answers the door can take, so offer no third path and no option of your own, and never choose for him. '
-        /* 1411's lesson, kept: a note that names a forbidden phrase puts it in the mouth, so the phrase is not
-           written here. The list simply says what the door can take. */
-        + 'Say nothing about length, nothing about how an earlier song came out, and ask nothing else.');
-      return;
     }
     songDraft.askBeat = 'sound';
     songDraft.asks = (songDraft.asks || 0) + 1;
@@ -4215,6 +4221,12 @@ function pictureAnswerIn(text) {
   if (/\b(?:yes|yeah|yep|sure|please|want|wanted|would|like|do|okay|ok|go|ahead|definitely|absolutely)\b/.test(t)) return 'yes';
   return '';
 }
+
+/* BUILD 273. A SENTENCE ABOUT HIS WORDS IS NOT A WRONG ANSWER ABOUT THE MUSIC.
+   He has answered "leave it as they are" or "build around my words" every night for a week; the question is gone but
+   the habit is his, so on the sound beat such a turn is read as what it is, said once that the song is built from his
+   words either way, and the sound question is asked again without being counted against him. */
+const OLD_WORDS_ANSWER = /\b(?:leave (?:it|them|the words?)|as (?:they|it) (?:are|is)|as is|as-is|build around|around my words|build on (?:it|them|my words)|extrapolate|more words|fuller|longer|make up something new|something new)\b/i;
 
 function soundIsReal(answer) {
   const t = ' ' + String(answer || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
