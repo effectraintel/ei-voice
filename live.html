@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-16T23:58';
-const BUILD_NO = 248;
+const BUILD = '2026-11-17T10:45';
+const BUILD_NO = 249;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1857,11 +1857,101 @@ function passBack() {
   }, 900);
 }
 
+/* ---- BUILD 249: A DEVICE ARRIVES NAMED ----
+   17 Nov 2026, reading his own key list: "just wondering why it registered like that in the first place?"
+   Because this label was a two-line guess at navigator.userAgent, and that string is thinner than it
+   looks. A Mac says "Macintosh; Intel Mac OS X 10_15_7": no phone, no browser name, and an OS version
+   Apple froze for privacy years ago - so it fell through to the literal word "browser". Android says
+   "Android 10" and never the handset model; the model lives in userAgentData, which nothing asked for.
+   What changed, and what did not: the label names the browser and the platform it can honestly know, and
+   asks the browser for the handset model where a browser will answer. It never invents a model, never
+   prints macOS's frozen version as if it were true, and never waits on a hint that does not come back -
+   a model is a courtesy, never a condition of enrolling. The name is still frozen at enrolment. */
+const LABEL_MAX = 60;
+
+// The browser, from the client hints where they exist (Chromium) and the user-agent where they do not.
+function browserName(withVer) {
+  const uad = navigator.userAgentData;
+  const list = (uad && uad.brands) || [];
+  const real = list.filter(function (b) { return !/Not.?A.?Brand|Chromium/i.test(String((b && b.brand) || '')); });
+  const pick = (real.length ? real : list)[0];
+  if (pick && pick.brand) {
+    const map = { 'Google Chrome': 'Chrome', 'Microsoft Edge': 'Edge', 'Opera': 'Opera',
+                  'Samsung Internet': 'Samsung', 'Brave': 'Brave', 'Vivaldi': 'Vivaldi' };
+    const name = map[pick.brand] || String(pick.brand);
+    const ver = String(pick.version || '').split('.')[0];
+    return withVer && ver ? name + ' ' + ver : name;
+  }
+  const ua = String(navigator.userAgent || '');
+  const grab = function (re) { const m = ua.match(re); return m ? m[1].split('.')[0] : ''; };
+  const named = [[/Edg(?:A|iOS)?\//, 'Edge'], [/OPR\/|Opera\//, 'Opera'], [/CriOS\//, 'Chrome'],
+                 [/FxiOS\//, 'Firefox'], [/Chrome\//, 'Chrome'], [/Firefox\//, 'Firefox'], [/Safari\//, 'Safari']];
+  for (let i = 0; i < named.length; i++) {
+    if (named[i][0].test(ua)) {
+      const ver = grab(/(?:Edg(?:A|iOS)?|OPR|Opera|CriOS|FxiOS|Chrome|Firefox|Version)\/([0-9.]+)/);
+      return withVer && ver ? named[i][1] + ' ' + ver : named[i][1];
+    }
+  }
+  return '';
+}
+
+// The machine, as one of the names he already uses for his own things.
+function platformName() {
+  const uad = navigator.userAgentData;
+  const p = String((uad && uad.platform) || '');
+  const ua = String(navigator.userAgent || '');
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (p === 'Android' || /Android/.test(ua)) return 'Android';
+  if (p === 'iOS') return 'iPhone';
+  if (p === 'macOS' || /Macintosh/.test(ua)) return 'Mac';
+  if (p === 'Windows' || /Windows/.test(ua)) return 'Windows';
+  if (p === 'Chrome OS') return 'Chromebook';
+  if (p === 'Linux' || /Linux/.test(ua)) return 'Linux';
+  return 'a device';
+}
+
+// Only versions a browser will actually tell the truth about. macOS's UA version is frozen at 10_15_7
+// for every Mac built since 2019, so it is left out rather than printed as a fact.
+function osVersion() {
+  const ua = String(navigator.userAgent || '');
+  const android = ua.match(/Android ([0-9.]+)/);
+  if (android) return android[1];
+  const ios = ua.match(/OS ([0-9_]+) like Mac OS X/);
+  if (ios) return ios[1].replace(/_/g, '.');
+  return '';
+}
+
 function deviceLabel() {
-  const ua = navigator.userAgent;
-  const kind = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : 'browser';
-  const ver = (ua.match(/(?:OS|Android) ([0-9_]+)/) || [])[1];
-  return kind + (ver ? ' ' + ver.replace(/_/g, '.') : '');
+  const p = platformName();
+  const os = osVersion();
+  const ios = p === 'iPhone' || p === 'iPad';
+  const b = browserName(!ios);           // on an iPhone the iOS version is the useful one, not two of them
+  const head = ios && os ? p + ' \u00b7 iOS ' + os
+    : (p === 'Android' && os ? 'Android ' + os : p);
+  return (b ? head + ' \u00b7 ' + b : head).slice(0, LABEL_MAX);
+}
+
+/* The enrolment label, which may also carry the handset model. Only Chromium will answer, only on
+   Android is there a model to get, and only 700ms is worth waiting: a door that hangs because a
+   browser was slow to name a phone is worse than a phone called "Android". */
+let richLabel = '';
+async function enrolLabel() {
+  if (richLabel) return richLabel;
+  let model = '';
+  try {
+    const uad = navigator.userAgentData;
+    if (uad && typeof uad.getHighEntropyValues === 'function') {
+      const hints = await Promise.race([
+        uad.getHighEntropyValues(['model']),
+        new Promise(function (res) { try { setTimeout(function () { res(null); }, 700); } catch (e) { res(null); } }),
+      ]);
+      if (hints && hints.model) model = String(hints.model).slice(0, 24);
+    }
+  } catch (e) { /* a model is a courtesy, never a condition */ }
+  const base = deviceLabel();
+  richLabel = (model ? model + ' \u00b7 ' + base : base).slice(0, LABEL_MAX);
+  return richLabel;
 }
 
 const gateEl = document.getElementById('gate');
@@ -1990,7 +2080,10 @@ async function unlockFingerprint(mode, enrolCode) {
   gAlt.disabled = true;
   gateSay(mode === 'register' ? 'asking this device to make a key' : 'asking this device for your fingerprint');
 
-  const begin = await gatePost('doorKeyBegin', { mode, device_label: deviceLabel() });
+  // BUILD 249. An enrolment is the one moment worth asking a browser for the handset model; an open is
+  // not, because a door that waits on a hint before it opens is a door that feels broken.
+  const label = mode === 'register' ? await enrolLabel() : deviceLabel();
+  const begin = await gatePost('doorKeyBegin', { mode, device_label: label });
 
   if (mode === 'unlock' && !begin.has_keys) {
     throw new Error('this device is not a key to this door yet');
@@ -2037,7 +2130,7 @@ async function unlockFingerprint(mode, enrolCode) {
   const payload = {
     mode,
     challenge_id: begin.challenge_id,
-    device_label: deviceLabel(),
+    device_label: label,
     enrol_code: enrolCode || '',
     response: {
       id: cred.id,
