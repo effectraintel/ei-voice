@@ -2616,7 +2616,7 @@ function songHearTurn(heard) {
       songDraft.guess = '';
       songDraft.soundTries = 0;
       songDraft.askBeat = '';
-      logLine('song.journey.sound', real, { level: 'info', target: 'music' });
+      logLine('song.journey.sound', songDraft.sound, { level: 'info', target: 'music' });   // build 259: the log says what was kept, not the word that matched
       chainBeat('sound');
       afterSoundBeat();
       return;
