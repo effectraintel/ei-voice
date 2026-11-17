@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T01:15';
-const BUILD_NO = 292;
+const BUILD = '2026-11-18T02:05';
+const BUILD_NO = 293;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4066,7 +4066,18 @@ function forkAnswer(heard) {
   const fresh = false;
   if (read.route !== 'none') logLine('song.read', read.route + ' \u00b7 ' + read.why,
     { level: 'info', target: 'music' });
-  const bare = /^(?:yes|yeah|yep|no|nope|nah|ok|okay|sure|please|fine)\b/.test(t) && t.split(/\s+/).length <= 4;
+  /* BUILD 293. A COURTESY WORD IS NOT A SENTENCE.
+     17 Nov 2026, 23:42:58: asked which song, he said "Please forgive me." - the title of the song he wanted - and
+     the fork read the leading "please" as a bare agreement, asked again "a song from the stores, or a new one?",
+     nothing was searched, and the mouth then told him the rail had found nothing. The same words with the artist
+     attached ("Please Forgive Me from Bryan Adams") had worked twenty minutes earlier, because five words was too
+     many for a bare answer. So bare-ness is decided by what is left when the courtesy is taken out: a sentence of
+     yes/no and politeness is bare, and anything carrying a real word in it is what he said it is. */
+  const COURTESY = new Set(['yes', 'yeah', 'yep', 'no', 'nope', 'nah', 'ok', 'okay', 'sure', 'fine', 'please',
+    'thanks', 'thank', 'you', 'boss', 'then', 'now', 'just', 'go', 'ahead', 'thing', 'great', 'perfect',
+    'cool', 'right', 'alright', 'and', 'so', 'much', 'the', 'a', 'one', 'song', 'share']);
+  const bareWords = t.replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const bare = bareWords.length > 0 && bareWords.length <= 4 && bareWords.every((w) => COURTESY.has(w));
   // A hesitation is not a song title. "hmm" reaching the title branch would have sent it to the stores as a
   // query, and "you choose" would have ignored him: that answer is a deferral, and it takes the cheap branch.
   const unsure = bare || /^(?:hmm+|mm+|uh+|um+|er+|ah+|oh+|i don'?t know|dunno|not sure|no idea)\b/.test(t);
@@ -5794,9 +5805,13 @@ function judgeClaim() {
     if (Date.now() - unbackedWarnedAt < 15000) return;    // one correction, not a chorus
     unbackedWarnedAt = Date.now();
     logLine('claim.unbacked', t.slice(0, 160), { level: 'warn', target: 'no-rail-call' });
-    doorNote('You just told him something about the rail that did not happen: nothing was searched and nothing '
-      + 'failed. Correct it in one short sentence, then ask which song he means. Never describe a result, an '
-      + 'error or an empty shelf that you have not been told about.', true);
+    /* BUILD 293. AND THE CORRECTION IS NOT LEFT TO THE MOUTH.
+       23:43:06 and 23:43:11: told to correct a rail claim it had invented, the mouth produced a SECOND rail claim -
+       "I can't search that song right now" - so he heard two false statements in a row and had to start again.
+       A correction that has to be re-corrected is not a correction. Nothing was searched, so the door says exactly
+       that, in its own line, and asks for the title. */
+    doorAsk('Nothing has been searched yet, Boss. Which song is it?',
+      'say exactly this, in one line, and nothing else: "Nothing has been searched yet, Boss. Which song is it?"');
   } catch (e) {
   } finally {
     railCallsThisTurn = 0;
