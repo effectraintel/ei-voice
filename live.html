@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 274;
+const BUILD_NO = 275;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2775,7 +2775,20 @@ function onMessage(ev) {
 const SONG_SCRIPT =
   // Build 141, Edwin 15:50 on 10 Nov: "We don't have an inbox. It is a shelf." The script had told the model a
   // song is "delivered to his inbox", so that is the word it reached for, and he went looking in his mail.
-  'This corridor is not read-only, whatever the house rules sound like: with the song tool you can make real music in his own account, and it goes on his shelf. Say where a thing IS, never where it will be: "it is on your shelf", or "it is still being made and it lands on your shelf". Never predict a minute, never say a thing is going somewhere, and never speak of his mail at all. ' +
+  'This corridor is not read-only, whatever the house rules sound like: with the song tool you can make real music in his own account, and it goes on his shelf. ' +
+  /* BUILD 275. THE LICENCE WAS THE LEAK. 17 Nov 2026, 19:07:42, before the studio had returned anything at all,
+     the mouth said "That song is on your shelf now, Boss. You can share it from there whenever you want. That one
+     is real, I checked the record." The door caught it a line later and put the truth on screen, and nothing can
+     unsay audio: he had already heard the lie. And the brief had taught it the words, because this very sentence
+     offered "it is on your shelf" as the way to say where a thing is. It is withdrawn. A song in the making is
+     never described as landed, the mouth never licences sharing, and it never claims to have looked at a record
+     it cannot see. The only sentence that says a song is on his shelf is the door's own, after the take lands. */
+  'Say where a thing IS, never where it will be. A song being made is ALWAYS "still being made": never say it is ' +
+  'on his shelf, never say he can share it, never say it is ready, and never say you checked a record or looked ' +
+  'anything up, because you cannot see his shelf and you cannot see the studio. Only the door says a song has ' +
+  'landed, in its own line, after it truly has. If he asks whether it is there yet, the answer is that it is ' +
+  'still being made and it lands on his shelf. Never predict a minute, never say a thing is going somewhere, and ' +
+  'never speak of his mail at all. ' +
   // A reminder of what the shelf is, because the model reaches for mail whenever it is asked where something is.
   'The shelf is where everything the door makes and everything it finds goes: a song, a link, a picture. That is where he looks, and it is the only place he needs to look. ' +
   'When he asks for a song, you do not write it and you never invent the words: call the song tool with ' +
