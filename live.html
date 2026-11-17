@@ -1611,6 +1611,7 @@ document.addEventListener('visibilitychange', () => {
    not a second source of truth. */
 let sittingTurns = [];             // [{who:'you'|'engine', text, at}] - this sitting only
 let sittingAt = 0;                 // when the sitting began
+let resumePending = false;         // he is back and has not said yet: carry on, or fresh
 const SITTING_MAX = 12;            // turns, not words: enough for "what I asked you just now"
 function sittingNote(who, text) {
   const t = String(text || '').trim();
@@ -1623,10 +1624,12 @@ function clearSitting() {
   sittingTurns = []; sittingAt = 0;
   try { localStorage.removeItem(SITTING_KEY); } catch (e) {}
 }
-/* Fifteen minutes: long enough to come back from a song or another tab, short enough that yesterday's conversation
-   can never walk in wearing today's. */
+/* MEMORY ENDS WHEN HE ENDS IT. Edwin, 18 Nov 2026, 00:32: "I don't agree with 1 minute ago, I can take a 20 minute
+   break and will like to continue with where I left off. Memory should end only when the user ends it. So memory
+   should always be there. When the user reenter, they should get a choice continue from where you left it or start
+   a fresh session?" So there is no clock on the sitting. It is kept until he starts fresh or a new sitting replaces
+   it, and a return is never silently continued: the door asks, in one line, which of the two he wants. */
 const SITTING_KEY = 'ei.door.sitting';
-const SITTING_KEEP_MS = 15 * 60 * 1000;
 function parkSitting() {
   try {
     if (!sittingTurns.length) return;
@@ -1638,29 +1641,25 @@ function pickSittingUp() {
   let kept = null;
   try { kept = JSON.parse(localStorage.getItem(SITTING_KEY) || 'null'); } catch (e) { kept = null; }
   if (!kept || !Array.isArray(kept.turns) || !kept.turns.length) return;
-  const last = kept.turns[kept.turns.length - 1];
-  if (!last || !last.at || Date.now() - last.at > SITTING_KEEP_MS) { clearSitting(); return; }
   sittingTurns = kept.turns.slice(-SITTING_MAX);
   sittingAt = sittingTurns[0].at || Date.now();
-  logLine('sitting.resumed', 'the same sitting picked up after a pause · ' + sittingTurns.length + ' turns',
-    { level: 'info' });
+  resumePending = true;            // a RETURN: he is asked whether to carry on or start fresh
+  logLine('sitting.resumed', 'a sitting from an earlier visit is waiting · ' + sittingTurns.length + ' turns · '
+    + Math.round((Date.now() - (kept.at || sittingAt)) / 60000) + ' min ago', { level: 'info' });
 }
 /* What the new socket is told, in one block, and only when this page really has a same-sitting history. */
 function sittingHandover() {
   pickSittingUp();
   if (!sittingTurns.length) return '';
-  const last = sittingTurns[sittingTurns.length - 1];
-  if (!last || Date.now() - last.at > SITTING_KEEP_MS) { clearSitting(); return ''; }
   const lines = sittingTurns.map(function (x) {
     return (x.who === 'you' ? 'He said: "' : 'You answered: "') + x.text + '"';
   });
-  return '\n\n(The door was interrupted a moment ago - the link was renewed, or he closed it and opened it again - '
-    + 'and this is the SAME sitting, not a new one. Nothing has been lost. This is what passed between you just '
-    + 'before, oldest first:\n'
+  return '\n\n(HIS MEMORY OF THIS VISIT, kept because he left it open and came back. It is the same sitting, not '
+    + 'a new one, and nothing has been lost. This is what passed between you, oldest first:\n'
     + lines.join('\n')
-    + '\nTreat it as your own memory of the last few minutes: do not say you hold only this session, do not ask '
-    + 'him to repeat any of it, and never re-announce a thing from it as news. Anything he asked for that is '
-    + 'still unfinished is still open.)';
+    + '\nTreat it as your own memory: do not say you hold only this session, do not ask him to repeat any of it, '
+    + 'and never re-announce a thing from it as news. Anything he asked for that is still unfinished is still open. '
+    + 'If he chooses a fresh session, everything above is closed and you do not refer to it again.)';
 }
 
 /* Every door states when it opened, in the transcript, so "this is a new
@@ -6786,6 +6785,27 @@ function doorHears(heard) {
   if (!said) return;
   // A new thing said is a new chance to be corrected: the mute above belongs to the fault, not to him.
   correctMuted = '';
+  /* BUILD 298. THE FIRST THING SAID AFTER "WELCOME BACK" SETTLES THE CHOICE, and only an explicit "fresh" closes the
+     memory. Anything else he says is him carrying on, which is what he asked for. */
+  if (resumePending) {
+    resumePending = false;
+    const low = said.toLowerCase();
+    if (/\b(?:fresh|start over|start again|start fresh|new session|new door|begin again|forget (?:it|that|everything|all of it)|clear (?:it|that)|wipe)\b/.test(low)) {
+      clearSitting();
+      logLine('sitting.cleared', 'he chose a fresh session · "this is a fresh door, and nothing before it"',
+        { level: 'info', target: 'sitting' });
+      doorNote('He chose a FRESH session. Everything from earlier in this visit is closed: do not refer to it, do '
+        + 'not use anything you were given about it, and never say what he asked before. Say in one short line that '
+        + 'the door is fresh and ask what he wants.', true);
+      return;                     // the door's line answers this turn, not the old subject
+    }
+    if (/\b(?:carry on|carrying on|continue|where we left|pick up|resume|go on|yes|yeah|sure|ok|okay|please)\b/.test(low)) {
+      logLine('sitting.continued', 'he chose to carry on · ' + said.slice(0, 40), { level: 'info', target: 'sitting' });
+    } else {
+      logLine('sitting.kept', 'he carried on talking, so the sitting stays · ' + said.slice(0, 40),
+        { level: 'info', target: 'sitting' });
+    }
+  }
   if (heardStop(said)) return;
   // "I want to create a song and share it to somebody" is the intent that makes a made song a gift.
   // Remembered for fifteen minutes, and only as a hint: nothing is sent without his address typed.
@@ -10408,6 +10428,16 @@ function doorRefused(raw) {
 }
 
 function sayGreeting() {
+  /* BUILD 298. HE IS ASKED, NOT RESUMED. A return is not a continuation he did not ask for: the door says what it
+     still holds and lets him choose. One question, and his next words settle it. */
+  if (resumePending) {
+    logLine('sitting.asked', 'a sitting is waiting; he is asked whether to carry on or start fresh',
+      { level: 'info', target: 'sitting' });
+    doorAsk('Welcome back, Boss. Carry on where we left off, or start fresh?',
+      'say exactly this, in one line, and nothing else: "Welcome back, Boss. Carry on where we left off, or start '
+      + 'fresh?" Say nothing about what was discussed until he has chosen.');
+    return;
+  }
   // What left, and that it left. A new session knows nothing on its own, so the record is handed to it — not
   // as something to announce, as the answer if he asks. (14:28: "when I spoke again, it had no idea it was sent")
   try {
