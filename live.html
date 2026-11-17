@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 265;
+const BUILD_NO = 266;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3172,6 +3172,7 @@ function songHearTurn(heard) {
       songDraft.coverAnswered = true;
       songDraft.coverTries = 0;
       songDraft.askBeat = '';
+      pictureDone = true;              // build 266: spoken yes/no is the answer, and it is final
       shareArt = { want: y, brief: '', url: '' };
       artLockedAt = Date.now();
       logLine('song.journey.cover', y ? 'a picture, drawn when it lands' : 'no picture', { level: 'info', target: 'music' });
@@ -3316,8 +3317,15 @@ function routeClosed() {
    and seconds later the take left anyway - journeyAskNext saw a real sound and armed the make, because it was
    written when the sound was the last gate. So the script's third line never arrived, and the landing then asked
    the picture, at the one moment he wanted his song. One predicate now guards every way into the studio. */
+/* BUILD 266. THE PICTURE IS ANSWERED ONCE PER SONG, AND THE DOOR REMEMBERS IT.
+   17 Nov 2026, 17:23, his run: "Yes." three times and the same question back each time. The making's beat did
+   take his yes and started the song, but the beat's own state lived only in the draft, so the next turn found
+   the picture open again, the landing's answer window opened on the mouth's repeated question, his yes was
+   stored a second time as "kept for landing", and the two paths took turns asking him. So the answer is
+   latched here, in one place, and every path that could ask or re-take it consults this latch. */
+let pictureDone = false;        // he has answered the picture for the song being made
 function pictureSettled() {
-  return !!(songDraft.coverAnswered || songDraft.pictureClosed);
+  return !!(pictureDone || songDraft.coverAnswered || songDraft.pictureClosed);
 }
 
 function armMake() {
@@ -4015,7 +4023,14 @@ function soundPhrase(answer) {
     if (SOUND_WORDS.indexOf(w) >= 0 || SOUND_WORDS.indexOf(w.replace(/s$/, '')) >= 0) idx = i;
   });
   if (idx < 0) return '';
-  const phrase = words.slice(Math.max(0, idx - 2), Math.min(words.length, idx + 2)).join(' ');
+  let phrase = words.slice(Math.max(0, idx - 2), Math.min(words.length, idx + 2)).join(' ');
+  /* BUILD 266. 17 Nov 2026, 17:23: he said "Let's make it pop. funk" and the rail was handed "s pop funk",
+     because the apostrophe was stripped and the "s" of "Let's" became a word. A contraction's tail is not a
+     word: a lone letter, or a bare s/t/d/ll/re/ve/m, is dropped from the front of the phrase. */
+  const tail = /^(?:s|t|d|m|re|ve|ll|[a-z])$/i;
+  let parts = phrase.split(' ');
+  while (parts.length > 1 && tail.test(parts[0])) parts = parts.slice(1);
+  phrase = parts.join(' ');
   return phrase.split(' ').slice(0, 4).join(' ');
 }
 
@@ -6968,6 +6983,9 @@ let artOpen = null;   // {at, request_id, title}: the art question is waiting fo
    the window: the drawing still happens at the landing, against this song's own record (madeReady). */
 function armArtWindow() {
   if (artOpen) return;
+  /* BUILD 266: the picture was answered in the making, so a later question about it is the mouth repeating
+     itself, not a second decision. Nothing is opened and nothing is drawn from it. */
+  if (pictureSettled()) return;
   if (!madeShare || (madeShare.stage !== 'making' && madeShare.stage !== 'waiting')) return;
   const told = String((typeof said !== 'undefined' && said && said.engine) || '');
   if (!/\b(?:picture|cover|artwork|image)\b/i.test(told) || !/\?/.test(told)) return;
@@ -6982,6 +7000,7 @@ function armArtWindow() {
 function descentHear(heard) {
   const t = String(heard || '').trim();
   if (!t) return;
+  if (pictureDone) return;           // build 266: that answer was given in the making, not here
   /* Build 174. On 12 Nov at 14:53 the mouth asked "do you want to draw a picture for the cover?" while the
      song was still being made, he answered "yes, just crowd dancing", and the door threw it away in this
      line because the answer window only opened at the landing. Nothing logged it either, so the loss was
@@ -7083,6 +7102,7 @@ function askCoverFor(card, mode) {
       songDraft.coverAnswered = true;
       songDraft.coverTries = 0;
       songDraft.askBeat = '';
+      pictureDone = true;              // build 266: answered once, and the door does not ask again
       logLine('song.journey.cover', want ? 'a picture, drawn when it lands' : 'no picture', { level: 'info', target: 'music' });
       try {
         doorNote(want
