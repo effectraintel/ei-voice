@@ -1,12 +1,12 @@
 {
  "latest": 301,
- "updated": "2026-11-18T01:25",
+ "updated": "2026-11-18T01:32",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
   {
    "n": 301,
    "file": "v301.html",
-   "at": "2026-11-18T01:25"
+   "at": "2026-11-18T01:32"
   },
   {
    "n": 300,
