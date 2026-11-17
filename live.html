@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 275;
+const BUILD_NO = 276;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3470,6 +3470,7 @@ function journeyAskNext() {
    has been asked for, it has the mouth asked once, and if the mouth still says nothing the door puts the
    song into the studio itself with the same rail call the tool would have made. One make, never two. */
 let makeArmedSig = '', makeArmedAt = 0, makeFiredAt = 0, makePostedSig = '';
+let makeDeliveredAt = 0;   // build 276: the making is in flight from the make until the take lands
 /* Build 178: when the rail actually took the words. A song is being made from this moment, and not one
    second earlier - which is the difference between the door reporting a receipt and the door guessing. */
 let makeReceiptAt = 0;
@@ -4946,6 +4947,32 @@ async function handleWorldCall(call) {
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
       }));
     } catch { /* the socket is gone; the turn will end on its own */ }
+    return;
+  }
+  /* BUILD 276. Two refusals, both from the run at 21:21 on 17 Nov: he said "Thank you." while his song was in
+     the studio, and the mouth went to the web for "the current time in South Africa" and shelved the answer.
+     A making is not a lookup, and a thank-you is not a question. */
+  if (songInFlight()) {
+    result = 'A song is in the studio right now, so nothing was searched and nothing was put on his shelf. '
+      + 'Answer only from what you did here, or say you do not know. Never invent a fact while his song is being made.';
+    logLine('world.refused', ask + ' · a song is in the studio', { level: 'info', target: 'world' });
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch { /* the socket is gone */ }
+    return;
+  }
+  if (bareAcknowledgement(lastHeardText)) {
+    result = 'He said nothing that asks anything - it was an acknowledgement - so nothing was searched and nothing '
+      + 'was put on his shelf. Answer him in one short line in your own words. Do not look anything up.';
+    logLine('world.refused', ask + ' · nothing was asked (' + String(lastHeardText || '').slice(0, 60) + ')',
+      { level: 'info', target: 'world' });
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch { /* the socket is gone */ }
     return;
   }
   try {
@@ -7515,6 +7542,7 @@ function startMadeWatch() {
 // picture (if he has not described one) or open the sheet for the address.
 async function madeReady(r) {
   if (!madeShare) return;
+  makeDeliveredAt = Date.now();   // build 276: the studio is no longer working on anything
   madeClear();                       // it has landed: there is nothing left to watch (build 142)
   const title = (r && r.title) || madeShare.title || '';
   let card = null;
@@ -9437,7 +9465,7 @@ function shelfFromGrounding(gm) {
      as a SOURCE card beside the song. The making is not a lookup, and his shelf is not a bin for the model's
      working: no web result is shelved while a song is being made, and a kind of music is never a search. */
   try {
-    if (songMaking()) {
+    if (songMaking() || songInFlight()) {
       logLine('shelf.keep.refused', 'a web result arrived while a song is being made, so nothing was shelved',
         { level: 'info', target: 'shelfKeep' });
       return;
@@ -9457,11 +9485,35 @@ function shelfFromGrounding(gm) {
    flight, and nothing else may put a card on his shelf beside it. */
 function songMaking() {
   try {
+    if (songInFlight()) return true;
     if (!songDraft.at) return false;
     if (Date.now() - songDraft.at > 20 * 60 * 1000) return false;
     if (songDraft.delivered || songDraft.done) return false;
     return !!(songDraft.said || songDraft.askBeat || soundIsReal(songDraft.sound));
   } catch (e) { return false; }
+}
+
+/* BUILD 276. 17 Nov 2026, 21:21: the four asks were answered, the make went to the studio, the draft was
+   consumed - and songMaking() then answered false, because the draft is what it reads. So the door had no idea a
+   song was in the studio, the mouth looked up "the current time in South Africa" on his "Thank you.", and the
+   search chunk landed on his shelf as a card beside the song being made. The making is not a draft: it is a take
+   in the studio and a landing being watched. This answers that question from the make itself. */
+/* "Thank you", "ok", "yes", "nice": a turn that asks for nothing. It is not a question, so nothing is looked up
+   and nothing lands on his shelf. */
+function bareAcknowledgement(t) {
+  const w = String(t || '').toLowerCase().replace(/[^a-z\s']/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!w) return false;   // nothing heard is not an acknowledgement: it is a caller with no transcript to read
+  if (w.split(' ').length > 4) return false;
+  return /^(?:(?:ok|okay|cool|great|nice|good|right|sure|yes|yeah|yep|no|nope|thanks|thank you|cheers|ta|please|perfect|lovely|awesome|brilliant|bye|goodbye|good bye|night|good night|morning|hello|hi|hey)\s*)+$/.test(w);
+}
+
+function songInFlight() {
+  try {
+    if (madeShare && (madeShare.stage === 'making' || madeShare.stage === 'ready')) return true;
+    if (makeFiredAt && Date.now() - makeFiredAt < 20 * 60 * 1000
+        && !(makeDeliveredAt && makeDeliveredAt >= makeFiredAt)) return true;
+  } catch (e) {}
+  return false;
 }
 
 /* The spoken boundary between "not open" and "open". It is one short line, spoken by the
