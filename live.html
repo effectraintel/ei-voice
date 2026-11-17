@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 273;
+const BUILD_NO = 274;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3545,8 +3545,13 @@ async function makeIfStillWaiting(sig) {
       text: text,
       who: songWhoClean(songDraft.who || '', songDraft.sound, songDraft.feel),
       session_id: s.token.slice(0, 24),
-      build: songDraft.build || 'as-is',   // build 267: told to the maker, so the words leave as they were said
+      build: songDraft.build || 'around',
     };
+    /* BUILD 274. HIS YES TO THE PICTURE TRAVELS WITH THE ASK.
+       17 Nov 2026, 18:52: the request was created here and his yes was posted a second later, while the maker had
+       already read the row - so the yes was overwritten and the song landed with no cover. The answer rides on the
+       creation now, so the record holds it from the first second and the card can be born with its picture. */
+    if (songDraft.coverAnswered) payload.cover = { want: !!songDraft.cover, brief: String(shareArt.brief || '') };
     /* Build 179: the ask is written on the chain it walks on, so the making can close its own make ring
        when a take lands. The door cannot close that ring itself: the corridor strips receipts on purpose
        and a render link without one is a claim, not a result. chainSettle closes it on the vault's hash. */
