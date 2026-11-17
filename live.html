@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T00:45';
-const BUILD_NO = 291;
+const BUILD = '2026-11-18T01:15';
+const BUILD_NO = 292;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5241,6 +5241,7 @@ let shareCoverAsked = false;   // the door asks for the picture once, and does n
 let shareAddrOk = false;       // set only by a known address, or by him hearing it and saying yes
 let shareAddrReadBack = '';    // the address the door read out, so a correction can be recorded as one          // what the rail offered, so his answer can be matched against it
 let shareQuery = '';
+let lockInFlight = false;   // a song is being wrapped: the mouth waits for the answer, it is not released into silence
 
 // A tribute band's recording is a different song by a different artist that happens to share a title. Offered
 // next to the real one it is noise, and chosen by accident it is the wrong recording forever.
@@ -5473,8 +5474,14 @@ function judgeClaim() {
       if (!beat && !flying) {
         logLine('claim.amnesia', 'the mouth apologised for a memory it has, and nothing at all is open to put back',
           { level: 'warn', target: 'claim' });
-        doorCorrect('Nothing is lost, Boss. Everything you have told me is still on the record.',
-          'Nothing is open to ask and nothing was lost. Say that in one short line and ask nothing.', false);
+        /* BUILD 292. The correction has to be worth more than the apology. At 23:34:39 his "Hello." - asked
+           because the door had gone silent on a lock - was met with "I hold this session only", and the guard
+           answered "Nothing is lost". True and useless: the song he had just chosen was sitting on his shelf
+           and neither line said so. If a song locked a moment ago, the correction names it. */
+        const line = amnesiaLine();
+        doorCorrect(line,
+          'Nothing is open to ask and nothing was lost. Say exactly this in one short line and ask nothing: "'
+          + line + '"', false);
         return;
       }
       if (beat) {
@@ -7117,7 +7124,11 @@ function noteSongAnswer(heard) {
         logLine('share.door.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
         doorNote('the rail did not answer. Say you could not reach it, in one line, and do not guess at the song.', true);
       })
-      .finally(() => { doorSearching = false; });
+      .finally(() => {
+        doorSearching = false;
+        /* The same rule at the end of a search: a sentence that was held is not played from its middle. */
+        if (!hiddenHold) { replyAudible = false; heldFrames = 0; }
+      });
   }, 250);
 }
 const DRAFT_KEY = 'ei-share-draft';
@@ -7516,8 +7527,10 @@ function resolveChoice(heard) {
   const picked = choice;
   shareChoices = []; shareChoicesAt = 0;
   hiddenHold = true; hiddenHoldUntil = Date.now() + 8000;
+  lockInFlight = true;
   railNote('share · choosing · ' + (picked.title || ''));
   gatePost('songShare', { action: 'choose', candidate: picked }).then((c) => {
+    lockInFlight = false;
     if (!c || !c.url) {
       hiddenHold = false;
       doorNote('the rail could not wrap that song: ' + ((c && (c.error || c.note)) || 'no answer')
@@ -10573,10 +10586,7 @@ function handleFrame(text) {
     turns.engine = null; said.engine = '';
   }
 
-  if (hiddenHold && hiddenHoldUntil && Date.now() > hiddenHoldUntil) {
-    hiddenHold = false; hiddenHoldUntil = 0;
-    logLine('mouth.released', 'the door was silent too long and let the mouth go', { level: 'warn' });
-  }
+  releaseHoldIfExpired();
   if (sc.turnComplete) {
     awaitingFirstAudio = false;
     turnInFlight = false;
@@ -11075,6 +11085,42 @@ function playPcm(b64, mime) {
 
 /* Barge-in: he speaks, our voice stops where it is. The server interrupts itself
    on speech too, but cutting our own queue is the part that feels right. */
+  /* BUILD 292. THE HOLD OUTLASTS THE WRAP.
+     17 Nov 2026, 23:34:08: he answered "Bryan Adams", the door took the choice and asked the rail to wrap it, and
+     the wrap took eight seconds. The hold expired at eight, the mouth was let go mid-sentence on "I couldn't",
+     the lock note then went into a turn that had already ended (note.stale.turn at :24), and what he heard was
+     nothing but a buzz. A hold is not a timer: while a rail answer is still coming, it is extended, so the mouth
+     never resumes on a sentence the door is about to contradict. */
+/* What the door says when the mouth apologises for a memory it has. A song that landed moments ago is the most
+   useful thing it can name, so it does. (Build 292.) */
+function amnesiaLine() {
+  const just = (shareCard && shareCard.title && shareLockedAt && Date.now() - shareLockedAt < 5 * 60 * 1000)
+    ? shareCard : null;
+  return just
+    ? '"' + just.title + '"' + (just.sub ? ' by ' + String(just.sub).split(' \u00b7 ')[0] : '')
+      + ' is on your shelf, Boss, and nothing has been lost.'
+    : 'Nothing is lost, Boss. Everything you have told me is still on the record.';
+}
+
+function releaseHoldIfExpired() {
+  if (!(hiddenHold && hiddenHoldUntil && Date.now() > hiddenHoldUntil)) return;
+    if (lockInFlight) {
+      hiddenHoldUntil = Date.now() + 6000;
+    } else {
+      hiddenHold = false; hiddenHoldUntil = 0;
+      /* BUILD 292. AND A SENTENCE THAT WAS SUPPRESSED IS NOT RESUMED HALFWAY.
+         23:34, right after "Bryan Adams": the mouth was held mid-sentence on "I couldn't", the hold expired, and the
+         rest of that utterance was played from an arbitrary point in the stream - which is the strange buzzing he
+         heard. A held sentence is dropped whole: the audio is cut cleanly here, and the next thing said starts at
+         its own beginning rather than at the middle of a sentence the door had already contradicted. */
+      let dropped = false;
+      try { if (heldFrames > 0 || speaking) { barge(); dropped = true; } } catch (e) {}
+      replyAudible = false; heldFrames = 0;
+      logLine('mouth.released', 'the door was silent too long and let the mouth go'
+        + (dropped ? ' \u00b7 the held sentence is dropped, not resumed' : ''), { level: 'warn' });
+    }
+}
+
 function barge() {
   try { playCtx && playCtx.close(); } catch {}
   playCtx = null; playAt = 0; playRunStart = 0; loudFrames = 0;
