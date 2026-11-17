@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T10:45';
-const BUILD_NO = 249;
+const BUILD = '2026-11-17T11:20';
+const BUILD_NO = 250;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -973,7 +973,22 @@ window.addEventListener('DOMContentLoaded', () => {
     const box = el('saytext');
     if (box) { try { box.blur(); } catch (e) {} }
     document.body.classList.remove('kb');
+    /* BUILD 250. LEAVING IS AN ACT, SO THE RECORD SAYS SO. 17 Nov 2026, 11:11, right after he tapped this on
+       his iPhone: "I left the room on my iPhone... Still shows Open sessions." The room was gone and the pass
+       was not, because this handler only forgot the token in this tab. The pass is closed in the record now,
+       before the tab forgets it - read from the session he is leaving, never from anything typed. */
+    const leaving = doorSession();
     try { shutDoor(); } catch (e) {}
+    try {
+      if (leaving && leaving.token) {
+        fetch(FNBASE + 'doorKeyAdmin', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify({ action: 'leave', session_token: leaving.token }),
+        }).catch(() => {});
+      }
+    } catch (e) {}
     try { sessionStorage.removeItem(DOOR_KEY); } catch (e) {}
     try { sessionStorage.removeItem('ei-door-session'); } catch (e) {}
     try { sessionStorage.removeItem(SILENCED); } catch (e) {}
