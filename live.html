@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 269;
+const BUILD_NO = 270;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2820,6 +2820,18 @@ const SONG_SCRIPT =
   + 'box or a message box: nothing has been sent and no sheet opens. ';
 
 let lastSongRequest = '';
+/* BUILD 270. The id of the last song this door asked for, kept across a reload. Without it a reopened door has
+   no id to name, and asking the record "is it done" without an id answers about SOMEONE ELSE's request - his
+   previous song - which on 17 Nov 2026 at 15:52:10 made the mouth say a song was on his shelf two seconds
+   before the new one had even been written. A check must name its song. */
+const SONG_REQ_KEY = 'ei.song.req';
+function saveSongReq(id) {
+  const v = String(id || '').trim();
+  if (!v) return;
+  lastSongRequest = v;
+  try { localStorage.setItem(SONG_REQ_KEY, v); } catch (e) {}
+}
+try { const lr = localStorage.getItem(SONG_REQ_KEY); if (lr) lastSongRequest = String(lr); } catch (e) {}
 let lastPriorId = '';   // the take he already has, named by the last prompt-back
 
 /* ---------- the song journey, in the door (build 38) ----------
@@ -3478,7 +3490,7 @@ async function makeIfStillWaiting(sig) {
     const r = await withTimeout(gatePost('giftSongStart', payload), 20000,
       'the music rail did not answer in time');
     makeFiredAt = Date.now();
-    if (r.request_id) lastSongRequest = r.request_id;
+    if (r.request_id) saveSongReq(r.request_id);
     /* BUILD 262: the picture was answered in the making, so it is written against the request before the draft
        is wiped, or the landing has no way to tell "he said no" from "he was never asked". */
     if (r.request_id && songDraft.coverAnswered) { try { saveArtBrief(r.request_id); } catch (e) {} }
@@ -4116,8 +4128,12 @@ function soundPhrase(answer) {
      because the apostrophe was stripped and the "s" of "Let's" became a word. A contraction's tail is not a
      word: a lone letter, or a bare s/t/d/ll/re/ve/m, is dropped from the front of the phrase. */
   const tail = /^(?:s|t|d|m|re|ve|ll|[a-z])$/i;
+  /* BUILD 270. 17 Nov 2026, 15:52: he answered the sound with "You can make it. Um let me see, dance pop." and
+     the rail was handed "see dance pop", so the sound he chose was read as something starting with "see". The
+     words around a sound that mean nothing to a style are dropped from the front of the phrase. */
+  const LEAD = /^(?:see|um+|uh+|er+|hmm+|well|so|okay|ok|yes|yeah|yep|right|actually|just|maybe|no)$/i;
   let parts = phrase.split(' ');
-  while (parts.length > 1 && tail.test(parts[0])) parts = parts.slice(1);
+  while (parts.length > 1 && (tail.test(parts[0]) || LEAD.test(parts[0]))) parts = parts.slice(1);
   phrase = parts.join(' ');
   return phrase.split(' ').slice(0, 4).join(' ');
 }
@@ -4387,9 +4403,21 @@ async function handleSongCall(call) {
       return;
     }
     if (action === 'check') {
+      /* BUILD 270: a check names its song. With no id the door used to hand the record an empty one, and the
+         record answered for whatever it found most recently - his PREVIOUS song, already made - so the mouth
+         was told "delivered, on your shelf" a moment before the new request existed. If the door has no id,
+         there is nothing to check and it says so in its own words. */
+      const rid0 = String(lastSongRequest || (madeShare && madeShare.request_id) || '').trim();
+      if (!rid0) {
+        logLine('song.check.none', 'no song named, so the record is not asked', { level: 'info', target: 'music' });
+        railNote('music rail \u00b7 checked \u00b7 nothing asked here');
+        result = 'Nothing has been asked for on this door, so there is no song to check. Say that in one short '
+          + 'line and nothing else: no take, no title, nothing on his shelf.';
+        return;
+      }
       railAsked = true;
       const r = await withTimeout(
-        gatePost('giftSongStart', { action: 'check', request_id: lastSongRequest || '' }), 12000,
+        gatePost('giftSongStart', { action: 'check', request_id: rid0 }), 12000,
         'the record did not answer in time');
       railOk = true;
       result = r.line + ' (status: ' + r.status + (r.title ? ', title: ' + r.title : '') + ')';
@@ -4582,7 +4610,7 @@ async function handleSongCall(call) {
           gatePost('giftSongStart', payload), 20000, 'the music rail did not answer in time');
         railOk = true;
         if (r.needs_word && r.prior_id) lastPriorId = r.prior_id;
-        if (r.request_id) lastSongRequest = r.request_id;
+        if (r.request_id) saveSongReq(r.request_id);
         if (r.request_id && !r.needs_word) { makeReceiptAt = Date.now(); chainMade(r.request_id); }
         if (styleLine && lastSongRequest && !r.needs_word) {
           gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.sound || '',
