@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T23:25';
-const BUILD_NO = 288;
+const BUILD = '2026-11-17T23:50';
+const BUILD_NO = 289;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -601,6 +601,14 @@ const PICTURE_RULE = 'THE DOOR HOLDS THE SCRIPT AND YOU DO NOT. It has three ask
   + 'THERE IS NO SHEET, no row, no card and no tapping: nothing about the making appears on his screen except what '
   + 'you say out loud. Never tell him to tap, choose, look at or open anything, and never mention a sheet, a panel, a '
   + 'picker, an address box or a message box. He answers in words, and the door takes the answer. '
+  /* BUILD 289. 17 Nov 2026, 20:37:49. The share locked "Please Forgive Me (Classic Version)" and the mouth
+     said it was on his shelf and then asked "What should the song say?" - the making's first question put to a
+     song that was written in 1993. He answered the only way a person could: "Doesn't say anything because it's
+     already written." */
+  + 'A SONG FROM THE STORES IS ALREADY WRITTEN. When the door says a store song is on his shelf the share is '
+  + 'finished: say the title once, say it is on his shelf, and ask nothing at all - not what the song should '
+  + 'say, not what kind of music, not about a picture. That song has its own words and its own artwork, and the '
+  + 'door is not making anything. '
   + 'Say nothing about how long a song will be, nothing about how an earlier one came out. When the picture is '
   + 'settled a yes is drawn the moment the song lands and a no leaves it bare, and you never say a cover is drawn '
   + 'when he shares it: that reading was withdrawn on 10 Nov.';
@@ -6382,6 +6390,12 @@ function resolvePending(heard) {
 
    Nothing new is invented: this is the same sequence, in the same order, moved into one home. */
 let engineAskAt = 0;                    // when the mouth last asked him for a song title
+/* BUILD 289. 17 Nov 2026, 20:38:04. The song had locked at :42; at :49 the mouth invented a question, and at
+   :04 his answer ("Doesn't say anything because it's already written.") was still inside the three minutes
+   that follow "which song would you like to share?" - so the door armed the hunt again and searched that
+   sentence for a song. A question the door asked BEFORE the song locked has been answered; it cannot be the
+   consent for the next thing he says. */
+let shareLockedAt = 0;
 const ASKED_FOR_TITLE = /\b(?:which|what)\s+(?:song|track|tune|one)\b|\bname (?:of )?the (?:song|track)\b|\bwhat(?:'s| is) it called\b|\bwho sings it\b/i;
 
 /* Build 210 · "STOP" IS AN INSTRUCTION AND NEVER A TITLE.
@@ -6536,7 +6550,7 @@ function doorHears(heard) {
   // consent for the answer to be searched, so if the mouth has just asked him for a song, the next short
   // line that is not a question is that song and the rail is asked with his own words.
   try {
-    if (!awaitSong && engineAskAt && Date.now() - engineAskAt < 180000
+    if (titleOwed(engineAskAt, shareLockedAt, awaitSong, Date.now())
         && !/[?]\s*$/.test(said) && said.split(/\s+/).filter(Boolean).length <= 8
         && !/\b(?:make|create|write|compose|sing)\b/i.test(said)) {
       awaitSong = Date.now();
@@ -6598,6 +6612,18 @@ function doorHears(heard) {
   if (!choiceTook) noteSongAnswer(said);
 }
 
+
+/* BUILD 289. Whether the door is still owed a song title, as one readable decision rather than a chain of
+   conditions buried in a turn. His answer at 20:38:04 was searched because an ask from 20:31:29 was still
+   inside its three minutes - but that ask had already been honoured: the song locked at 20:37:42. A question
+   the door asked BEFORE the song was found has been answered, so it cannot be the consent to search what he
+   says next. */
+function titleOwed(askAt, lockedAt, armed, now) {
+  if (armed) return false;                       // the hunt is already open: this turn is its answer
+  if (!askAt) return false;                      // nobody asked him for a title
+  if (lockedAt && askAt <= lockedAt) return false;   // the ask predates the song that answered it
+  return (now - askAt) < 180000;
+}
 
 function noteSongAnswer(heard) {
   const said = String(heard || '').trim();
@@ -7308,6 +7334,8 @@ function doorCorrect(display, note, needsMouth) {
 // Step 1 done: the song is decided. Step 2 opens: does a picture go with it, and what should it show.
 function shareSongLocked(card) {
   if (!card || !card.title) return;
+  shareLockedAt = Date.now();               // build 289: the question he was asked is now answered
+  engineAskAt = 0;
   shareArtistHint = '';                    // the hunt is over: the artist he named goes with it
   // The model called find again on the next turn (10:06 and 10:29 on 8 Nov), which re-locked the song and
   // asked the cover question a second and third time. A song already locked stays locked, silently.
@@ -10377,7 +10405,7 @@ function handleFrame(text) {
         logLine('turn.engine.held', outText.slice(0, 120), { level: 'info', target: 'held' });
       }
     } else if (outText) {
-      try { if (ASKED_FOR_TITLE.test(outText)) engineAskAt = Date.now(); } catch (e) {}
+      try { if (ASKED_FOR_TITLE.test(outText) && !shareLockedAt) engineAskAt = Date.now(); } catch (e) {}
       engineSpokeNow(); appendLive('engine', outText);
     }
   }
