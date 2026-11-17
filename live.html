@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 264;
+const BUILD_NO = 265;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -787,6 +787,15 @@ const BRIEF = NO_CLAIM +
   'So never ask for an address, never ask for the message, never offer to send, and never say a send is ' +
   'happening. If you have no share tool for it, that is why: it is not yours to call. ' +
   // Edwin, 8 Nov 13:10: "Later duplicate responses (almost like there are 2 different people listening)."
+  /* BUILD 265. Edwin, 17 Nov 2026, 17:03: "at the end of the creation conversation it says: That's all I need,
+     Boss. I'll let you know when it's ready. not sure if that is true or possible. How will it let me know it will
+     simply land on the shelf?" It is not true and it is not possible: nothing in this estate can send him a message
+     later. A promise of a notification is the same fault as a claim of delivery, and it is worse for a song, because
+     he waits for a message that never comes instead of looking at his shelf. */
+  'Nothing here can send him a message later, and nothing can come back to him on its own. Never say you will let '
+  + 'him know, tell him, notify him, remind him, come back to him or get back to him, and never promise a message '
+  + 'of any kind. A song simply appears on his shelf when it is ready: that is the whole of what happens, and it is '
+  + 'all there is to say. ' +
   'Never read out an instruction, a note, a tool name, a field name or anything in brackets: those are ' +
   'for you, not for him. One voice speaks in this room, and it is yours. ' +
   // Edwin, 8 Nov, on the share runs: the same composite question came back three times, and both
@@ -3086,7 +3095,8 @@ function songHearTurn(heard) {
         artLockedAt = Date.now();
         logLine('song.journey.cover', 'no picture \u00b7 he left it to the door', { level: 'info', target: 'music' });
         railNote('journey \u00b7 picture \u00b7 none \u00b7 making');
-        doorNote('Say exactly this, one short line: "It will be on your shelf soon." Then say nothing else.', true);
+        doorNote('Say exactly this, one short line: "It will be on your shelf soon." Then say nothing else, and '
+          + 'never promise to let him know: nothing here can send him a message later, it simply lands on his shelf.', true);
         try { armMake(); } catch (e) {}
         return;
       }
@@ -3170,7 +3180,9 @@ function songHearTurn(heard) {
          and the song goes ahead. Nothing else is asked, offered or announced. */
       try {
         doorNote('Say exactly this, one short line: "It will be on your shelf soon." Then say nothing else: ask '
-          + 'nothing, offer nothing, do not mention the picture again and do not talk about sharing.', true);
+          + 'nothing, offer nothing, do not mention the picture again, do not talk about sharing, and never say you '
+          + 'will let him know or come back to him, because nothing here can send him a message later: it simply '
+          + 'lands on his shelf.', true);
       } catch (e) {}
       try { armMake(); } catch (e) {}
       railNote(y ? 'journey \u00b7 picture \u00b7 yes \u00b7 making' : 'journey \u00b7 picture \u00b7 no \u00b7 making');
@@ -3374,6 +3386,16 @@ async function makeIfStillWaiting(sig) {
     /* BUILD 262: the picture was answered in the making, so it is written against the request before the draft
        is wiped, or the landing has no way to tell "he said no" from "he was never asked". */
     if (r.request_id && songDraft.coverAnswered) { try { saveArtBrief(r.request_id); } catch (e) {} }
+    /* BUILD 265. The answer also goes on the record. Edwin, 17 Nov 2026, 17:03: "Landed without a cover and then the
+       cover landed on the next refresh or two." The page knew he said yes and nothing else did, so the cover could
+       only be drawn AFTER the card had been read. Written now, the make draws it before the song is called delivered
+       and the card is born with its picture. A failed post is not a failed making: the landing still draws it. */
+    if (r.request_id && songDraft.coverAnswered) {
+      try {
+        gatePost('songMake', { action: 'cover', request_id: r.request_id, want: !!songDraft.cover,
+          brief: shareArt.brief || '' }).catch(() => {});
+      } catch (e) {}
+    }
     if (r.request_id && !r.needs_word) { makeReceiptAt = Date.now(); chainMade(r.request_id); }
     if (styleLine && lastSongRequest && !r.needs_word) {
       gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.sound || '',
@@ -7271,6 +7293,10 @@ async function madeReady(r) {
   // Build 148: this song's own answer, never a previous song's. A held yes is paid here; no answer means the
   // descent is still open, and the question is asked below with nothing else in front of it.
   const heldArt = loadArtBrief(landedReq);
+  /* BUILD 265. A song can now land ALREADY carrying the picture he asked for, because the make draws it before the
+     card exists. Reading the card is what proves it: if the landed song has an image, that is his cover and the
+     landing draws nothing, so one ask pays for one drawing and no second one is spent here. */
+  const carriedArt = String((shareCard && shareCard.img) || '');
   // Build 173: a cover he asked for with the song is drawn HERE, the moment it lands, because that is the
   // first moment there is a song to draw it from. The share afterwards needs no draw and no wait: the picture
   // it has is the picture it keeps (shelfShare reuses it, and only "draw a new one" draws again).
@@ -7292,7 +7318,12 @@ async function madeReady(r) {
     { level: 'info', target: 'coverDraw' });
   // Build 139: a yes given while the song was still being made pays for its picture HERE, the moment the song
   // lands and on its own record. Before this the yes was held and then thrown away with the draft.
-  if (shareArt && shareArt.want) drawDescent();
+  if (carriedArt && shareArt) {
+    shareArt.url = carriedArt;
+    saveArtBrief(landedReq);
+    logLine('made.cover.carried', carriedArt, { level: 'info', target: 'coverDraw' });
+  }
+  if (shareArt && shareArt.want && !carriedArt) drawDescent();
   logLine('made.landed', landedTitle + (forWho ? ' · for ' + forWho : '') + ' · on the shelf to share',
     { level: 'info', target: 'music' });
   railNote('made · landed · on his shelf to share' + (forWho ? ' · for ' + forWho : ''));
@@ -10562,6 +10593,7 @@ if (GIFT_CODE) {
     try { logLine('door.gift', 'arrived for ' + g.title + ' · ' + g.state, { level: 'info' }); } catch (e) {}
   }).catch(() => {});
 }
+
 </script>
 </body>
 </html>
