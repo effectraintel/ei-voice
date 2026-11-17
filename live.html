@@ -1511,7 +1511,12 @@ function shutDoor() {
   } catch (e) {}
   try { ws && ws.close(); } catch {}
   ws = null; sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
-  try { clearSitting(); } catch (e) {}      // build 296: a shut door ends the sitting
+  /* BUILD 297. A DOOR CLOSED A MINUTE AGO IS STILL THE SAME VISIT. 18 Nov 2026, 00:20: he shut the voice, opened it
+     again, and the door had no idea what he had been doing - "it is a fresh door". True to the letter of build 296
+     and useless to him. Build 242's rule (a new sitting is not the last conversation) still holds for a real
+     parting, so the sitting is kept for fifteen minutes and then it is gone: closing the door is a pause, not a
+     memory. */
+  try { parkSitting(); } catch (e) {}
   releaseRoom();
   // A greeting still in flight must not open a door that has been shut.
   greeting = false; if (greetWatch) { clearTimeout(greetWatch); greetWatch = null; }
@@ -1614,17 +1619,44 @@ function sittingNote(who, text) {
   sittingTurns.push({ who: who, text: t.slice(0, 400), at: Date.now() });
   if (sittingTurns.length > SITTING_MAX) sittingTurns = sittingTurns.slice(-SITTING_MAX);
 }
-function clearSitting() { sittingTurns = []; sittingAt = 0; }
+function clearSitting() {
+  sittingTurns = []; sittingAt = 0;
+  try { localStorage.removeItem(SITTING_KEY); } catch (e) {}
+}
+/* Fifteen minutes: long enough to come back from a song or another tab, short enough that yesterday's conversation
+   can never walk in wearing today's. */
+const SITTING_KEY = 'ei.door.sitting';
+const SITTING_KEEP_MS = 15 * 60 * 1000;
+function parkSitting() {
+  try {
+    if (!sittingTurns.length) return;
+    localStorage.setItem(SITTING_KEY, JSON.stringify({ at: Date.now(), turns: sittingTurns.slice(-SITTING_MAX) }));
+  } catch (e) {}
+}
+function pickSittingUp() {
+  if (sittingTurns.length) return;                    // the page still has it: nothing to pick up
+  let kept = null;
+  try { kept = JSON.parse(localStorage.getItem(SITTING_KEY) || 'null'); } catch (e) { kept = null; }
+  if (!kept || !Array.isArray(kept.turns) || !kept.turns.length) return;
+  const last = kept.turns[kept.turns.length - 1];
+  if (!last || !last.at || Date.now() - last.at > SITTING_KEEP_MS) { clearSitting(); return; }
+  sittingTurns = kept.turns.slice(-SITTING_MAX);
+  sittingAt = sittingTurns[0].at || Date.now();
+  logLine('sitting.resumed', 'the same sitting picked up after a pause · ' + sittingTurns.length + ' turns',
+    { level: 'info' });
+}
 /* What the new socket is told, in one block, and only when this page really has a same-sitting history. */
 function sittingHandover() {
+  pickSittingUp();
   if (!sittingTurns.length) return '';
   const last = sittingTurns[sittingTurns.length - 1];
-  if (!last || Date.now() - last.at > 10 * 60 * 1000) { clearSitting(); return ''; }
+  if (!last || Date.now() - last.at > SITTING_KEEP_MS) { clearSitting(); return ''; }
   const lines = sittingTurns.map(function (x) {
     return (x.who === 'you' ? 'He said: "' : 'You answered: "') + x.text + '"';
   });
-  return '\n\n(The microphone was interrupted a moment ago in this SAME sitting and the link was renewed. '
-    + 'Nothing has been lost. This is what passed between you just before, oldest first:\n'
+  return '\n\n(The door was interrupted a moment ago - the link was renewed, or he closed it and opened it again - '
+    + 'and this is the SAME sitting, not a new one. Nothing has been lost. This is what passed between you just '
+    + 'before, oldest first:\n'
     + lines.join('\n')
     + '\nTreat it as your own memory of the last few minutes: do not say you hold only this session, do not ask '
     + 'him to repeat any of it, and never re-announce a thing from it as news. Anything he asked for that is '
@@ -5312,6 +5344,42 @@ function variantWeight(title) {
   if (/remaster/.test(t)) return 1;
   return 0;
 }
+/* BUILD 297. WHO SINGS IT IS LEARNED, NOT GUESSED.
+   18 Nov 2026, 00:10: he said "Free Animal", the door read the two capitalised words as an artist, and the songs it
+   offered were the ones by a band of that name instead of Free Animal by Foreign Air. A phrase his words alone
+   cannot settle is settled by evidence: if every song the rail returns for it is by one artist, that artist is what
+   he named, and it stays on the rest of this hunt. */
+function learnArtistFrom(query, candidates) {
+  try {
+    if (shareArtistHint) return shareArtistHint;
+    const q = String(query || '').trim();
+    if (!q || q.split(/\s+/).filter(Boolean).length > 4) return '';
+    const list = Array.isArray(candidates) ? candidates : [];
+    if (!list.length) return '';
+    const artists = Array.from(new Set(list.map((c) => String((c && c.artist) || '').trim()).filter(Boolean)));
+    if (artists.length !== 1) return '';
+    shareArtistHint = artists[0];
+    logLine('share.artist.learned', 'every song the rail returned for "' + q + '" is by ' + artists[0],
+      { level: 'info', target: 'songShare' });
+    return artists[0];
+  } catch (e) { return ''; }
+}
+/* The artist he named may reorder what he is offered. It may never remove the rail's own best match: that is his
+   title, and a list without it is the fault he reported at 00:10. */
+function preferArtist(picks, hint) {
+  try {
+    const list = Array.isArray(picks) ? picks.slice() : [];
+    const h = String(hint || '').toLowerCase().trim();
+    if (list.length < 2 || !h) return list;
+    const mine = list.filter((c) => {
+      const a = String((c && c.artist) || '').toLowerCase();
+      return a && (a.includes(h) || h.includes(a));
+    });
+    if (!mine.length) return list;
+    const top = list[0];
+    return mine.indexOf(top) === 0 ? mine : [top].concat(mine.filter((c) => c !== top));
+  } catch (e) { return Array.isArray(picks) ? picks : []; }
+}
 function collapseChoices(list) {
   const best = new Map();
   for (const c of list) {
@@ -6160,6 +6228,7 @@ async function handleShareCall(call) {
         railNote('share · ' + before + ' listings, ' + r.candidates.length + ' song'
           + (r.candidates.length === 1 ? '' : 's'));
       }
+      learnArtistFrom(query, r.candidates);
       shareChoices = r.candidates;
       shareChoicesAt = Date.now();
       if (!shareChoices.length) {
@@ -6385,8 +6454,18 @@ function artistInWords(t) {
      name needs more than one word: "Bryan Adams" is a name, "Hello" is a way of finding out if the room is
      listening. */
   if (/^(?:hello|hi|hey|hiya|howzit|yo|morning|evening|thanks|thank you|please|ok|okay|cool|right|sure|yes|no|sorry|what|why|huh)\b/i.test(x)) return '';
-  if (x.split(/\s+/).length <= 4 && /^[A-Z][\w'’.-]*(?:\s+[A-Z][\w'’.-]*){1,3}$/.test(x)
-      && !/\b(?:song|track|tune|please|forgive|love|home|night|day)\b/i.test(x)) return x;
+  /* BUILD 297. A TITLE OF TWO WORDS IS NOT A BAND. 18 Nov 2026, 00:10: he said "Free Animal", this branch read it
+     as an artist, the search carried "Free Animal" as the artist he had named, and the three songs he was offered
+     were the ones whose ARTIST was a band called Free Animal. Foreign Air, the band he wanted, was in the rail's
+     own answer and was pushed out of the list. A bare phrase is an artist only with evidence: it is the artist of
+     a song already offered, or the artist this hunt has already named. Otherwise it is what it looks like. */
+  const bare = x.split(/\s+/).length <= 4 && /^[A-Z][\w'’.-]*(?:\s+[A-Z][\w'’.-]*){1,3}$/.test(x)
+    && !/\b(?:song|track|tune|please|forgive|love|home|night|day)\b/i.test(x);
+  if (!bare) return '';
+  const flatten = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const want = flatten(x);
+  try { if (shareChoices.some((c) => flatten(c.artist) === want)) return x; } catch (e) {}
+  if (shareArtistHint && flatten(shareArtistHint) === want) return x;
   return '';
 }
 /* A rejection is not a title. "Not one of those." was searched as a song name at 20:17:59 and came back empty,
@@ -7178,14 +7257,7 @@ function noteSongAnswer(heard) {
           /* BUILD 291. 21:21:12: he had already named Michael Bolton, and the rail answered his title with other
              artists' covers of it. His artist is the strongest thing he has told the door, so a list that can
              honour it does: when some of what came back is his artist, those are what he is offered. */
-          try {
-            const hint = String(shareArtistHint || '').toLowerCase();
-            if (hint) {
-              const mine = picks.filter((c) => String(c.artist || '').toLowerCase().includes(hint)
-                || hint.includes(String(c.artist || '').toLowerCase() && String(c.artist || '').toLowerCase()));
-              if (mine.length) picks = mine;
-            }
-          } catch (e) {}
+          try { picks = preferArtist(picks, shareArtistHint); } catch (e) {}
           shareChoices = picks;          // the door asked the question, so the door must remember the options
           shareChoicesAt = Date.now();
           logLine('share.choice', picks.map((c) => (c.title || '') + ' · ' + (c.artist || '')).join(' | '),
@@ -7638,6 +7710,10 @@ function resolveChoice(heard) {
   shareChoices = []; shareChoicesAt = 0;
   hiddenHold = true; hiddenHoldUntil = Date.now() + 8000;
   lockInFlight = true;
+  /* BUILD 297. The cut begins the moment the door takes the turn, not when the hold expires. He heard "The sharing"
+     at 23:54:51 before the door stopped a wrong sentence, because the sound only stopped on release. */
+  try { barge(); } catch (e) {}
+  replyAudible = false; heldFrames = 0;
   railNote('share · choosing · ' + (picked.title || ''));
   gatePost('songShare', { action: 'choose', candidate: picked }).then((c) => {
     lockInFlight = false;
