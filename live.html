@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 266;
+const BUILD_NO = 267;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -573,12 +573,20 @@ const mouthMaySound = () => !typed() && !turnBeganMuted;
    So the picture is never spoken: the door puts it on his screen as a tap, right after the sound is answered, and
    the mouth asks nothing about it. Order is subject, sound, picture, song. A yes is drawn the moment the song lands
    from the song's own scene; a no leaves it bare and nothing asks again. */
-const PICTURE_RULE = 'The picture is answered by a TAP, not by a sentence: right after he answers the sound, the door '
-  + 'puts one row on his screen asking whether he wants a cover picture, and he taps yes or no. You never ask about '
-  + 'the picture in words, never mention a cover as a question, and never offer versions of one. ONE QUESTION A TURN: '
-  + 'never ask the sound and the picture in the same breath, and never ask the picture before the sound is answered. '
-  + 'When the tap has been taken the picture is settled: a yes is drawn the moment the song lands, a no leaves it bare. '
-  + 'Never say a cover is drawn when he shares it: that reading was withdrawn on 10 Nov.';   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+/* Build 267. THE SCRIPT, IN THE MOUTH'S OWN WORDS.
+   17 Nov 2026: the picture stopped being a tap in build 257 - the door asks it in words, like every other line - and
+   this rule kept saying "a TAP, not a sentence", which is a rule the theatre had already left. It also predated the
+   words question he added the same evening. So the rule is now what the theatre is: the door issues each question as
+   its own note, one at a time, and the mouth asks only for the note it was given. */
+const PICTURE_RULE = 'THE SCRIPT HAS FOUR ASKS AND THE DOOR ISSUES EACH ONE. In order: what the song should say, then '
+  + 'whether to build around his words or leave them as they are, then what kind of music, then whether he wants a '
+  + 'cover picture. Each one arrives as its own note. Ask only the question in the note you were given, in one short '
+  + 'line: never two in the same breath, never one before the door asks for it, and never a question of your own. He '
+  + 'answers in words, and the door takes the answer. Say nothing about how long a song will be, nothing about how an '
+  + 'earlier one came out, and nothing about the picture as a tap, a row or a card. When the picture is settled a yes '
+  + 'is drawn the moment the song lands and a no leaves it bare. Never say a cover is drawn when he shares it: that '
+  + 'reading was withdrawn on 10 Nov.';
+
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -3152,6 +3160,38 @@ function songHearTurn(heard) {
       afterSoundBeat();
       return;
     }
+    /* ---- BUILD 267: THE WORDS BEAT. Built around, or left exactly as he said them. ---- */
+    if (beat === 'build') {
+      const around = /\b(?:build around|build it|build on|build out|expand|extrapolate|more words|fuller|longer|flesh it out|add to it|work around)\b/i.test(t)
+        || /^(?:yes|yeah|yep|y|sure|ok|okay|please|do it|go ahead|definitely|absolutely|of course)\b/i.test(t.trim());
+      const asis = /\b(?:as is|as it is|leave it|leave them|keep it|keep them|just as|exact|unchanged|don'?t change|nothing)\b/i.test(t)
+        || /^(?:no|nope|nah|n)\b/i.test(t.trim());
+      /* A phrase in both ("yes but leave the words") is read as leaving them: the door never spends a rewrite on
+         an ambiguous yes. And a song is never held hostage to this question - asked twice with no answer, it goes
+         with his words untouched. */
+      if (asis || !around) {
+        if (!asis && !around) {
+          songDraft.buildTries = (songDraft.buildTries || 0) + 1;
+          if (songDraft.buildTries < 2) {
+            doorNote('That was not an answer about his words. Ask once more, one short line: do you want me to '
+              + 'build around your words, or just leave it as it is? Ask nothing else and make nothing yet.', true);
+            railNote('journey \u00b7 build \u00b7 still open');
+            return;
+          }
+        }
+        songDraft.build = 'as-is';
+      } else {
+        songDraft.build = 'around';
+      }
+      songDraft.askBeat = '';
+      songDraft.buildTries = 0;
+      logLine('song.journey.build', songDraft.build === 'around' ? 'built around his words' : 'his words, as they are',
+        { level: 'info', target: 'music' });
+      railNote(songDraft.build === 'around' ? 'journey \u00b7 build \u00b7 around his words' : 'journey \u00b7 build \u00b7 as they are');
+      try { journeyAskNext(); } catch (e) {}
+      return;
+    }
+
     /* ---- BUILD 252: THE PICTURE BEAT ---- */
     if (beat === 'cover') {
       const y = /^(?:yes|yeah|yep|y|sure|ok|okay|please|do it|go ahead|definitely|absolutely|of course)\b/i.test(t.trim());
@@ -3263,6 +3303,24 @@ function journeyAskNext() {
         return;
       }
       try { armMake(); } catch (e) {}
+      return;
+    }
+    /* BUILD 267. THE WORDS CAN BE BUILT AROUND.
+       17 Nov 2026, after hearing "Cell phones are empty devices" (1:08): "It's short, so we need to extrapolate
+       the wording a bit. So we need to ask the question. Do you want me to build around your words or just leave
+       it as is..." His words stay the song; the question is whether the door may make more room for them. It is
+       the door's line, asked in words, and it is asked right after his words because that is what it is about. */
+    if (!songDraft.build) {
+      songDraft.askBeat = 'build';
+      songDraft.buildTries = 0;
+      songDraft.at = Date.now();
+      logLine('journey.ask', 'build \u00b7 his words are in, so the door asks whether to build around them',
+        { level: 'info', target: 'music' });
+      railNote('journey \u00b7 build');
+      doorAsk('Do you want me to build around your words, or just leave it as it is?',
+        'His words are held and the door is asking one thing about them. Ask him exactly this, one short line in '
+        + 'your own voice: "Do you want me to build around your words, or just leave it as it is?" Say nothing '
+        + 'about length, nothing about how an earlier song came out, and ask nothing else.');
       return;
     }
     songDraft.askBeat = 'sound';
@@ -3379,6 +3437,7 @@ async function makeIfStillWaiting(sig) {
       text: text,
       who: songWhoClean(songDraft.who || '', songDraft.sound, songDraft.feel),
       session_id: s.token.slice(0, 24),
+      build: songDraft.build || 'as-is',   // build 267: told to the maker, so the words leave as they were said
     };
     /* Build 179: the ask is written on the chain it walks on, so the making can close its own make ring
        when a take lands. The door cannot close that ring itself: the corridor strips receipts on purpose
