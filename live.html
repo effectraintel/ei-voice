@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T14:55';
-const BUILD_NO = 254;
+const BUILD = '2026-11-17T15:05';
+const BUILD_NO = 255;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2989,12 +2989,15 @@ function afterSoundBeat() {
      told to ask it in one short line and asked it in the same breath as the sound, which is the one thing this beat
      exists to prevent. A tap cannot be bundled. */
   try { askCoverFor({ title: String(songDraft.said || '').slice(0, 40) }, 'making'); } catch (e) {}
+  /* BUILD 255. It is SAID as well as shown. On 254 the row arrived in silence, which is nothing at all to a man
+     speaking rather than tapping. One short spoken line, in this turn only, about the picture and nothing else -
+     the sound is already answered, so there is no sequence left to run together. */
   try {
-    doorNote('The sound is locked, and the picture question is on his screen as a tap. Do NOT ask about the '
-      + 'picture in words, do not repeat the sound question, and ask no other question: one question a turn. Say '
-      + 'one short line that the sound is kept, and wait for the tap.', true);
+    doorNote('The sound is kept. Say ONE short line in your own words asking whether he wants a cover picture '
+      + 'drawn for it, and tell him he can simply tap yes or no on the row on his screen. Say nothing about the '
+      + 'sound, do not ask what the picture should be, offer no versions, and ask nothing else.', true);
   } catch (e) {}
-  try { railNote('journey \u00b7 sound locked \u00b7 picture asked as a tap'); } catch (e) {}
+  try { railNote('journey \u00b7 sound locked \u00b7 picture asked, spoken and shown'); } catch (e) {}
 }
 
 function chainBeat(beat) {
@@ -3061,7 +3064,35 @@ function songHearTurn(heard) {
   // Build 138: a beat is open, so his next answer is that beat's answer, taken here rather than trusting
   // the mouth to pass it on. "You choose" skips it, which is the promise that keeps the journey honest.
   const beat = songDraft.askBeat || '';
-  if (beat) {
+    /* BUILD 255. THE PICTURE BY VOICE. The row is on his screen and nothing is held up by it, so a man talking may
+       answer the picture without touching anything. Only a plain yes or no, and only while the row is fresh (three
+       minutes), so an unrelated "yes" in a later sentence is never read as consent to spend on a drawing. */
+    if (!beat && songDraft.coverPending && (Date.now() - songDraft.coverPending) < 3 * 60 * 1000) {
+      const short = String(t || '').trim();
+      const saidYes = /^(?:yes|yeah|yep|y|sure|ok|okay|please|do it|go ahead|draw it|draw one|definitely|absolutely|of course)\b/i.test(short);
+      const saidNo = /^(?:no|nope|nah|n|skip|leave it|bare|nothing|without)\b/i.test(short);
+      if (saidYes || saidNo) {
+        const want = saidYes;
+        songDraft.cover = want;
+        songDraft.coverAnswered = true;
+        songDraft.coverPending = 0;
+        shareArt = { want: want, brief: '', url: '' };
+        artLockedAt = Date.now();
+        artOpen = null;
+        logLine('song.journey.cover.heard', want ? 'a picture, said out loud' : 'no picture, said out loud',
+          { level: 'info', target: 'music' });
+        chainBeat('cover');
+        try {
+          doorNote(want
+            ? 'The picture is answered out loud: yes, and it is drawn the moment the song lands. Do not ask about '
+              + 'it again and draw nothing now. Make the song.'
+            : 'The picture is answered out loud: no, so the song goes bare. Ask nothing more about it. Make the song now.', true);
+        } catch (e) {}
+        railNote(want ? 'journey \u00b7 picture \u00b7 yes, spoken' : 'journey \u00b7 picture \u00b7 no, spoken');
+        return;
+      }
+    }
+    if (beat) {
     if (JOURNEY_SKIP.test(t)) {
       songDraft.skipped.push(beat);
       songDraft.askBeat = '';
@@ -6923,6 +6954,7 @@ function askCoverFor(card, mode) {
   wrap.className = 'coverask';
   wrap.style.cssText = 'margin:10px 0 2px;padding:11px 12px;border:1px solid #2f2b24;border-radius:10px;background:#12110e';
   const q = document.createElement('div');
+  if (making) songDraft.coverPending = Date.now();   // BUILD 255: fresh by a clock, never by a guess
   q.textContent = making
     ? 'do you want a cover picture to go with that?'
     : 'do you want a cover image drawn for it? one drawing, or leave it bare.';
@@ -6932,6 +6964,7 @@ function askCoverFor(card, mode) {
   const answer = (want) => {
     artLockedAt = Date.now();
     artOpen = null;
+    songDraft.coverPending = 0;      // BUILD 255: answered, so a spoken yes can no longer move it
     shareArt = { want: !!want, brief: '', url: '' };
     try { saveDraft(); } catch (e) {}
     if (making) {
