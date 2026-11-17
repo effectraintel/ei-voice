@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T23:05';
-const BUILD_NO = 287;
+const BUILD = '2026-11-17T23:25';
+const BUILD_NO = 288;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6765,6 +6765,20 @@ function noteSongAnswer(heard) {
      had found and searched the greeting instead. 20:26:25: he said "I just told you." and it searched that
      sentence, found a song called "Hello", and told him it was on his shelf. Neither is a title, and neither may
      ever put a song on his shelf. */
+  /* BUILD 288. 17 Nov 2026, 20:31:29: the song was on his shelf, he said "Thank you.", the mouth answered
+     "You're welcome, Boss. Is there anything else I can help with?" - and then the door searched the word
+     "Thank You" and offered him Dimitri Vegas, Dido and Alanis Morissette. Two answers to one turn, which is
+     how it read to him: "there is two process listening and process one request differently". A thank-you is
+     an acknowledgement and nothing else: nothing is searched, nothing is shelved, and the mouth's one warm
+     line is the whole reply. */
+  const ackOnly = /^(?:thank(?:s| you)?(?:\s+(?:very|so)\s+much|\s+a\s+lot)?|cheers|ta|ok(?:ay)?|great|perfect|lovely|brilliant|awesome|amazing|beautiful|nice|cool|sure|got it|all right|alright|good|fine|wow|yep|nope|bye|goodbye|see you(?: soon)?|that'?s (?:great|perfect|lovely|nice|good|amazing|it|all|everything))[\s.!,]*$/i;
+  if (ackOnly.test(said.trim())) {
+    logLine('share.thanks', said + ' · nothing was searched', { level: 'info', target: 'share' });
+    doorNote('He is only acknowledging you, so nothing was searched and nothing was put on his shelf. Answer '
+      + 'warmly in one short line and ask nothing further: no song, no picture, no question. That single line '
+      + 'is the whole reply.', true);
+    return;
+  }
   const greetingOnly = /^(?:hello|hi|hey|hiya|howzit|yo|morning|good morning|good evening|good afternoon|evening|anyone there|are you there|you there)\W*$/i.test(said.trim());
   const repeatComplaint = /^(?:i (?:just|already) told you|i told you|as i (?:said|told you)|that'?s what i (?:just )?said|i already said(?: that)?|like i said)\b/i.test(said.trim());
   if (greetingOnly || repeatComplaint) {
@@ -7303,7 +7317,13 @@ function shareSongLocked(card) {
   shareCard = card;
   shareCardTarget = card;
   shareChoices = []; shareChoicesAt = 0;
-  shareStage = 'art';
+  /* BUILD 288. A song from the music stores already has its own artwork, so there is no picture for him to
+     describe and nothing to draw. Opening the picture step on a store song is what made every turn after it
+     look like a picture brief: at 20:30 on 17 Nov "Can you tell me the weather in Cape Town?", "Thank you and
+     tell me the latest news about Ukraine" and "that sounds quite serious" were each logged as "art locked",
+     and the last of them then fell through into a search for a song called "Thank you". A step that asks
+     nothing real is not a step. */
+  shareStage = (card.kind === 'store' || (!card.song_id && card.kind !== 'song')) ? 'idle' : 'art';
   shareArt = { want: false, brief: '' };
   shareArtTries = 0;
   shareCoverAsked = false; shareAddrOk = false;
