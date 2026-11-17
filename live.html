@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T00:10';
-const BUILD_NO = 290;
+const BUILD = '2026-11-18T00:45';
+const BUILD_NO = 291;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -605,6 +605,15 @@ const PICTURE_RULE = 'THE DOOR HOLDS THE SCRIPT AND YOU DO NOT. It has three ask
      said it was on his shelf and then asked "What should the song say?" - the making's first question put to a
      song that was written in 1993. He answered the only way a person could: "Doesn't say anything because it's
      already written." */
+  /* BUILD 291. 17 Nov 2026, 20:20:58: he said "Not one of those. Give me more." and the mouth answered with three
+     Michael Bolton titles out of its own memory - "How Am I Supposed To Live Without You", "Said I Loved
+     You...But I Lied", "When a Man Loves a Woman". Two of them happened to be right, which is worse than being
+     wrong: a choice list from a model's memory is a claim with nothing behind it, and the door's whole promise is
+     that a name it gives him came from the rail. A song name may only ever be one the rail returned. */
+  + 'NEVER NAME A SONG THE RAIL DID NOT GIVE YOU. Every title you say - in a choice, an example, an apology, a '
+  + 'suggestion - must be one the door or the rail put in front of you in this conversation. When he asks for more '
+  + 'options you do not have, say you will ask for more and let the door do it; never fill the gap from memory, '
+  + 'never list "how about" titles, and never add an artist he did not name. '
   + 'A SONG FROM THE STORES IS ALREADY WRITTEN. When the door says a store song is on his shelf the share is '
   + 'finished: say the title once, say it is on his shelf, and ask nothing at all - not what the song should '
   + 'say, not what kind of music, not about a picture. That song has its own words and its own artwork, and the '
@@ -6338,14 +6347,73 @@ function askAboutCard(card, words) {
     + 'do not ask about a picture, and do not offer to send.');
 }
 
+
+/* BUILD 291. A SPOKEN YES ARRIVES WITH SPACES IN IT.
+   17 Nov 2026, 21:22:06: the door read the name back - "Is that the one, Boss: Said I Loved You...But I Lied,
+   Michael Bolton?" - he said yes, the transcript came back as "y es", and the door did not recognise it. It
+   treated his yes as a new title, searched "y es Michael Bolton", and offered him three other artists. The mouth
+   had already told him the song was on his shelf, so he heard a landing that never happened.
+   The yes and the no are read from the whole line with the spaces and the punctuation taken out, because a
+   transcriber splits small words. */
+function flatSaid(said) {
+  return String(said || '').toLowerCase().replace(/[^a-z]/g, '');
+}
+function affirmative(said) {
+  const t = String(said || '').toLowerCase().trim();
+  const f = flatSaid(t);
+  if (!f) return false;
+  if (/^(?:y|ye|yy|yes|yeah|yea|yep|yup|ya|yas|correct|right|exactly|absolutely|definitely|indeed|affirmative|ok|okay|sure|spoton|thatsit|thatisit|thatstheone|thats the one|thatsthatone|yesplease|yesboss)$/.test(f)) return true;
+  if (/^yes/.test(f) && f.length <= 24) return true;
+  return /\b(?:that'?s (?:the one|it)|that is (?:the one|it)|correct|exactly|spot on)\b/i.test(t);
+}
+function negative(said) {
+  const t = String(said || '').toLowerCase().trim();
+  const f = flatSaid(t);
+  if (!f) return false;
+  if (/^(?:n|no|nope|nah|na|naw|wrong|negative|nothat|notit|isnt|aint|different|notoneofthose|noneofthose)$/.test(f)) return true;
+  if (/^no(?:pe|h)?$/.test(f)) return true;
+  return /\b(?:not (?:that|it|those|one of those)|none of those|wrong one|that'?s not)\b/i.test(t);
+}
+
+
+/* Is he asking for more options, and whose songs does he mean? One readable decision, so the test can hold it
+   without reaching into the turn. (Build 291.) */
+function moreBy(said, artistHint) {
+  const want = /\b(?:more|others?|else|another|different|other ones|next)\b/i.test(String(said || ''));
+  return { want, artist: String(artistHint || '').trim() };
+}
+
+/* BUILD 291. A CANCEL IS A CANCEL. 21:20:12: "I think it is called I No, I'm not I'm not sure so don't worry.
+   Cancel cancel." The mouth said "whenever you're ready" and the door searched the whole sentence as a title,
+   then told him nothing was found with those exact words. A hunt he has called off is closed: nothing is
+   searched, nothing is stored, and the door says one short line and leaves him alone. */
+const CANCEL_WORDS = /\b(?:cancel|never ?mind|forget it|forget about it|leave it|not now|stop(?: it)?|drop it|no thanks|don'?t worry(?: about it)?|dont worry(?: about it)?)\b/i;
+function shareHuntOpen() {
+  return !!(awaitSong || engineAskAt || sharePending || (shareChoices && shareChoices.length) || shareCard);
+}
+function shareCancelled(said) {
+  const t = String(said || '').trim();
+  if (!CANCEL_WORDS.test(t)) return false;
+  awaitSong = 0; engineAskAt = 0; sharePending = null;
+  shareChoices = []; shareChoicesAt = 0;
+  shareArtistHint = ''; lastSongWords = '';
+  railNote('share \u00b7 called off, nothing searched');
+  logLine('share.cancel', t.slice(0, 90) + ' \u00b7 the hunt is closed, nothing was searched',
+    { level: 'info', target: 'songShare' });
+  doorNote('He has called the sharing off, so nothing was searched and nothing was put on his shelf. Say one '
+    + 'short line that lets it go, such as "No problem, Boss." Do not ask again, do not name a song, and do '
+    + 'not offer anything.', true);
+  return true;
+}
+
 function resolvePending(heard) {
   const said = String(heard || '').trim();
   if (!sharePending || !said) return false;
   if (Date.now() - sharePending.at > 90000) { sharePending = null; return false; }
-  const yes = /\b(?:yes|yeah|yep|yup|correct|right|that'?s it|that is it|that'?s the one|exactly|spot on|affirmative|sure)\b/i;
-  const no = /\b(?:no|nope|nah|wrong|not that|not it|isn'?t|ain'?t|different)\b/i;
+  const yes = affirmative(said);
+  const no = negative(said);
   const card = sharePending.card;
-  if (yes.test(said) && !no.test(said)) {
+  if (yes && !no) {
     sharePending = null;
     mergeCard(card);
     railAnsweredAt = Date.now();
@@ -6357,7 +6425,7 @@ function resolvePending(heard) {
       + 'should go with it and what it should show.', true);
     return true;
   }
-  if (no.test(said)) {
+  if (no) {
     sharePending = null;
     railNote('share · not that one');
     logLine('share.confirm.no', said, { level: 'info', target: 'songShare' });
@@ -6589,9 +6657,15 @@ function doorHears(heard) {
       { level: 'info', target: 'record' });
     doorNote('say exactly this, in one line, and nothing else: "' + line + '"', true);
   }
+  // Build 291: a hunt he has called off is closed before anything reads his words as a song.
+  try { if (shareHuntOpen() && shareCancelled(said)) return; } catch (e) {}
   // Step 2 of the share: this utterance IS the answer about the picture. The door takes it, locks it,
   // and opens the sheet. The model is not asked, because a model asked twice answers twice.
-  if (sharePending && resolvePending(said)) { /* the name was being checked: that was the answer */ }
+  /* BUILD 291. THE TURN THAT ANSWERED THE READ-BACK IS SPENT.
+     21:22:06: the read-back was answered, and the same sentence was then read as a title and searched - so one
+     turn produced a confirmation and a search. Whatever the read-back took, it takes whole: nothing else in this
+     turn reads his words as a song. */
+  if (sharePending && resolvePending(said)) return;
   else if (shareStage === 'art' && artAnswerCandidate(said)) { shareArtAnswer(said); }
   // The cover question may still be asked by the model rather than the door. If he answers it with a
   // picture in mind while a song is on the shelf, that is the art step whether or not the door opened
@@ -6836,6 +6910,37 @@ function noteSongAnswer(heard) {
   if (shareRejection(said)) {
     railNote('share · he rejected what was offered · ' + said.slice(0, 40));
     logLine('share.rejected', said, { level: 'info', target: 'songShare' });
+    /* BUILD 291. "Give me more" is a request to the rail, not an invitation to improvise. At 20:20:58 the mouth
+       answered it with three titles from its own memory. When he wants more and the door knows whose songs he is
+       looking through, the rail is asked for that artist and what it hands back is what he is offered. */
+    const who = moreBy(said, artistInWords(said) || shareArtistHint || '');
+    if (who.want && who.artist) {
+      try { const q = artistInWords(said); if (q) shareArtistHint = q; } catch (e) {}
+      logLine('share.more', 'asking the rail for more by ' + who.artist, { level: 'info', target: 'songShare' });
+      railNote('share · asking for more by ' + who.artist);
+      doorNote('He wants more of them, so the door is asking the rail for more songs by ' + who + ' right now. Say '
+        + 'nothing about any song until you are told what came back, and never list titles from memory.', true);
+      withTimeout(gatePost('songShare', { action: 'find', query: who.artist }), 40000, 'the rail did not answer')
+        .then((r) => {
+          let picks = collapseChoices((r && r.candidates) || []);
+          if (!picks.length) {
+            doorNote('the rail had no more songs by ' + who.artist + '. Say that plainly in one line and ask for the title '
+              + 'as he would say it.', true);
+            awaitSong = Date.now();
+            return;
+          }
+          picks = dropTributes(picks);
+          shareChoices = picks; shareChoicesAt = Date.now();
+          logLine('share.choice', picks.map((c) => (c.title || '') + ' · ' + (c.artist || '')).join(' | '),
+            { level: 'info', target: 'songShare' });
+          doorNote('the rail answered with ' + picks.length + ' more songs: '
+            + picks.slice(0, 3).map((c, i) => (i + 1) + ') ' + c.title + (c.artist ? ' by ' + c.artist : '')).join('; ')
+            + '. Ask which one, in one short question, and name no song that is not in that list.', true);
+          railNote('share · ' + picks.length + ' more to choose from');
+        })
+        .catch(() => { doorNote('the rail did not answer. Say that plainly in one line.', true); awaitSong = Date.now(); });
+      return;
+    }
     doorNote('He has rejected the songs that were offered, so nothing was searched and nothing was found. Ask him '
       + 'for the title, and who sings it, in one short line. Do not say the rail did not answer and do not name a '
       + 'song.', true);
@@ -6953,6 +7058,17 @@ function noteSongAnswer(heard) {
         let picks = collapseChoices(r.candidates);
         if (picks.length > 1) {
           picks = dropTributes(picks);
+          /* BUILD 291. 21:21:12: he had already named Michael Bolton, and the rail answered his title with other
+             artists' covers of it. His artist is the strongest thing he has told the door, so a list that can
+             honour it does: when some of what came back is his artist, those are what he is offered. */
+          try {
+            const hint = String(shareArtistHint || '').toLowerCase();
+            if (hint) {
+              const mine = picks.filter((c) => String(c.artist || '').toLowerCase().includes(hint)
+                || hint.includes(String(c.artist || '').toLowerCase() && String(c.artist || '').toLowerCase()));
+              if (mine.length) picks = mine;
+            }
+          } catch (e) {}
           shareChoices = picks;          // the door asked the question, so the door must remember the options
           shareChoicesAt = Date.now();
           logLine('share.choice', picks.map((c) => (c.title || '') + ' · ' + (c.artist || '')).join(' | '),
