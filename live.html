@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 263;
+const BUILD_NO = 264;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3378,6 +3378,26 @@ async function makeIfStillWaiting(sig) {
     if (styleLine && lastSongRequest && !r.needs_word) {
       gatePost('songBrief', { request_id: lastSongRequest, feel: styleLine, band: songDraft.sound || '',
         feel_word: songDraft.feel || '' }).catch(() => {});
+    }
+    /* BUILD 264. THE DOOR'S OWN MAKE MUST OWN THE WATCH.
+       17 Nov 2026, 16:40, on build 263 - the flow he called perfect - and then nothing: the song landed at 16:42
+       and the picture he had said yes to was never drawn. The landing watch was still following the PREVIOUS
+       song (asking the record about request 6afc65b7 every thirty seconds), because this path posted the make
+       and recorded it in lastSongRequest while madeShare still pointed at the old one. So the take landed
+       unseen, the descent never ran, and the cover never came. One line of state, and it cost him the picture.
+       The make that is made here is now the make the door watches. */
+    if (r.request_id && !r.needs_word) {
+      const whoMade = String(payload.who || '').trim();
+      madeShare = {
+        request_id: r.request_id, who: whoMade, text: text, cover: songDraft.cover === true,
+        band: songDraft.sound || '', feel: songDraft.feel || '', title: r.title || '', stage: 'making',
+      };
+      shareCard = { kind: 'made', title: r.title || 'the song he is making',
+        sub: whoMade ? 'for ' + whoMade : '', url: '', code: '', song_id: '' };
+      shareCardTarget = shareCard;
+      madeSave();
+      startMadeWatch();
+      logLine('song.watch.own', r.request_id, { level: 'info', target: 'music' });
     }
     if (!r.needs_word) songDraftReset();
     railNote('in the studio \u00b7 ' + String(text || '').slice(0, 40));
