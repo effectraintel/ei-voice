@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 277;
+const BUILD_NO = 278;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -7595,6 +7595,25 @@ async function madeReady(r) {
     try { await withTimeout(refreshCards(true), 15000, 'the shelf did not answer'); } catch (e) {}
     onShelf = onShelfNow();
   }
+  /* BUILD 278. 17 Nov 2026, on build 276: "landed without the cover only when I refreshed or on second refresh did
+     it show." The picture was on the song's record from the moment the studio finished; the card simply did not
+     carry it until something else painted it. The shelf read now hands back the song's own picture with the song,
+     so the card is read once more BEFORE it is announced, and the picture it gains here is the one he asked for.
+     A second drawing for the same yes is unasked spend, and the landing below never pays for one when the record
+     already holds it. */
+  const onShelfCard = () => shelf.find((c) => (sid && String(c.song_id || '') === sid)
+    || (title && String(c.title || '').trim().toLowerCase() === String(title).trim().toLowerCase()));
+  try {
+    const nowCard = onShelfCard();
+    if (onShelf && nowCard && !nowCard.img) {
+      await withTimeout(refreshCards(true), 15000, 'the shelf did not answer');
+    }
+    const withArt = onShelfCard();
+    if (withArt && withArt.img) {
+      if (card) card.img = withArt.img;
+      logLine('made.cover.on.card', String(withArt.img).slice(0, 90), { level: 'info', target: 'coverDraw' });
+    }
+  } catch (e) { /* a card without its picture is still a song that landed */ }
   shareCard = card || { kind: 'made', title: title || 'your song', sub: 'made here', url: '', code: '', song_id: '' };
   shareCardTarget = shareCard;
   madeShare.stage = 'ready';
@@ -7661,7 +7680,11 @@ async function madeReady(r) {
   // (consent-before-spend). If he already described one while it was being made, it is held and is not
   // asked again.
   descentAskedAt = artHeld ? 0 : Date.now();
-  logLine('made.descent', artHeld ? 'held from the making: ' + (heldArt.brief || 'his yes')
+  /* BUILD 278. `heldArt` is the saved brief for this request, and it is null when he answered the picture in
+     words the door never stored as a brief. The line below read `heldArt.brief` unguarded, so a yes with no brief
+     threw here - after the card had merged, which is why the song landed and the landing's own bookkeeping was
+     the part that broke. Guarded: an answer is an answer whether or not a brief came with it. */
+  logLine('made.descent', artHeld ? 'held from the making: ' + ((heldArt && heldArt.brief) || 'his yes')
     : 'asking, once', { level: 'info', target: 'music' });
   const artLine = askedInMaking && !shareArt.want
     ? 'He said no picture for this one, so do not ask about one and do not offer one: the song is bare and that is his answer.'
