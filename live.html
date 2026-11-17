@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T06:35';
-const BUILD_NO = 298;
+const BUILD = '2026-11-18T07:30';
+const BUILD_NO = 299;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5355,15 +5355,35 @@ function learnArtistFrom(query, candidates) {
     if (shareArtistHint) return shareArtistHint;
     const q = String(query || '').trim();
     if (!q || q.split(/\s+/).filter(Boolean).length > 4) return '';
+    /* BUILD 299. A COURTESY WORD IS NOT A BAND EITHER. 18 Nov 2026, 00:54:45, the trace reads: searching the rail
+       itself: "Yes Oh" (with the artist he named: Oh). One earlier answer had come back with a single candidate
+       whose artist happened to be "Oh", that was taken as proof of a name, and from then on every search carried
+       "Oh" - "for the light by foreign air Oh" - which is why worship records came back for a song by Foreign Air. */
+    if (/^(?:yes|no|yeah|nope|ok|okay|oh|ah|eh|hm+|mm+|um+|thanks|thank you|please|sure|right|cool|hello|hi|hey)\b/i.test(q)) return '';
     const list = Array.isArray(candidates) ? candidates : [];
-    if (!list.length) return '';
+    if (list.length < 2) return '';
     const artists = Array.from(new Set(list.map((c) => String((c && c.artist) || '').trim()).filter(Boolean)));
     if (artists.length !== 1) return '';
     shareArtistHint = artists[0];
+    shareArtistFrom = 'learned';
     logLine('share.artist.learned', 'every song the rail returned for "' + q + '" is by ' + artists[0],
       { level: 'info', target: 'songShare' });
     return artists[0];
   } catch (e) { return ''; }
+}
+/* Build 299. A hint learned from a rail answer stops being evidence the moment the rail stops agreeing with it. */
+function dropHintIfUnmatched(candidates) {
+  try {
+    if (!shareArtistHint || shareArtistFrom !== 'learned') return;
+    const h = String(shareArtistHint).toLowerCase();
+    const list = Array.isArray(candidates) ? candidates : [];
+    const hit = list.some((c) => String((c && c.artist) || '').toLowerCase().includes(h));
+    if (!hit) {
+      logLine('share.hint.dropped', 'no song in the answer is by ' + shareArtistHint + ', so it stops being kept',
+        { level: 'info', target: 'songShare' });
+      shareArtistHint = ''; shareArtistFrom = '';
+    }
+  } catch (e) {}
 }
 /* The artist he named may reorder what he is offered. It may never remove the rail's own best match: that is his
    title, and a list without it is the fault he reported at 00:10. */
@@ -6230,6 +6250,7 @@ async function handleShareCall(call) {
           + (r.candidates.length === 1 ? '' : 's'));
       }
       learnArtistFrom(query, r.candidates);
+      dropHintIfUnmatched(r.candidates);
       shareChoices = r.candidates;
       shareChoicesAt = Date.now();
       if (!shareChoices.length) {
@@ -6443,6 +6464,7 @@ let sharePending = null;   // { card, words, at } — found, read back, not yet 
    "Please Forgive Me (Classic Version) · Bryan Adams" first try, which is the whole fault: the hunt forgot who he
    had named one turn earlier. It is remembered now, and every search inside the hunt carries it. */
 let shareArtistHint = '';
+let shareArtistFrom = '';          // 'said' when he named one, 'learned' when the rail proved it
 function artistInWords(t) {
   const x = String(t || '').trim();
   if (!x) return '';
@@ -6469,6 +6491,37 @@ function artistInWords(t) {
   if (shareArtistHint && flatten(shareArtistHint) === want) return x;
   return '';
 }
+/* BUILD 299. A CORRECTION IS A TITLE AND AN ARTIST, NOT A SENTENCE.
+   18 Nov 2026, 00:55:59: "No it is called for the light and the artist is foreign air" went to the rail whole, so it
+   answered worship records - the words "the light" were all the rail could hear. Everything he said may be true, and
+   the door must take the name out of it. Returns {title, artist, why} or null. */
+function correctionWords(t) {
+  const x = String(t || '').trim();
+  if (!x) return null;
+  const low = x.toLowerCase();
+  if (!/\b(?:called|named|titled)\b|\b(?:the )?(?:song|title|track) is\b|\bthe artist is\b|\bit'?s\b/.test(low)) return null;
+  let artist = '';
+  const am = x.match(/\b(?:and\s+)?the artist\s+(?:is|was)\s+([^.,;!?]+)/i);
+  if (am) artist = am[1].trim();
+  if (!artist) {
+    const bm = x.match(/\b(?:by|from)\s+([^.,;!?]+)/i);
+    if (bm && !/\b(?:the )?(?:stores?|shops?|music)\b/i.test(bm[1])) artist = bm[1].trim();
+  }
+  let title = '';
+  const tm = x.match(/\b(?:it'?s|it is)?\s*(?:called|named|titled)\s+([^.,;!?]+?)(?:\s*(?:,|\band\b)\s*the artist|\s+by\s+|\s+from\s+|$)/i);
+  if (tm) title = tm[1].trim();
+  if (!title) {
+    const sm = x.match(/\b(?:the )?(?:song|title|track)\s+is\s+([^.,;!?]+?)(?:\s*(?:,|\band\b)\s*the artist|\s+by\s+|\s+from\s+|$)/i);
+    if (sm) title = sm[1].trim();
+  }
+  const clean = (v) => String(v || '').trim().replace(/^["'\u201c\u201d]+|[.?!,"'\u201c\u201d]+$/g, '').trim();
+  title = clean(title);
+  artist = clean(artist);
+  if (!title) return null;
+  if (/^(?:it|this|that|the song|the one)$/i.test(title)) return null;
+  return { title: title, artist: artist, why: 'he corrected the name' };
+}
+
 /* A rejection is not a title. "Not one of those." was searched as a song name at 20:17:59 and came back empty,
    which read to him as the rail having nothing when the truth was that nobody had asked it anything sensible. */
 function shareRejection(t) {
@@ -6527,6 +6580,28 @@ function wordsCover(text, title) {
 }
 
 function askAboutCard(card, words) {
+  /* BUILD 299. A NAME THAT SHARES NOTHING WITH HIS WORDS IS NOT A GUESS, IT IS A WRONG ANSWER.
+     18 Nov 2026, 00:55:25: he said "for the light by foreign air" and the door read back "Is that the one, Boss:
+     Smile, Foreign Air?" - then, later, "Was that for 'Better for It' by Foreign Air, Boss?". Neither name is a
+     mishearing of his; both came from a search poisoned by a stray artist hint. A read-back is for the ear, so it
+     needs at least one word in common with what he actually said. Without that, the door says it could not match
+     his words and asks for the title and artist - which is the truth, and it is one question instead of two. */
+  try {
+    const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const mine = norm(words).split(' ').filter(Boolean);
+    const theirs = norm(card && card.title).split(' ').filter((w) => w.length > 2);
+    const overlap = theirs.some((w) => mine.includes(w));
+    if (theirs.length && !overlap) {
+      railNote('share · no match for his words');
+      logLine('share.confirm.nomatch', (card && card.title) + ' shares nothing with: ' + String(words).slice(0, 60),
+        { level: 'warn', target: 'songShare' });
+      doorAsk('I could not match that to a title, Boss. Say the title, and who sings it.',
+        'say exactly this, in one line, and nothing else: "I could not match that to a title, Boss. Say the title, '
+        + 'and who sings it?" Nothing was put on his shelf.');
+      awaitSong = Date.now();
+      return;
+    }
+  } catch (e) {}
   sharePending = { card: card, words: String(words || ''), at: Date.now() };
   railNote('share · reading the name back');
   logLine('share.confirm', (card.title || '') + ' | heard: ' + String(words || '').slice(0, 60),
@@ -7179,7 +7254,14 @@ function noteSongAnswer(heard) {
   clearTimeout(awaitSongNudge);
   awaitSongNudge = setTimeout(() => {
     if (shareQuery || shareStage !== 'idle') return;   // the model did it; nothing to take over
-    const asked = searchWords(said);
+    const fix = correctionWords(said);
+    if (fix && fix.artist) { shareArtistHint = fix.artist; shareArtistFrom = 'said'; }
+    const asked = fix ? (fix.title + (fix.artist ? ' ' + fix.artist : '')).trim() : searchWords(said);
+    if (fix) {
+      logLine('share.corrected', 'he named the song inside a correction: "' + fix.title + '"'
+        + (fix.artist ? ' by ' + fix.artist : ''), { level: 'info', target: 'songShare' });
+      railNote('share · he corrected it · ' + fix.title + (fix.artist ? ' by ' + fix.artist : ''));
+    }
     logLine('share.door', 'searching the rail itself: ' + asked
       + (shareArtistHint && asked !== said ? ' (with the artist he named: ' + shareArtistHint + ')' : ''),
       { level: 'info', target: 'songShare' });
@@ -11555,6 +11637,11 @@ function postTyped(text) {
   /* Build 205. The door hears a typed line on its way in, before the model sees it, exactly as it hears
      a spoken one. Without this the model is the only reader of a typed sentence, and on 14 Nov it
      answered "I couldn't find "Back in Black" on the sharing rail" twice without asking the rail once. */
+  /* BUILD 299. A TYPED LINE IS HIS WORDS TOO. 18 Nov 2026, 00:57:19: lastHeardText was only ever written by the
+     microphone, so when the door had to search "what he just said" it searched the last SPOKEN line - "for the light
+     by foreign air" - while he had just typed "It is called echo". The guard fired, searched the wrong sentence, and
+     the correction was lost. */
+  try { lastHeardText = String(text || ''); } catch (e) {}
   try { doorHears(text); } catch (e) {}
   try {
     ws.send(JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text: text }] }], turnComplete: true } }));
