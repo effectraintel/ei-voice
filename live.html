@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 267;
+const BUILD_NO = 268;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -800,6 +800,18 @@ const BRIEF = NO_CLAIM +
      simply land on the shelf?" It is not true and it is not possible: nothing in this estate can send him a message
      later. A promise of a notification is the same fault as a claim of delivery, and it is worse for a song, because
      he waits for a message that never comes instead of looking at his shelf. */
+  /* BUILD 268. 17 Nov 2026, 17:38, in one run: "That's all I need, Boss. The song will appear on your shelf when
+     it's ready" while no take existed, then "My mistake, Boss, the song isn't ready yet; I'm checking on its
+     progress now." Two faults in two breaths: the making was called finished before the door had said so, and a
+     promise to go and look. There is no window into the studio from here, so checking is not a thing the door can
+     do, and saying it is a promise dressed as an answer. */
+  'The making is finished only when the door tells you it has what it needs. Until then never close it, never say '
+  + 'that is all you need, and never say what a song will do or when it will arrive. You cannot see the studio and '
+  + 'cannot follow a song while it is being made: never say you are checking, looking in on it, watching it, chasing '
+  + 'it, waiting on it or coming back with news, and never say a take is not ready yet as though you had looked. If '
+  + 'he asks whether it is done, say in one line that a song lands on his shelf when it is ready. ' +
+  'Never search the open web while a song is being made, and never look up a kind of music: what he names as a '
+  + 'sound is his answer, not a thing to search for. ' +
   'Nothing here can send him a message later, and nothing can come back to him on its own. Never say you will let '
   + 'him know, tell him, notify him, remind him, come back to him or get back to him, and never promise a message '
   + 'of any kind. A song simply appears on his shelf when it is ready: that is the whole of what happens, and it is '
@@ -3169,6 +3181,23 @@ function songHearTurn(heard) {
       /* A phrase in both ("yes but leave the words") is read as leaving them: the door never spends a rewrite on
          an ambiguous yes. And a song is never held hostage to this question - asked twice with no answer, it goes
          with his words untouched. */
+      /* BUILD 268. 17 Nov 2026, 17:37: he was asked whether to build around his words and answered with the SOUND
+         ("alternative folk"). The door treated it as a second unclear answer, closed the words question as "as it
+         is", and then asked him for a kind of music he had just given - the words question ate the sound. So an
+         answer that IS a sound closes the words question as "leave them" and fills the sound in the same breath,
+         because that is plainly what he meant. */
+      const realSound = soundIsReal(t);
+      if (realSound && !asis) {
+        songDraft.build = 'as-is';
+        songDraft.askBeat = '';
+        songDraft.buildTries = 0;
+        songDraft.sound = soundPhrase(t) || realSound;
+        logLine('song.journey.build', 'he answered with a sound (' + songDraft.sound + '), so his words stay as they are',
+          { level: 'info', target: 'music' });
+        railNote('journey \u00b7 build \u00b7 as they are \u00b7 sound ' + songDraft.sound);
+        try { afterSoundBeat(); } catch (e) {}
+        return;
+      }
       if (asis || !around) {
         if (!asis && !around) {
           songDraft.buildTries = (songDraft.buildTries || 0) + 1;
@@ -9229,6 +9258,17 @@ function keepFound(it) {
 
 // Web results arrive with their own URIs. They go to the shelf, and now also into the record.
 function shelfFromGrounding(gm) {
+  /* BUILD 268. 17 Nov 2026, 17:38: he was making a song and answered the sound with "alternative folk". The mouth
+     went to the web, and the search's own grounding chunk for "Alternative Folk - Melodlgging" landed on his shelf
+     as a SOURCE card beside the song. The making is not a lookup, and his shelf is not a bin for the model's
+     working: no web result is shelved while a song is being made, and a kind of music is never a search. */
+  try {
+    if (songMaking()) {
+      logLine('shelf.keep.refused', 'a web result arrived while a song is being made, so nothing was shelved',
+        { level: 'info', target: 'shelfKeep' });
+      return;
+    }
+  } catch (e) {}
   const chunks = (gm && gm.groundingChunks) || [];
   for (const c of chunks) {
     const w = c.web || {};
@@ -9237,6 +9277,17 @@ function shelfFromGrounding(gm) {
     shelfAdd(card);
     keepFound(card);
   }
+}
+
+/* Is a song being made on this door right now? The words, a beat, a sound: any of them means the making is in
+   flight, and nothing else may put a card on his shelf beside it. */
+function songMaking() {
+  try {
+    if (!songDraft.at) return false;
+    if (Date.now() - songDraft.at > 20 * 60 * 1000) return false;
+    if (songDraft.delivered || songDraft.done) return false;
+    return !!(songDraft.said || songDraft.askBeat || soundIsReal(songDraft.sound));
+  } catch (e) { return false; }
 }
 
 /* The spoken boundary between "not open" and "open". It is one short line, spoken by the
