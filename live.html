@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T15:05';
-const BUILD_NO = 255;
+const BUILD = '2026-11-17T15:15';
+const BUILD_NO = 256;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5274,6 +5274,12 @@ function looksLikeIntentNotTitle(q) {
   if (/^(?:can|could|would|will)\s+you\b/i.test(t)) return true;
   if (/^(?:please|let'?s|why don'?t)\b/i.test(t)) return true;
   if (/^(?:share|send|sing|play|put)\s+(?:me\s+)?(?:this|that|a|an|the|some)\b/i.test(t)) return true;
+  /* Build 256. A SENTENCE ABOUT HIMSELF IS NOT A TITLE. 17 Nov 2026: he said a line about how he felt, the door
+     searched the store, the store answered with a genuine title (Jelly Roll's "I Am Not Okay"), and a store card
+     landed on his shelf beside a song being made from the same words. A feeling is material for a making, never a
+     lookup - unless he plainly asks to find, play or share one, in which case the ask wins and the search stands. */
+  if (/^(?:i\s*(?:'m|am|feel|felt|have|'ve|was|can'?t|cannot|don'?t|do not|won'?t|will not|need|want to sing|used to)|my\b|we\s*(?:'re|are|feel|were)|he\s*(?:'s|is|was)|she\s*(?:'s|is|was)|they\s*(?:'re|are))/i.test(t)
+      && !/\b(?:play|find|search|share|send|look\s*up|put\s+on|get\s+me)\b/i.test(t)) return true;
   return false;
 }
 
