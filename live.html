@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T07:30';
-const BUILD_NO = 299;
+const BUILD = '2026-11-18T08:05';
+const BUILD_NO = 300;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -7201,12 +7201,27 @@ function noteSongAnswer(heard) {
   }
   /* BUILD 286: the rejection and the artist, both before anything is searched. */
   if (shareRejection(said)) {
+    /* BUILD 300. "NO" PLUS A TITLE IS A TITLE.
+       18 Nov 2026, 00:57:56: he answered the wrong read-back with "no ehco" - no, it is Echo - and the door treated
+       the whole line as a rejection, threw away the name he had just given, and asked "What is the title, Boss, and
+       who sings it?" He had said it twice by then. The rejection is the first word; anything after it is what he
+       wants instead. */
+    const tail = String(said).replace(/^\s*(?:no+|nope|nah)[\s,.!-]*/i, '').replace(/^\s*(?:it'?s|it is)\s+/i, '').trim();
+    /* "no, not one of them" names nothing: the tail starts with a stop word, so it is not a title. */
+    const stopTail = /^(?:not|none|never|no|nothing|one of|any of|that|this|it|them|those|these|thanks|thank you|way|idea|sorry|bad|good)\b/i;
+    const wants = tail && /[a-z]{3,}/i.test(tail) && !stopTail.test(tail);
     railNote('share · he rejected what was offered · ' + said.slice(0, 40));
     logLine('share.rejected', said, { level: 'info', target: 'songShare' });
+    if (wants) {
+      shareQuery = '';
+      logLine('share.rejected.named', 'the rejection carried the song he wants: "' + tail.slice(0, 60) + '"',
+        { level: 'info', target: 'songShare' });
+      railNote('share · he named it instead · ' + tail.slice(0, 60));
+    }
     /* BUILD 291. "Give me more" is a request to the rail, not an invitation to improvise. At 20:20:58 the mouth
        answered it with three titles from its own memory. When he wants more and the door knows whose songs he is
        looking through, the rail is asked for that artist and what it hands back is what he is offered. */
-    const who = moreBy(said, artistInWords(said) || shareArtistHint || '');
+    const who = wants ? { want: false, artist: '' } : moreBy(said, artistInWords(said) || shareArtistHint || '');
     if (who.want && who.artist) {
       try { const q = artistInWords(said); if (q) shareArtistHint = q; } catch (e) {}
       logLine('share.more', 'asking the rail for more by ' + who.artist, { level: 'info', target: 'songShare' });
