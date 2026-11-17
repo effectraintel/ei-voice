@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T18:20';
-const BUILD_NO = 281;
+const BUILD = '2026-11-17T18:25';
+const BUILD_NO = 282;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3436,7 +3436,9 @@ function journeyAskNext() {
        armed here, so his question never arrived and the door jumped to "it will be on your shelf soon". */
     if (soundIsReal(songDraft.sound)) {
       if (!pictureSettled()) {
+        if (songDraft.at && songDraft.askBeat) {
         logLine('song.make.held', 'the picture is still open, so nothing is armed', { level: 'info', target: 'music' });
+      }
         afterSoundBeat();
         return;
       }
@@ -3523,7 +3525,9 @@ function pictureSettled() {
 function armMake() {
   try {
     if (!pictureSettled()) {
-      logLine('song.make.held', 'the picture is still open, so nothing is armed', { level: 'info', target: 'music' });
+      if (songDraft.at && songDraft.askBeat) {
+        logLine('song.make.held', 'the picture is still open, so nothing is armed', { level: 'info', target: 'music' });
+      }
       return;
     }
     if (!routeClosed()) return;
@@ -3940,11 +3944,19 @@ function readRoute(text, opts) {
     const after = t.slice(at).replace(/^\S+/, '').replace(OBJECT_FILLER, '').trim();
     return (after.split(/[^a-z']+/)[0] || '');
   };
+  /* BUILD 282. 17 Nov 2026, 18:05: "Let Make a Final Song" - the making never opened, so no words, no sound, no
+     song, and the door promised one anyway. This test read only the word straight after the verb, and "final" is
+     not a song, so a perfectly ordinary ask ("make a final song", "do a nice tune", "write a short one") was read
+     as no ask at all. A song word within the next three words is the object; a word that is plainly something else
+     ("make a mistake in the last song") still is not. */
   const objectIsSong = (at) => {
     const w = objectWord(at);
     if (!w) return false;
     if (SONG_NOUN.test(w)) return true;
-    return SONG_PRONOUN.test(w);
+    if (SONG_PRONOUN.test(w)) return true;
+    const after = t.slice(at).replace(/^\s*[a-z']+/, '').replace(OBJECT_FILLER, '').trim();
+    const near = after.split(/[^a-z']+/).filter(Boolean).slice(0, 3).join(' ');
+    return SONG_NOUN.test(near);
   };
   /* A phrase he named is a title. Without this, "share back in black from acdc" has no song word in it
      and would be read as a bare ask, sending him back to a question he had already answered. */
@@ -5447,6 +5459,24 @@ function judgeClaim() {
        sentence that is plainly about the future is not this guard's business. */
     const futureHere = /\b(?:will|'ll|shall|gonna|going to)\b[^.!?]{0,80}\b(?:land|lands|appear|arrive|be ready|be on|show up|come|drop)\b|\bwhen it'?s ready\b|\bwhen it is ready\b|\bonce it'?s ready\b|\bwhen the song is ready\b/i.test(t);
     const finishedHere = /\b(?:has landed|have landed|just landed|has arrived|is on your shelf now|is ready now|is there now)\b/i.test(t);
+    /* BUILD 282. 17 Nov 2026, 18:05: nothing was in the studio - the make route never opened - and the mouth said
+       "That's all I need, Boss. The song will land on your shelf when it's ready." Build 272 protected that shape of
+       sentence from the landing guard because it is a promise about the future rather than a claim about the past,
+       which is right when a song IS being made. With nothing armed it is the same false landing as 275, only stated
+       in the future. So the promise needs an anchor: a make armed or in flight, a request on the record, or a take
+       that has just landed. Without one the door corrects it and opens the making itself. */
+    const promiseAnchored = !!(makeArmedSig || songMaking() || songInFlight() || lastSongRequest
+      || (madeShare && madeShare.stage && madeShare.stage !== 'idle') || madeRecently);
+    if (futureHere && !finishedHere && !promiseAnchored && songWords) {
+      logLine('song.promise.unanchored', t.slice(0, 150), { level: 'warn', target: 'no-take' });
+      try { if (!songDraft.at) { openSongBeat(); } } catch (e) {}
+      const askNow = (() => { try { return openJourneyBeat(); } catch (e) { return ''; } })();
+      doorAsk('Nothing was made \u00b7 your words first',
+        'Nothing has been put into the studio: no words were taken and nothing is being made, so no song is coming. '
+        + 'Say that in one short line, without apologising twice, and then ask him: "' + (askNow || 'What should the song say?')
+        + '" Never promise a song will land until the door has armed it.', true);
+      return;
+    }
     if (readyClaim.test(t) && !negatedHere(t, readyClaim) && !(futureHere && !finishedHere) && !madeRecently && !lastSongRequest
         && !shelfBacksClaim(t) && !findingSentence) {
       /* What the correction is ABOUT, which decides its words and not whether it fires. A store song
