@@ -1612,7 +1612,9 @@ document.addEventListener('visibilitychange', () => {
 let sittingTurns = [];             // [{who:'you'|'engine', text, at}] - this sitting only
 let sittingAt = 0;                 // when the sitting began
 let resumePending = false;         // he is back and has not said yet: carry on, or fresh
-const SITTING_MAX = 12;            // turns, not words: enough for "what I asked you just now"
+/* Twenty-four turns, because a visit is a visit: he may make a song, choose a cover, share it and ask a question
+   in between, and "carry on where we left off" has to mean the whole of that, not the tail of it. */
+const SITTING_MAX = 24;
 function sittingNote(who, text) {
   const t = String(text || '').trim();
   if (!t) return;
