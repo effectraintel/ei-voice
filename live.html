@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 268;
+const BUILD_NO = 269;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4319,6 +4319,30 @@ function openJourneyBeat() {
   } catch (e) { return ''; }
 }
 
+/* BUILD 269. A SESSION THAT CLOSED IS NOT A SESSION IN THE BACKGROUND.
+   17 Nov 2026, after the voice link died ("Session closed due to client inactivity") and he opened the door again
+   four minutes later: "when I opened it again out of the blue it said - What kind of music should it be? Say you
+   choose and I will pick." Nothing was wrong with the record - his words were still held - but the door asked a
+   question from a conversation that had ended, with no context and no reason to be answering it. Build 140 wrote
+   that re-ask for a door he was in and left in the background; a closed session is a different thing. So on a
+   fresh open the door says where things STAND, in one line, and asks nothing. The beat stays open, so whatever he
+   says next still lands on it, and nothing is lost by not asking. */
+/* Build 269: the one decision behind that rule, named so a case can prove it rather than trust it. */
+function resumeIsSameConversation() {
+  try { return (Date.now() - lastGreetAt) < 120000; } catch (e) { return true; }
+}
+function openJourneyState() {
+  try {
+    if (!songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000) return '';
+    const beat = songDraft.askBeat || '';
+    if (beat === 'subject') return 'Nothing was made: the last song never got its words.';
+    if (beat === 'build') return 'Nothing was made: the last song is still waiting on your words.';
+    if (beat === 'sound') return 'Nothing was made: the last song is still waiting on the kind of music, and your words are held.';
+    if (beat === 'feel') return 'Nothing was made: the last song is still waiting on how it should feel.';
+    if (beat === 'cover') return 'Nothing has been made yet: the last song is still waiting on whether you want a picture with it.';
+    return '';
+  } catch (e) { return ''; }
+}
 async function handleSongCall(call) {
   const args = call.args || {};
   let result = '';
@@ -9489,16 +9513,30 @@ function sayGreeting() {
      The open beat is the only thing worth saying on this door, so it takes the place of the greeting. */
   const beatLine = openJourneyBeat();
   if (beatLine) {
+    /* Build 269: the same conversation re-opened inside two minutes is the background return build 140 was written
+       for, so the question stands and it is asked again. A closed session that comes back later is not that: it
+       gets one line of where things stand, and no question. */
+    const sameConversation = resumeIsSameConversation();
     lastGreetAt = Date.now();
     resumeSpeak = ''; resumeNote = '';
     resumeLine = '';
     sessionOpenedAt = Date.now();
-    logLine('journey.resume', (songDraft.askBeat || 'beat') + ' · ' + beatLine.slice(0, 60),
+    if (sameConversation) {
+      logLine('journey.resume', (songDraft.askBeat || 'beat') + ' · ' + beatLine.slice(0, 60),
+        { level: 'info', target: 'music' });
+      sendOpeningLine(beatLine, 'You are in the middle of making a song with him and nothing has been made '
+        + 'yet: the route is open at one question, and the app was in the background when it was asked. Ask '
+        + 'that one question again, in your own voice, in one short line. Do not greet him, do not start over, '
+        + 'do not ask a different question, and do not describe the song.');
+      return;
+    }
+    const stateLine = openJourneyState() || 'Nothing has been made yet.';
+    logLine('journey.resume.state', (songDraft.askBeat || 'beat') + ' · ' + stateLine.slice(0, 70),
       { level: 'info', target: 'music' });
-    sendOpeningLine(beatLine, 'You are in the middle of making a song with him and nothing has been made '
-      + 'yet: the route is open at one question, and the app was in the background when it was asked. Ask '
-      + 'that one question again, in your own voice, in one short line. Do not greet him, do not start over, '
-      + 'do not ask a different question, and do not describe the song.');
+    sendOpeningLine(stateLine, 'The app was closed and he has opened the door again, so this is a fresh '
+      + 'conversation and NOT a question. Say only that one line of where things stand, as a statement, in '
+      + 'your own voice. Do not ask him anything, do not lift the end of the line like a question, do not offer '
+      + 'to carry on, and do not describe the song. If he answers it anyway, the door takes the answer.');
     return;
   }
   /* Build 142: a door that opens with a song still in the air keeps watching it. Nothing is said here; the
