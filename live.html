@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T22:20';
-const BUILD_NO = 285;
+const BUILD = '2026-11-17T22:45';
+const BUILD_NO = 286;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6232,6 +6232,48 @@ let sharePending = null;   // { card, words, at } — found, read back, not yet 
 
 // The narrowest honest slice of what he said: what followed "called", or the words before "by/from" with
 // the plumbing removed. Never a re-ranking of the engine's answer — a cleaner question to the same engine.
+/* BUILD 286. 17 Nov 2026, 20:17. He said "Let's find a song" and then "Bryan Adams", and the rail answered with
+   four of his songs. He then asked "Isn't there a song like Please Forgive Me?" and said "Please forgive me." -
+   and the door searched that title with no artist, so the rail returned "Forgive me" by DJ UNIVXRSEL and
+   "forgive me..." by nohssiwi. Searching the same words WITH the artist he had already given returns
+   "Please Forgive Me (Classic Version) · Bryan Adams" first try, which is the whole fault: the hunt forgot who he
+   had named one turn earlier. It is remembered now, and every search inside the hunt carries it. */
+let shareArtistHint = '';
+function artistInWords(t) {
+  const x = String(t || '').trim();
+  if (!x) return '';
+  const m = x.match(/\b(?:by|from)\s+([A-Z][\w'’.-]*(?:\s+(?:[A-Z][\w'’.-]*|van|der|de|la|the)){0,3})/);
+  if (m) return m[1].replace(/\s+/g, ' ').trim();
+  /* A name on its own is an artist. "Bryan Adams" as the whole answer to "which song?" is exactly how the hunt
+     began, and the rail knew what to do with it. */
+  if (x.split(/\s+/).length <= 4 && /^[A-Z][\w'’.-]*(?:\s+[A-Z][\w'’.-]*){0,3}$/.test(x)
+      && !/\b(?:song|track|tune|please|forgive|love|home|night|day)\b/i.test(x)) return x;
+  return '';
+}
+/* A rejection is not a title. "Not one of those." was searched as a song name at 20:17:59 and came back empty,
+   which read to him as the rail having nothing when the truth was that nobody had asked it anything sensible. */
+function shareRejection(t) {
+  const x = String(t || '').toLowerCase().replace(/[^a-z\s']/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!x || x.split(' ').length > 8) return false;
+  return /^(?:no+|nope|nah|not (?:one|that|those|these|this|it)\b|none of (?:those|these|them)\b|that'?s not (?:it|right|the one)|not (?:the|that) one|wrong (?:one|song)|something else)/.test(x);
+}
+/* His words, as the rail should hear them: the question worn off the front, and the artist he already named
+   kept on the end. Both halves matter - "Isn't there a song like Please Forgive Me?" is a title, and
+   "Please forgive me." alone is half a title. */
+function searchWords(said) {
+  let q = String(said || '').trim()
+    .replace(/^(?:please\s+)?(?:can|could|would)\s+you\s+/i, '')
+    .replace(/^(?:please\s+)?(?:search|look|find|see|check)\s*(?:for|up)?\s*/i, '')
+    .replace(/^(?:isn'?t|is not|aren'?t|wasn'?t)\s+there\s+(?:a|any)\s+(?:song|track|tune)\s*(?:like|called|named)?\s*/i, '')
+    .replace(/^(?:do you know|there'?s a song called|the song is)\s*/i, '')
+    .replace(/^["'“”‘’]+|["'“”‘’?.!]+$/g, '')
+    .replace(/\s+/g, ' ').trim();
+  if (!q) q = String(said || '').trim();
+  if (shareArtistHint && !new RegExp(shareArtistHint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(q)) {
+    q = (q + ' ' + shareArtistHint).trim();
+  }
+  return q;
+}
 function narrowedQuery(said) {
   const s = String(said || '');
   const m = s.match(/\b(?:called|named|titled)\s+([^.;!?]{2,60})/i);
@@ -6696,25 +6738,41 @@ function noteSongAnswer(heard) {
     awaitSong = Date.now();                  // still armed: the next thing he says is the song
     return;
   }
+  /* BUILD 286: the rejection and the artist, both before anything is searched. */
+  if (shareRejection(said)) {
+    railNote('share · he rejected what was offered · ' + said.slice(0, 40));
+    logLine('share.rejected', said, { level: 'info', target: 'songShare' });
+    doorNote('He has rejected the songs that were offered, so nothing was searched and nothing was found. Ask him '
+      + 'for the title, and who sings it, in one short line. Do not say the rail did not answer and do not name a '
+      + 'song.', true);
+    awaitSong = Date.now();                  // still armed: the next thing he says is the song
+    return;
+  }
+  try { const who = artistInWords(said); if (who) shareArtistHint = who; } catch (e) {}
   lastSongWords = said;
   awaitSong = 0;
   // The door searches at once and asks the mouth to hold. The 3.5-second courtesy to the model was the
   // window in which it said "I couldn't find that one" (12:15:38) a second before the rail answered with
   // the song. A courtesy to a guess is a lie with a delay on it.
-  doorNote('The door is searching the rail for his exact words ("' + said + '") right now. Say nothing '
-    + 'about whether a song was found until you are told. Do not search, do not guess, do not apologise.');
+  doorNote('The door is searching the rail for his exact words ("' + searchWords(said) + '") right now'
+    + (shareArtistHint ? ', with the artist he named (' + shareArtistHint + ') kept on the query' : '')
+    + '. Say nothing about whether a song was found until you are told. Do not search, do not guess, '
+    + 'do not apologise.');
   logLine('share.nudge', said, { level: 'info', target: 'songShare' });
   clearTimeout(awaitSongNudge);
   awaitSongNudge = setTimeout(() => {
     if (shareQuery || shareStage !== 'idle') return;   // the model did it; nothing to take over
-    logLine('share.door', 'searching the rail itself: ' + said, { level: 'info', target: 'songShare' });
+    const asked = searchWords(said);
+    logLine('share.door', 'searching the rail itself: ' + asked
+      + (shareArtistHint && asked !== said ? ' (with the artist he named: ' + shareArtistHint + ')' : ''),
+      { level: 'info', target: 'songShare' });
     const t0 = Date.now();
     doorSearching = true;
     hiddenHold = true;                       // no words and no voice until the rail's answer is in his hands
     hiddenHoldUntil = Date.now() + 8000;
     heldEngineLogged = 0;
-    shareQuery = said;
-    gatePost('songShare', { action: 'find', query: said })
+    shareQuery = asked;
+    gatePost('songShare', { action: 'find', query: asked })
       .then(async (r) => {
         // The rail answers a find in three shapes, and I only read one of them. On 12:05:15 it came back
         // already resolved and wrapped (found: mtshare, with the url in the same breath); this code saw no
@@ -6724,7 +6782,7 @@ function noteSongAnswer(heard) {
         const decided = !!(r && r.url && r.found && r.found !== 'choice' && r.found !== 'none');
         if (!r || r.found === 'none' || (!decided && !(r.candidates || []).length)) {
           // one narrower ask, once, before the door says nothing was found
-          const again = narrowedQuery(said);
+          const again = narrowedQuery(asked) || '';
           if (again && again.toLowerCase() !== said.toLowerCase()) {
             logLine('share.door.retry', again, { level: 'info', target: 'songShare' });
             const t1 = Date.now();
@@ -7182,6 +7240,7 @@ function doorCorrect(display, note, needsMouth) {
 // Step 1 done: the song is decided. Step 2 opens: does a picture go with it, and what should it show.
 function shareSongLocked(card) {
   if (!card || !card.title) return;
+  shareArtistHint = '';                    // the hunt is over: the artist he named goes with it
   // The model called find again on the next turn (10:06 and 10:29 on 8 Nov), which re-locked the song and
   // asked the cover question a second and third time. A song already locked stays locked, silently.
   const same = shareCard && (card.code || card.song_id)
