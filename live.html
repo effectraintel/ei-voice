@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T14:35';
-const BUILD_NO = 253;
+const BUILD = '2026-11-17T14:55';
+const BUILD_NO = 254;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2979,8 +2979,12 @@ function chainAskNext(r) {
    taken by the door: this is the beat he asked for on 17 Nov, right after "what kind of music should it be". */
 function afterSoundBeat() {
   if (songDraft.coverAnswered) return;      // he has already answered for this song
-  songDraft.askBeat = 'cover';
   songDraft.coverTries = 0;
+  /* BUILD 254. NOT A BEAT. An open beat is what holds the make back, and the picture is not a gate on the song: it
+     chooses what happens when the song lands. On 253 it became a beat, so the row appeared and the making carried on
+     regardless, which read as the door running ahead of him. Nothing is held now, and nothing runs ahead either:
+     the answer simply decides whether a picture is drawn on landing. */
+  songDraft.askBeat = '';
   /* BUILD 253. The question goes on his screen, and the mouth is told to ask nothing about it. On 252 the mouth was
      told to ask it in one short line and asked it in the same breath as the sound, which is the one thing this beat
      exists to prevent. A tap cannot be bundled. */
@@ -6782,6 +6786,14 @@ function shareArtAnswer(heard) {
     return;
   }
   // Step 3 opens: the popup, where he types the address himself and writes the message.
+  /* BUILD 254. NO POPUP BEFORE THERE IS ANYTHING TO SEND. On 253 a sheet arrived asking for an address while the
+     song was still being made, which is the worst kind of question: one he cannot answer. The step waits for the
+     song to be ready, and says nothing at all until it is. */
+  if (!(madeShare && madeShare.stage === 'ready')) {
+    logLine('share.sheet.held', 'no popup: the song is not ready yet', { level: 'warn', target: 'share' });
+    railNote('share \u00b7 sheet held \u00b7 the song is not ready');
+    return;
+  }
   shareStage = 'sheet';
   saveDraft();
   openSheetWhenQuiet(shareCard, shareArt, 0);
