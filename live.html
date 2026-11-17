@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T23:50';
-const BUILD_NO = 289;
+const BUILD = '2026-11-18T00:10';
+const BUILD_NO = 290;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -8821,15 +8821,29 @@ function renderGarage(el) {
 }
 
 let lastCardsSig = '';    // what the shelf looked like last time, so an unchanged poll stays quiet
+/* BUILD 290. 17 Nov 2026, 22:43: "What is this on the shelf? he song vault could not be read / Rate limit
+   exceeded: entity_list allows 350 requests per 60s". The shelf reader was minting a playback token for
+   every song on every read - a function call each - so a phone with the door open a couple of times spent
+   the app's own budget. That is fixed in shelfCards. Here, a read that is refused for rate must also not be
+   retried in the same breath: the door waits out the window instead of spending it. */
+let cardsPausedUntil = 0;
+const rateRefused = (d, err) => /rate limit|too many requests|429/i.test(String((d && (d.error || d.message || d.warning)) || (err && err.message) || ''));
 let lastPaySig = '';
 async function refreshCards(force) {
   if (clearing) return;                 // build 216: a read taken during a clear predates the clear
   if (!force && Date.now() - cardsAt < 8000) return;
+  if (Date.now() < cardsPausedUntil) return;   // build 290: a refused window is waited out, not spent again
   cardsAt = Date.now();
   try {
     const t0 = Date.now();
     const r = await fetch(FNBASE + 'shelfCards?limit=6', { cache: 'no-store' });
     const d = await r.json();
+    if (rateRefused(d)) {
+      cardsPausedUntil = Date.now() + 60000;
+      logLine('shelf.wait', 'the record refused a read for rate: waiting a minute before asking again',
+        { level: 'warn', target: 'shelf' });
+      return;
+    }
     // A poll that changes nothing is a heartbeat, not an event. Edwin reads this log to follow a
     // conversation (7 Nov: "our logging is paying off"), and twenty identical shelf reads bury the
     // eight lines that matter. So a quiet poll says nothing; a changed one says everything.
@@ -8924,9 +8938,9 @@ async function shelfSync() {
 const seedShelf = () => { shelfSync(); refreshCards(true); loadGarage(true); };
 
 // While anything on the shelf is still open, keep it honest without being asked.
-setInterval(() => { if (!document.hidden && shelf.length) shelfSync(); }, 15000);
+setInterval(() => { if (!document.hidden && shelf.length) shelfSync(); }, 25000);
 // A song made a minute ago should be on the shelf without him asking for it.
-setInterval(() => { if (!document.hidden) refreshCards(true); }, 60000);
+setInterval(() => { if (!document.hidden) refreshCards(true); }, 90000);
 
 /* ---------- the shelf: what the door hands over ---------- */
 
