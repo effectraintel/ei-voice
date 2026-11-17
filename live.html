@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 262;
+const BUILD_NO = 263;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -650,11 +650,11 @@ const DECLS = [{
               // The music rail, reached by voice. Making is a real generation in his
                 // own account, so it only ever happens because he asked for it aloud.
                 name: 'song',
-                description: 'Ask the music rail to make a song from his own words, send him one he already has, or report what became of one already asked for. Use make whenever he asks for a song, a tune, something sung, or to make it sing. If make answers that he already has a similar song, ask him back exactly as it tells you, then use resend if he wants that one, new if he wants a fresh song anyway, or again if he wants another version. Use check when he asks whether his song is done or has arrived. Never write the lyric yourself and never summarise his words: the words are the seed.',
+                description: 'Report on a song he has asked for, or send him one he already has. THIS ACT CANNOT MAKE A SONG: the door holds the making, asks what it should say, then what kind of music, then whether he wants a picture, and makes it itself. Use check when he asks whether his song is done or has arrived, and resend when he asks for one he already has to be sent again. Never call this to start a song, and never write the lyric yourself or summarise his words.',
                 parameters: {
                   type: 'OBJECT',
                   properties: {
-                    action: { type: 'STRING', description: 'make = start a new song from his words; resend = send him the song he already has, again, making nothing new; new = make a fresh song even though a similar one exists (only after he has said so); again = another version of the same words; check = report what happened to the one already asked for' },
+                    action: { type: 'STRING', description: 'resend = send him the song he already has, again, making nothing new; check = report what happened to the one already asked for' },
                     words: { type: 'STRING', description: 'for make, new or again: what the song should SAY, in his own words, exactly as he said it. A person is not a subject: "a song for a friend" needs what it should say to them, so ask before calling make. The tool will hand back the next question if the brief is still thin, and you must ask it as given rather than making anything' },
                     who: { type: 'STRING', description: 'for make: the person it is for, if he named one' },
                     prior: { type: 'STRING', description: 'for resend: the request id the last answer named for the song he already has' },
@@ -4200,7 +4200,23 @@ async function handleSongCall(call) {
       return;
     }
 
-    const action = String(args.action || 'make').toLowerCase().trim();
+    const action = String(args.action || '').toLowerCase().trim();
+    /* BUILD 263. THE MAKING IS THE DOOR'S, NOT THE MOUTH'S.
+       17 Nov 2026, 16:33, on build 262: he answered the sound with "alternative pop", the door held the make
+       and asked him the picture in that same second - and the mouth called this act, whose own beats knew
+       nothing about a picture, so it fell straight through to a make. The song left, his question was never
+       asked, and he heard "that song is being made now" where the script says "do you want a cover picture".
+       So the mouth can no longer make anything at all. It may report on a song he has asked for, or send him
+       one he already has. The making is the door's own script, and the door makes the song. */
+    if (action === 'make' || action === 'new' || action === 'again' || action === '') {
+      logLine('song.make.refused.mouth', action || '(none)', { level: 'warn', target: 'music' });
+      railNote('the making is the door\u2019s own');
+      result = 'Nothing has been made from here, and nothing will be: the door holds the making and asks its '
+        + 'questions itself. It asks what the song should say, then what kind of music, then whether he wants '
+        + 'a picture, and it makes the song once he has answered. Say nothing about a song being made or on its '
+        + 'way. If one of those questions is open, ask that one question and stop.';
+      return;
+    }
     if (action === 'check') {
       railAsked = true;
       const r = await withTimeout(
