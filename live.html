@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T20:35';
-const BUILD_NO = 283;
+const BUILD = '2026-11-17T20:50';
+const BUILD_NO = 284;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5425,6 +5425,29 @@ function judgeClaim() {
     const amnesia = /\bi\s+(?:only\s+)?(?:hold|keep|have)\s+(?:only\s+)?this\s+session\b|\bi\s+(?:do\s+not|don'?t)\s+(?:hold|keep|retain)\s+(?:any\s+)?(?:memory|record)\b|\bi\s+(?:can'?t|cannot)\s+(?:see|access|recall)\s+(?:your|the|any)\s+(?:earlier|previous|prior|last)\b|\bcould\s+you\s+(?:please\s+)?(?:repeat|say\s+that\s+again)\b/i;
     if (amnesia.test(t)) {
       const beat = openJourneyBeat();
+      /* BUILD 284. 17 Nov 2026, 18:23:54 and 18:24:06, right after a good run: his song was in the studio and the
+         mouth answered him with "I hold only this session, Boss, so tell me again what matters. What should the
+         song say?" - twice, word for word, after he said "I didn't ask for that. That was the previous song" and
+         then "I already told you." The amnesia guard existed but only spoke when a question was open, and a song
+         in the studio opens no question, so the apology stood. He is never asked to repeat what the door already
+         holds: if a song is being made, say that and say nothing was lost; if nothing is open, say nothing is
+         lost. The apology for an amnesia the door does not have is never the answer. */
+      const flying = (() => { try { return !!(songInFlight() || songMaking()); } catch (e) { return false; } })();
+      if (!beat && flying) {
+        logLine('claim.amnesia', 'the mouth apologised for a memory it has while his song was in the studio',
+          { level: 'warn', target: 'claim' });
+        doorCorrect('That song is being made now, Boss, and nothing has been lost.',
+          'His song is in the studio and nothing is open to ask. Say in one short line that it is being made and '
+          + 'that nothing was lost. Never ask him to repeat himself.', false);
+        return;
+      }
+      if (!beat && !flying) {
+        logLine('claim.amnesia', 'the mouth apologised for a memory it has, and nothing at all is open to put back',
+          { level: 'warn', target: 'claim' });
+        doorCorrect('Nothing is lost, Boss. Everything you have told me is still on the record.',
+          'Nothing is open to ask and nothing was lost. Say that in one short line and ask nothing.', false);
+        return;
+      }
       if (beat) {
         const lead = (songRoute && songRoute.pick === 'make' && !songDraft.said) ? 'A new one, then. ' : '';
         const line = lead + beat;
