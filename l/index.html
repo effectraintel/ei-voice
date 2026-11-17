@@ -54,6 +54,54 @@
   .from{ margin:12px 0 0; font-size:13px; color:var(--dim); }
   .from b{ font-weight:500; color:#c9c0b2; }
   audio{ width:100%; margin:20px 0 0; height:38px; filter:saturate(0) contrast(.94) brightness(1.06); }
+
+  /* BUILD 271. THE PLAYER IS OURS, NOT THE BROWSER'S.
+     17 Nov 2026, after he opened his own song: "it didn't even open in the player look and feel we created just a
+     link with a play button." That is exactly what it was - a native <audio controls>, the browser's grey bar with
+     a triangle on it - and the words were folded away behind a closed "The words" row, so they were never read.
+     So the song now plays in an EI player (one gold action: play or pause, a hairline that fills, the clock) and
+     the words sit open underneath it, on the same page as the picture they belong to. */
+  .player{
+    display:flex; align-items:center; gap:14px; margin:22px 0 0;
+    padding:14px 16px; border:1px solid var(--border); border-radius:12px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));
+  }
+  .pp{
+    flex:0 0 auto; width:46px; height:46px; border-radius:50%;
+    border:1px solid var(--gold-soft); background:transparent; color:var(--gold);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; transition:background .18s ease, border-color .18s ease;
+  }
+  .pp:hover{ background:var(--gold-faint); border-color:var(--gold) }
+  .pp:focus-visible{ outline:2px solid var(--gold-soft); outline-offset:3px }
+  .pp svg{ width:16px; height:16px; display:block; fill:currentColor }
+  .pp.playing{ background:var(--gold); border-color:var(--gold); color:var(--char) }
+  .track{ flex:1 1 auto; min-width:0 }
+  .bar{
+    position:relative; height:18px; display:flex; align-items:center; cursor:pointer; touch-action:none;
+  }
+  .bar::before{ content:''; position:absolute; left:0; right:0; height:1px; background:var(--border) }
+  .fill{ position:absolute; left:0; height:1px; width:0; background:var(--gold) }
+  .dot{
+    position:absolute; left:0; width:7px; height:7px; border-radius:50%; background:var(--gold);
+    transform:translateX(-3.5px); opacity:0; transition:opacity .18s ease;
+  }
+  .bar:hover .dot, .player.touched .dot{ opacity:1 }
+  .times{
+    display:flex; justify-content:space-between; margin-top:2px;
+    font-size:11px; letter-spacing:.12em; color:var(--dimmer); font-variant-numeric:tabular-nums;
+  }
+  .words{ margin:26px 0 0; }
+  .words h2{
+    font-family:var(--serif); font-weight:400; font-size:15px; letter-spacing:.02em;
+    margin:0 0 14px; color:#c9c0b2;
+  }
+  .words .tag{
+    margin:18px 0 8px; font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--gold-soft);
+  }
+  .words .tag:first-of-type{ margin-top:0 }
+  .words .line{ margin:0; font-size:15px; line-height:1.85; color:#cdc4b9 }
+  .words .gap{ height:10px }
   .hair{ height:1px; background:var(--border); margin:20px 0 0; border:0; }
   .stamp{ margin:14px 0 0; font-size:12px; color:var(--dim); letter-spacing:.01em; }
   .stamp b{ color:#c9c0b2; font-weight:500 }
@@ -116,9 +164,6 @@
   // The engine app. One constant: the address can move without this page caring.
   var ENGINE = 'https://solene-7ba0f3a1.base44.app';
   var DOOR = 'https://door.effectra.ai';
-  // Keeping a gift is not the door's job: the postbox hands over, and claiming is where a handle
-  // (a key) is minted. That lives on the channel host, at one public address.
-  var CLAIM = 'https://matrix.effectra.ai/_ei/claim';
 
   var gift = document.getElementById('gift');
   var load = document.getElementById('load');
@@ -166,6 +211,25 @@
     foot.className = '';
   }
 
+  function clock(sec) {
+    var t = Math.max(0, Math.round(Number(sec) || 0));
+    var m = Math.floor(t / 60), r = t % 60;
+    return m + ':' + String(r).padStart(2, '0');
+  }
+
+  // A lyric line that is only a tag is a label, not a line to sing.
+  function wordsBlock(words) {
+    var out = '<section class="words"><h2>The words</h2>';
+    String(words).split(/\r?\n/).forEach(function (raw) {
+      var line = String(raw).trim();
+      if (!line) { out += '<div class="gap"></div>'; return; }
+      var tag = line.match(/^\[([^\]]+)\]$/);
+      if (tag) { out += '<p class="tag">' + esc(tag[1]) + '</p>'; return; }
+      out += '<p class="line">' + esc(line.replace(/^\[([^\]]+)\]\s*/, '')) + '</p>';
+    });
+    return out + '</section>';
+  }
+
   function draw(d) {
     load.className = 'hide';
     gift.className = '';
@@ -190,7 +254,14 @@
         + '<p>The thirty days for this gift have been and gone, so it is resting rather than playing. '
         + 'It is <b>not lost</b>: it is held whole, with its picture and its proof, waiting for you.</p></div>';
     } else {
-      html += '<audio id="player" controls preload="metadata" src="' + esc(d.stream) + '"></audio>';
+      html += '<div class="player" id="pl">'
+        + '<button class="pp" id="pp" type="button" aria-label="Play">'
+        + '<svg viewBox="0 0 24 24" id="ppicon"><path d="M8 5v14l11-7z"/></svg></button>'
+        + '<div class="track">'
+        + '<div class="bar" id="bar"><div class="fill" id="fill"></div><div class="dot" id="dot"></div></div>'
+        + '<div class="times"><span id="el">0:00</span><span id="du">' + (d.duration ? clock(d.duration) : '0:00') + '</span></div>'
+        + '</div></div>'
+        + '<audio id="player" preload="metadata" src="' + esc(d.stream) + '"></audio>';
       html += '<p class="from">' + fromLine + '</p>';
       html += '<hr class="hair" />';
       html += '<p class="stamp">Sealed <b>' + when(d.sealed_at) + '</b>';
@@ -213,32 +284,92 @@
     // The ask, once, and never before the song. Full play is the gift; keeping it is the only thing on offer.
     if (held) {
       html += '<div class="keep"><h2>Want it back?</h2>'
-        + '<p>A gift is kept whole until it is claimed, and claiming never expires. Keep it and everything sent '
-        + 'to you comes with it: the recording, its proof, the picture, and a handle of your own.</p>'
-        + '<a href="' + CLAIM + '?c=' + encodeURIComponent(d.code) + '">Keep it now</a></div>';
+        + '<p>A gift is kept whole until it is claimed. Open an account at the door and everything sent to you '
+        + 'comes with it, proof and picture included.</p>'
+        + '<a href="' + DOOR + giftAddr(d) + '">Open the door</a></div>';
     } else {
       html += '<div class="keep"><h2>This is yours to keep.</h2>'
         + '<p>It plays in full here for ' + (claimed ? 'good' : (d.days_left === 1 ? 'the rest of today' : (d.days_left + ' more days')))
         + '. Keeping it means a handle at the door: the song then lives in your own vault, with this proof, '
         + 'and it is yours for good.</p>'
-        + '<a href="' + CLAIM + '?c=' + encodeURIComponent(d.code) + '">Keep it</a></div>';
+        + '<a href="' + DOOR + giftAddr(d) + '">Keep it</a></div>';
     }
 
-    if (d.words) {
-      html += '<details><summary style="margin-top:18px"><span class="p">+</span> The words</summary>'
-        + '<p class="note" style="font-style:normal; font-size:14.5px; line-height:1.75; color:#c3bab0">'
-        + esc(d.words) + '</p></details>';
-    }
+    /* The words are the song, not a footnote: they sit open under the player, with [Verse] / [Chorus] as small
+       gold labels instead of raw brackets. Nothing is folded away that he came to read. */
+    if (d.words) html += wordsBlock(d.words);
 
     gift.innerHTML = html;
 
-    var player = document.getElementById('player');
-    if (player) {
-      player.addEventListener('ended', function () {
-        var keep = gift.querySelector('.keep');
-        if (keep) keep.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
+    wirePlayer();
+  }
+
+  /* One gold action at a time: the button plays or it pauses, and the hairline shows where the song is. Scrubbing
+     works with a finger and with a mouse, because a man listening on a phone drags it. */
+  function wirePlayer() {
+    var audio = document.getElementById('player');
+    var btn = document.getElementById('pp');
+    var icon = document.getElementById('ppicon');
+    var bar = document.getElementById('bar');
+    var fill = document.getElementById('fill');
+    var dot = document.getElementById('dot');
+    var el = document.getElementById('el');
+    var du = document.getElementById('du');
+    var pl = document.getElementById('pl');
+    if (!audio || !btn || !bar) return;
+
+    var PLAY = '<path d="M8 5v14l11-7z"/>';
+    var PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+
+    function paint() {
+      var dur = isFinite(audio.duration) ? audio.duration : 0;
+      var pct = dur ? Math.min(1, audio.currentTime / dur) : 0;
+      fill.style.width = (pct * 100) + '%';
+      dot.style.left = (pct * 100) + '%';
+      el.textContent = clock(audio.currentTime);
+      du.textContent = dur ? clock(dur) : du.textContent;
     }
+    function setPlaying(on) {
+      btn.classList.toggle('playing', on);
+      icon.innerHTML = on ? PAUSE : PLAY;
+      btn.setAttribute('aria-label', on ? 'Pause' : 'Play');
+    }
+
+    btn.addEventListener('click', function () {
+      if (audio.paused) { audio.play().catch(function () { /* a browser that refuses says so silently */ }); }
+      else { audio.pause(); }
+    });
+    audio.addEventListener('play', function () { setPlaying(true); });
+    audio.addEventListener('pause', function () { setPlaying(false); });
+    audio.addEventListener('timeupdate', paint);
+    audio.addEventListener('loadedmetadata', paint);
+    audio.addEventListener('ended', function () {
+      setPlaying(false); paint();
+      var keep = gift.querySelector('.keep');
+      if (keep) keep.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    function seek(ev) {
+      var dur = isFinite(audio.duration) ? audio.duration : 0;
+      if (!dur) return;
+      var r = bar.getBoundingClientRect();
+      var x = (ev.touches && ev.touches[0] ? ev.touches[0].clientX : ev.clientX) - r.left;
+      audio.currentTime = Math.max(0, Math.min(dur, (x / r.width) * dur));
+      paint();
+    }
+    bar.addEventListener('pointerdown', function (ev) {
+      pl.classList.add('touched');
+      bar.setPointerCapture && bar.setPointerCapture(ev.pointerId);
+      seek(ev);
+      var move = function (e) { seek(e); };
+      var up = function () {
+        bar.removeEventListener('pointermove', move);
+        bar.removeEventListener('pointerup', up);
+      };
+      bar.addEventListener('pointermove', move);
+      bar.addEventListener('pointerup', up);
+    });
+    paint();
   }
 
   var c = code();
