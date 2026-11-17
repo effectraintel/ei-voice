@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T15:15';
-const BUILD_NO = 256;
+const BUILD = '2026-11-17T15:25';
+const BUILD_NO = 257;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2984,20 +2984,16 @@ function afterSoundBeat() {
      chooses what happens when the song lands. On 253 it became a beat, so the row appeared and the making carried on
      regardless, which read as the door running ahead of him. Nothing is held now, and nothing runs ahead either:
      the answer simply decides whether a picture is drawn on landing. */
-  songDraft.askBeat = '';
-  /* BUILD 253. The question goes on his screen, and the mouth is told to ask nothing about it. On 252 the mouth was
-     told to ask it in one short line and asked it in the same breath as the sound, which is the one thing this beat
-     exists to prevent. A tap cannot be bundled. */
-  try { askCoverFor({ title: String(songDraft.said || '').slice(0, 40) }, 'making'); } catch (e) {}
-  /* BUILD 255. It is SAID as well as shown. On 254 the row arrived in silence, which is nothing at all to a man
-     speaking rather than tapping. One short spoken line, in this turn only, about the picture and nothing else -
-     the sound is already answered, so there is no sequence left to run together. */
+  /* BUILD 257. THE SCRIPT, AND NOTHING BESIDE IT. The picture is the next line of the script: it holds the song for a
+     yes or a no and it puts nothing on his screen. No Card, no tap row, no second ask, no share popup. He asked for a
+     basic flow, and every extra mechanism we added turned into another thing that could arrive at the wrong moment.
+     The answer is taken by the door's own router, never guessed from what the mouth says. */
+  songDraft.askBeat = 'cover';
   try {
-    doorNote('The sound is kept. Say ONE short line in your own words asking whether he wants a cover picture '
-      + 'drawn for it, and tell him he can simply tap yes or no on the row on his screen. Say nothing about the '
-      + 'sound, do not ask what the picture should be, offer no versions, and ask nothing else.', true);
+    doorNote('Ask him exactly this, one short line and nothing before or after it: "Do you want a cover picture '
+      + 'to go with it?" Say nothing about the sound, offer no versions, describe no pictures, and make nothing yet.', true);
   } catch (e) {}
-  try { railNote('journey \u00b7 sound locked \u00b7 picture asked, spoken and shown'); } catch (e) {}
+  try { railNote('journey \u00b7 sound locked \u00b7 picture asked, in words'); } catch (e) {}
 }
 
 function chainBeat(beat) {
@@ -3064,34 +3060,8 @@ function songHearTurn(heard) {
   // Build 138: a beat is open, so his next answer is that beat's answer, taken here rather than trusting
   // the mouth to pass it on. "You choose" skips it, which is the promise that keeps the journey honest.
   const beat = songDraft.askBeat || '';
-    /* BUILD 255. THE PICTURE BY VOICE. The row is on his screen and nothing is held up by it, so a man talking may
-       answer the picture without touching anything. Only a plain yes or no, and only while the row is fresh (three
-       minutes), so an unrelated "yes" in a later sentence is never read as consent to spend on a drawing. */
-    if (!beat && songDraft.coverPending && (Date.now() - songDraft.coverPending) < 3 * 60 * 1000) {
-      const short = String(t || '').trim();
-      const saidYes = /^(?:yes|yeah|yep|y|sure|ok|okay|please|do it|go ahead|draw it|draw one|definitely|absolutely|of course)\b/i.test(short);
-      const saidNo = /^(?:no|nope|nah|n|skip|leave it|bare|nothing|without)\b/i.test(short);
-      if (saidYes || saidNo) {
-        const want = saidYes;
-        songDraft.cover = want;
-        songDraft.coverAnswered = true;
-        songDraft.coverPending = 0;
-        shareArt = { want: want, brief: '', url: '' };
-        artLockedAt = Date.now();
-        artOpen = null;
-        logLine('song.journey.cover.heard', want ? 'a picture, said out loud' : 'no picture, said out loud',
-          { level: 'info', target: 'music' });
-        chainBeat('cover');
-        try {
-          doorNote(want
-            ? 'The picture is answered out loud: yes, and it is drawn the moment the song lands. Do not ask about '
-              + 'it again and draw nothing now. Make the song.'
-            : 'The picture is answered out loud: no, so the song goes bare. Ask nothing more about it. Make the song now.', true);
-        } catch (e) {}
-        railNote(want ? 'journey \u00b7 picture \u00b7 yes, spoken' : 'journey \u00b7 picture \u00b7 no, spoken');
-        return;
-      }
-    }
+    /* BUILD 257. One answer path for the picture: the cover beat in the script. The row is gone, so the separate
+       spoken-picture branch written for it goes with it. */
     if (beat) {
     if (JOURNEY_SKIP.test(t)) {
       songDraft.skipped.push(beat);
@@ -3181,11 +3151,14 @@ function songHearTurn(heard) {
       artLockedAt = Date.now();
       logLine('song.journey.cover', y ? 'a picture, drawn when it lands' : 'no picture', { level: 'info', target: 'music' });
       chainBeat('cover');
-      doorNote(y
-        ? 'The picture is answered: yes. It is drawn the moment the song lands, from the song\'s own scene, and he '
-          + 'is asked nothing more about it. Make the song now.'
-        : 'The picture is answered: no, so the song goes bare and nothing is drawn. Make the song now.', true);
-      railNote(y ? 'journey \u00b7 picture \u00b7 yes' : 'journey \u00b7 picture \u00b7 no');
+      /* BUILD 257. The last line of the script is his to hear and the making is the door's own: one short sentence,
+         and the song goes ahead. Nothing else is asked, offered or announced. */
+      try {
+        doorNote('Say exactly this, one short line: "It will be on your shelf soon." Then say nothing else: ask '
+          + 'nothing, offer nothing, do not mention the picture again and do not talk about sharing.', true);
+      } catch (e) {}
+      try { armMake(); } catch (e) {}
+      railNote(y ? 'journey \u00b7 picture \u00b7 yes \u00b7 making' : 'journey \u00b7 picture \u00b7 no \u00b7 making');
       return;
     }
     if (beat === 'feel' && words.length <= 18) {
@@ -7199,42 +7172,10 @@ async function madeReady(r) {
     ? { want: coverInAsk ? true : !!(heldArt && heldArt.want),
         brief: (heldArt && heldArt.brief) || '', url: (heldArt && heldArt.url) || '' }
     : { want: false, brief: '', url: '' };
-  if (!artHeld && !songDraft.coverAnswered) {
-    artOpen = { at: Date.now(), request_id: landedReq, title: landedTitle };
-    /* BUILD 251: the question goes on his screen as a tap, once per song, and the mouth is told not to ask it in
-       words. Left to the mouth on 17 Nov, it was never asked at all and the cover was drawn at share time instead. */
-    if (madeShare && !madeShare.coverAsked) {
-      madeShare.coverAsked = true;
-      try { askCoverFor(shareCard); } catch (e) {}
-      try {
-        doorNote('The cover question is on his screen as a tap, so do not ask it in words and do not offer '
-          + 'versions or descriptions. Say one short line that it is on his shelf, and leave the picture to the tap.', true);
-      } catch (e) {}
-      artOpen = null;          // nothing for the mouth to re-ask: the question is already in front of him
-    }
-  }
-  /* Build 174: the question is checked, not assumed. On 12 Nov the note that told the mouth to ask it never
-     left the door's own queue, so the door believed the picture question had been asked and it never was.
-     Twenty seconds after the landing, if the window is still open and the mouth has not mentioned a picture
-     at all, it asks once more - once, and nothing is drawn until he answers. */
-  if (!artHeld) {
-    setTimeout(() => {
-      try {
-        if (!artOpen || artOpen.request_id !== landedReq) return;   // he answered, or another song opened it
-        // Build 244: the question may already be on his screen, or already spoken. Then it is not asked again.
-        if (Date.now() - pictureSpokenAt < 20000) return;
-        const toldNow = String((typeof said !== 'undefined' && said && said.engine) || '');
-        if (/\b(?:picture|cover|artwork|image)\b/i.test(toldNow) && /\?/.test(toldNow)) return;
-        logLine('made.descent.retry', 'the picture question was not asked · asking once more',
-          { level: 'warn', target: 'coverDraw' });
-        descentAskedAt = Date.now();       // the question is live again the moment it is said
-        doorAsk('Would you like a picture to go with "' + landedTitle + '"? What should it show?',
-          'Ask the last question of the making now, in one short line: would he like a picture to go '
-          + 'with "' + landedTitle + '", and what should it show. Nothing has been drawn and nothing has '
-          + 'been sent.', true);
-      } catch (e) {}
-    }, 20000);
-  }
+  /* BUILD 257. NOTHING AT LANDING. The picture was settled in the making, in words, by his own answer, so the landing
+     has no question to ask: no card, no tap row and no twenty-second re-ask. The song simply appears on the shelf, with
+     a picture drawn on its own record if he said yes. Sharing starts with him, from the shelf.
+   */
   if (coverInAsk) logLine('made.cover.ask.at.landing', 'drawn at landing, at his ask',
     { level: 'info', target: 'coverDraw' });
   // Build 139: a yes given while the song was still being made pays for its picture HERE, the moment the song
