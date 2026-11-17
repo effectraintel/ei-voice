@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 270;
+const BUILD_NO = 271;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -578,14 +578,21 @@ const mouthMaySound = () => !typed() && !turnBeganMuted;
    this rule kept saying "a TAP, not a sentence", which is a rule the theatre had already left. It also predated the
    words question he added the same evening. So the rule is now what the theatre is: the door issues each question as
    its own note, one at a time, and the mouth asks only for the note it was given. */
-const PICTURE_RULE = 'THE SCRIPT HAS FOUR ASKS AND THE DOOR ISSUES EACH ONE. In order: what the song should say, then '
-  + 'whether to build around his words or leave them as they are, then what kind of music, then whether he wants a '
-  + 'cover picture. Each one arrives as its own note. Ask only the question in the note you were given, in one short '
-  + 'line: never two in the same breath, never one before the door asks for it, and never a question of your own. He '
-  + 'answers in words, and the door takes the answer. Say nothing about how long a song will be, nothing about how an '
-  + 'earlier one came out, and nothing about the picture as a tap, a row or a card. When the picture is settled a yes '
-  + 'is drawn the moment the song lands and a no leaves it bare. Never say a cover is drawn when he shares it: that '
-  + 'reading was withdrawn on 10 Nov.';
+const PICTURE_RULE = 'THE DOOR HOLDS THE SCRIPT AND YOU DO NOT. It has four asks - what the song should say, whether '
+  + 'to build around his words, what kind of music, whether he wants a cover picture - and each one arrives as its own '
+  + 'note, one at a time. THIS LIST IS NOT A CHECKLIST TO RECITE: ask only the question named in the note in front of '
+  + 'you, in one short line, and say nothing about any other line of the script. Never two questions in the same '
+  + 'breath, never one before the door asks for it, never a question of your own. '
+  /* BUILD 271. 17 Nov 2026, 18:15. The note asked for the kind of music and the mouth said "What kind of music,
+     Boss? And do you want a cover picture?" - it recited the script from this very rule and then, a turn later,
+     invented a screen that does not exist: "While that sheet is open, just tap the picture you want." There is no
+     sheet. It is named here because a model that fills a gap with a picture of a screen will do it again. */
+  + 'THERE IS NO SHEET, no row, no card and no tapping: nothing about the making appears on his screen except what '
+  + 'you say out loud. Never tell him to tap, choose, look at or open anything, and never mention a sheet, a panel, a '
+  + 'picker, an address box or a message box. He answers in words, and the door takes the answer. '
+  + 'Say nothing about how long a song will be, nothing about how an earlier one came out. When the picture is '
+  + 'settled a yes is drawn the moment the song lands and a no leaves it bare, and you never say a cover is drawn '
+  + 'when he shares it: that reading was withdrawn on 10 Nov.';
 
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
@@ -3170,6 +3177,29 @@ function songHearTurn(heard) {
       songDraft.askBeat = '';
       logLine('song.journey.sound', songDraft.sound, { level: 'info', target: 'music' });   /* build 259: the log says what was kept, not the word that matched */
       chainBeat('sound');
+      /* BUILD 271. If he answered the picture in the same sentence, it is answered: asking again is the door
+         talking over him, and leaving the beat open is what stopped this song from ever being made. */
+      const picNow = pictureAnswerIn(t);
+      if (picNow) {
+        songDraft.cover = picNow === 'yes';
+        songDraft.coverAnswered = true;
+        songDraft.coverTries = 0;
+        pictureDone = true;
+        shareArt = { want: songDraft.cover, brief: '', url: '' };
+        artLockedAt = Date.now();
+        logLine('song.journey.cover', (songDraft.cover ? 'a picture' : 'no picture')
+          + ' \u00b7 answered in the same breath as the sound', { level: 'info', target: 'music' });
+        chainBeat('cover');
+        try {
+          doorNote('Say exactly this, one short line: "It will be on your shelf soon." Then say nothing else: ask '
+            + 'nothing about a picture, offer nothing, do not talk about sharing, and never say you will let him '
+            + 'know or come back to him, because nothing here can send him a message later: it simply lands on his '
+            + 'shelf.', true);
+        } catch (e) {}
+        try { armMake(); } catch (e) {}
+        railNote('journey \u00b7 sound \u00b7 picture \u00b7 ' + (songDraft.cover ? 'yes' : 'no') + ' \u00b7 making');
+        return;
+      }
       afterSoundBeat();
       return;
     }
@@ -3235,8 +3265,21 @@ function songHearTurn(heard) {
 
     /* ---- BUILD 252: THE PICTURE BEAT ---- */
     if (beat === 'cover') {
-      const y = /^(?:yes|yeah|yep|y|sure|ok|okay|please|do it|go ahead|definitely|absolutely|of course)\b/i.test(t.trim());
-      const n = /^(?:no|nope|nah|n|skip|not now|leave it|bare|nothing|without)\b/i.test(t.trim());
+      /* BUILD 271. The sound is never lost to the picture: if this turn names a kind of music and the slot is
+         still empty, the sound is taken here first. (His 18:15 run answered the picture beautifully and gave the
+         sound in the same sentence; the door had the sound but not the picture. Same fault, other way round.) */
+      if (!soundIsReal(songDraft.sound)) {
+        const rs = soundIsReal(t);
+        if (rs) {
+          songDraft.sound = soundPhrase(t) || rs;
+          logLine('song.journey.sound', songDraft.sound + ' \u00b7 taken while the picture was open',
+            { level: 'info', target: 'music' });
+          chainBeat('sound');
+        }
+      }
+      const inSentence = pictureAnswerIn(t);
+      const y = inSentence === 'yes' || /^(?:yes|yeah|yep|y|sure|ok|okay|please|do it|go ahead|definitely|absolutely|of course)\b/i.test(t.trim());
+      const n = inSentence === 'no' || /^(?:no|nope|nah|n|skip|not now|leave it|bare|nothing|without)\b/i.test(t.trim());
       if (!y && !n) {
         songDraft.coverTries = (songDraft.coverTries || 0) + 1;
         if (songDraft.coverTries < 2) {
@@ -4112,7 +4155,10 @@ function doorPicksSound(subject) {
    soundIsReal stays the judge of whether it IS a sound at all, and this reads it back whole. English puts the qualifier
    before the noun, so the phrase is the member with up to two words before it and one after, filler dropped. A long
    answer still yields a short phrase, so a sentence can never become a style. */
-const SOUND_FILLER = new Set(['a','an','the','some','kind','kinds','of','sort','sorts','type','types','something','like','music','song','songs','track','style','styles','please','make','makes','it','be','should','i','want','wants','would','my','me','maybe','just','and','or','with','in','on','that','this','sound','sounds','bit','little','more','very','really']);
+/* BUILD 271. 17 Nov 2026, 18:15, his run: "So it should be a romantic ballad. And yes, I want a cover picture."
+   and the sound was stored as "romantic ballad yes" - his answer to the picture was swallowed by the sound phrase.
+   A picture word is never part of a style, so it is filler here and the sentence's own answer is read separately. */
+const SOUND_FILLER = new Set(['yes','yeah','yep','no','nope','okay','ok','cover','picture','art','artwork','image','photo','also','too','then','while','open','sheet','tap','a','an','the','some','kind','kinds','of','sort','sorts','type','types','something','like','music','song','songs','track','style','styles','please','make','makes','it','be','should','i','want','wants','would','my','me','maybe','just','and','or','with','in','on','that','this','sound','sounds','bit','little','more','very','really']);
 function soundPhrase(answer) {
   const raw = String(answer || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!raw || !soundIsReal(raw)) return '';
@@ -4136,6 +4182,20 @@ function soundPhrase(answer) {
   while (parts.length > 1 && (tail.test(parts[0]) || LEAD.test(parts[0]))) parts = parts.slice(1);
   phrase = parts.join(' ');
   return phrase.split(' ').slice(0, 4).join(' ');
+}
+
+/* BUILD 271. HE MAY ANSWER TWO LINES IN ONE BREATH, AND THE DOOR MUST TAKE BOTH.
+   17 Nov 2026, 18:15. He was asked the sound and the mouth had recited the picture question beside it, so he
+   answered both in one sentence: "So it should be a romantic ballad. And yes, I want a cover picture." The
+   sound beat took the whole turn, the picture beat stayed open, armMake held, and no song was ever made - a
+   request that never reached the record. So a picture answer is read from the same sentence, wherever the yes
+   or the no sits inside it, and the anchored word-at-the-front test stays only as the plain case. */
+function pictureAnswerIn(text) {
+  const t = ' ' + String(text || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  if (!/\b(?:cover|picture|artwork|art|image|photo)\b/.test(t)) return '';
+  if (/\b(?:no|nope|nah|not|without|bare|skip|nothing|dont|don t)\b/.test(t)) return 'no';
+  if (/\b(?:yes|yeah|yep|sure|please|want|wanted|would|like|do|okay|ok|go|ahead|definitely|absolutely)\b/.test(t)) return 'yes';
+  return '';
 }
 
 function soundIsReal(answer) {
