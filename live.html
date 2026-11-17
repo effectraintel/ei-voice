@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T11:20';
-const BUILD_NO = 250;
+const BUILD = '2026-11-17T14:20';
+const BUILD_NO = 251;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6833,6 +6833,51 @@ function descentHear(heard) {
   railNote('descent · his yes · drawing' + (brief ? ' · ' + brief.slice(0, 40) : ' · from the song'));
   try { drawDescent(); } catch (e) {}
 }
+/* ---- BUILD 251: ONE QUESTION, ON THE SCREEN, NOT IN THE MOUTH ----
+   17 Nov 2026. The rule already said the picture is the last question of the making, but the asking was left to
+   the mouth: his song landed, nothing was asked, and the cover was drawn on the share sheet instead. A question
+   that decides a spend is a tap. One row, two answers, asked once per song, and no third question about what the
+   picture should be, because the song's own scene is the brief. Yes draws it there and then; no leaves it bare. */
+function askCoverFor(card) {
+  const c = card || {};
+  const wrap = document.createElement('div');
+  wrap.className = 'coverask';
+  wrap.style.cssText = 'margin:10px 0 2px;padding:11px 12px;border:1px solid #2f2b24;border-radius:10px;background:#12110e';
+  const q = document.createElement('div');
+  q.textContent = 'do you want a cover image drawn for it? one drawing, or leave it bare.';
+  q.style.cssText = 'font-size:13px;color:#e8dfcc;line-height:1.45;margin-bottom:9px';
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+  const answer = (want) => {
+    artLockedAt = Date.now();
+    artOpen = null;
+    shareArt = { want: !!want, brief: '', url: '' };
+    try { saveDraft(); } catch (e) {}
+    if (want) {
+      logLine('cover.yes', 'drawing one \u00b7 ' + String(c.title || ''), { level: 'info' });
+      try { drawDescent(); } catch (e) {}
+    } else {
+      logLine('cover.no', 'left bare \u00b7 ' + String(c.title || ''), { level: 'info' });
+    }
+  };
+  const mk = (label, want) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.cssText = 'border-radius:8px;padding:9px 10px;font-size:11px;letter-spacing:.04em;background:none;'
+      + 'border:1px solid #3a352d;color:#c9a86a';
+    b.onclick = () => { try { wrap.remove(); } catch (e) {} answer(want); };
+    row.appendChild(b);
+    return b;
+  };
+  mk('yes, draw one', true);
+  mk('no, leave it bare', false);
+  wrap.appendChild(q);
+  wrap.appendChild(row);
+  try { logEl.appendChild(wrap); logEl.scrollTop = logEl.scrollHeight; } catch (e) {}
+  return wrap;
+}
+
 async function drawDescent() {
   if (!shareArt || !shareArt.want) return;
   // Build 139: only a song that has landed gets a picture, and only its own record gets it. On 10 Nov a
@@ -7017,7 +7062,20 @@ async function madeReady(r) {
     ? { want: coverInAsk ? true : !!(heldArt && heldArt.want),
         brief: (heldArt && heldArt.brief) || '', url: (heldArt && heldArt.url) || '' }
     : { want: false, brief: '', url: '' };
-  if (!artHeld) artOpen = { at: Date.now(), request_id: landedReq, title: landedTitle };
+  if (!artHeld) {
+    artOpen = { at: Date.now(), request_id: landedReq, title: landedTitle };
+    /* BUILD 251: the question goes on his screen as a tap, once per song, and the mouth is told not to ask it in
+       words. Left to the mouth on 17 Nov, it was never asked at all and the cover was drawn at share time instead. */
+    if (madeShare && !madeShare.coverAsked) {
+      madeShare.coverAsked = true;
+      try { askCoverFor(shareCard); } catch (e) {}
+      try {
+        doorNote('The cover question is on his screen as a tap, so do not ask it in words and do not offer '
+          + 'versions or descriptions. Say one short line that it is on his shelf, and leave the picture to the tap.', true);
+      } catch (e) {}
+      artOpen = null;          // nothing for the mouth to re-ask: the question is already in front of him
+    }
+  }
   /* Build 174: the question is checked, not assumed. On 12 Nov the note that told the mouth to ask it never
      left the door's own queue, so the door believed the picture question had been asked and it never was.
      Twenty seconds after the landing, if the window is still open and the mouth has not mentioned a picture
@@ -8167,7 +8225,12 @@ function openShareSheet(card, art) {
     || (card.title && !card.url && /\b(?:made|song|tune|take)\b/i.test(String(card.sub || '')))));
   // What the sheet is to do about a picture. '' means he has not answered, and nothing is answered for him.
   // 'draw' pays for a new one, 'reuse' sends the picture the song already has, 'none' sends it bare.
-  let coverMode = (art && art.want) ? 'draw' : '';
+  /* BUILD 251. THE SHEET NEVER PRESELECTS A SPEND. A default is a silent yes, and a silent yes pays for a
+     drawing nobody asked for. The sheet opens on the picture the song already has; drawing a new one is a tap
+     he has to make himself. (Edwin, 17 Nov 2026: "it is a gap, that should default to send it with the picture
+     it has".) */
+  let coverMode = '';
+  let coverChosen = false;         // true only once he has answered the picture question himself
   let coverReuse = String((card && (card.img || card.cover_url)) || '');
   let coverAgain = false;   // the rail said this already went, so the next tap must be a second decision
   const artLine = document.createElement('div');
@@ -8196,12 +8259,17 @@ function openShareSheet(card, art) {
       }
       artText.style.display = coverMode === 'draw' ? 'block' : 'none';
     };
+    const settleCover = () => {
+      if (!coverMode) coverMode = coverReuse ? 'reuse' : 'none';
+      markChoice();
+    };
     const pick = (label, mode) => {
       const b = document.createElement('button');
       b.type = 'button'; b.textContent = label;
       b.style.cssText = 'border-radius:8px;padding:9px 8px;font-size:11px;letter-spacing:.04em;'
         + 'background:none;border:1px solid #3a352d;color:#9b9182';
       b.onclick = () => {
+        coverChosen = true;
         coverMode = mode;
         markChoice();
         if (mode === 'draw') { try { artText.focus(); } catch (e) {} }
@@ -8222,7 +8290,7 @@ function openShareSheet(card, art) {
         pick('yes, draw a cover', 'draw');
         pick('no, just send', 'none');
       }
-      markChoice();
+      settleCover();
     };
     buildChoices();
     // Ask the record what picture this song already has, so the sheet offers it instead of writing a fresh
@@ -8231,9 +8299,10 @@ function openShareSheet(card, art) {
       const lookRef = String(card.song_id || card.code || card.title || '');
       if (lookRef) {
         railPost('shelfShare', { action: 'art', ref: lookRef }).then((a) => {
-          if (!a || !a.ok || !a.cover_url || coverMode || coverReuse) return;
+          if (!a || !a.ok || !a.cover_url || coverChosen || coverReuse) return;
           coverReuse = String(a.cover_url);
           if (a.brief && !String(artText.value || '').trim()) artText.value = a.brief;
+          coverMode = 'reuse';       // the picture it has, never a second charge
           buildChoices();
           artLine.textContent = 'this song already has a picture. send it with that, or draw a new one.';
           railNote('sheet · this song already has a picture');
