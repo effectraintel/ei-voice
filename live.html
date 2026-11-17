@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T02:05';
-const BUILD_NO = 293;
+const BUILD = '2026-11-18T02:35';
+const BUILD_NO = 294;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4087,6 +4087,12 @@ function forkAnswer(heard) {
     songFork = 0; songForkAsks = 0;
     shareChoices = []; shareChoicesAt = 0;
     songRoute = { pick: 'share', at: Date.now() };
+    /* BUILD 294. THE DOOR HAS JUST ASKED FOR A TITLE, SO THE TITLE IS WHAT COMES NEXT.
+       17 Nov 2026, 23:46:54: he left the choice to the door ("And you choose one for me"), the fork closed with no
+       hunt armed, and then "animal", "Free Animal" and "free animal" were each met with "I couldn't find that one"
+       while the rail was never called once (claim.unbacked, railCallsThisTurn 0). A question and the arming of the
+       thing that answers it are one act: if the door asks which song, it is listening for the answer. */
+    awaitSong = Date.now();
     logLine('song.fork.answer', 'share · from the stores', { level: 'info', target: 'music' });
     /* Build 210. Nothing has been searched at this point, so there is no result and no failure to report.
        14 Nov 13:20: handed this note, the mouth answered "The sharing rail didn't answer, Boss" with no
@@ -4121,6 +4127,7 @@ function forkAnswer(heard) {
   if (defer) {
     songFork = 0; songForkAsks = 0;
     songRoute = { pick: 'share', at: Date.now() };
+    awaitSong = Date.now();          // build 294: the title he says next is the answer to this question
     logLine('song.fork.defer', 'he left it to the door · the branch that makes nothing', { level: 'info', target: 'music' });
     doorNote('He left the choice to the door, so it is a song from the stores: nothing is made. Say in one '
       + 'short line that you will find one, and ask him for the title.', true);
@@ -5810,6 +5817,23 @@ function judgeClaim() {
        "I can't search that song right now" - so he heard two false statements in a row and had to start again.
        A correction that has to be re-corrected is not a correction. Nothing was searched, so the door says exactly
        that, in its own line, and asks for the title. */
+    /* And if he had already told the door the title, asking him for it again is not a correction, it is a
+       second fault. 23:47-23:48 on 17 Nov: "animal", "Free Animal", "free animal" and finally "Free animal from
+       foreign air" were each answered "Nothing has been searched yet, which song is it?" - the door had the title
+       four times. If his words name something, they go to the rail now. */
+    /* Named hisWords, not said: `said` is the object holding the mouth's own text, and declaring it here shadowed
+       that object for the whole of judgeClaim, which threw on the first line and was swallowed by the guard's own
+       catch - the door went silent instead of correcting. The corpus caught it; nothing else would have. */
+    const hisWords = String(lastHeardText || '').trim();
+    const titleish = hisWords && !looksLikeIntentNotTitle(hisWords) && !isCheckIn(hisWords)
+      && !/^(?:hi|hello|hey|thanks|thank you|ok|okay|yes|no|cancel|stop)\b/i.test(hisWords);
+    if (titleish) {
+      logLine('claim.research', 'his words are searched now instead of asking again · ' + hisWords.slice(0, 60),
+        { level: 'warn', target: 'no-rail-call' });
+      awaitSong = Date.now();
+      try { noteSongAnswer(hisWords); } catch (e) {}
+      return;
+    }
     doorAsk('Nothing has been searched yet, Boss. Which song is it?',
       'say exactly this, in one line, and nothing else: "Nothing has been searched yet, Boss. Which song is it?"');
   } catch (e) {
