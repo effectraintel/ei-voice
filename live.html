@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T02:35';
-const BUILD_NO = 294;
+const BUILD = '2026-11-18T03:10';
+const BUILD_NO = 295;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1522,8 +1522,26 @@ window.addEventListener('pageshow', (e) => {
 // A home-screen app spends most of its life in the background. Two costs, and one of them is a lie: a socket
 // left running speaks a buffered turn when the app comes back (which is how one line arrives twice), and the
 // shelf polls keep paying for every suspended copy of an old document. So a hidden page holds nothing open.
+/* BUILD 295. A TAB SWITCH IS NOT A POCKET.
+   17 Nov 2026, 23:59: "When I play the song, I cannot talk to the voice on my mac?" He opened his song from
+   the shelf, which opens in its own tab (the cards have done that since build 281), and this listener closed
+   the microphone the moment the door lost focus - so the door was deaf for as long as he listened, and deaf
+   again every time he glanced at anything else. On a phone that rule is right: no microphone in a pocket. On a
+   machine with a mouse, the tab he switched to is still in front of him, so the door keeps its ears and only a
+   real absence ends it. */
+function glanceAway() {
+  try { return !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; }
+}
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    if (glanceAway()) {
+      if (sessionUp || listening) {
+        logLine('session.background', 'the tab lost focus: a tab switch is not a pocket, so the door kept its mic',
+          { level: 'info' });
+      }
+      return;
+    }
     // quiet, not closed: no microphone in a pocket, no mouth in another app, and the conversation kept
     try {
       if (sessionUp || listening) {
@@ -1538,7 +1556,12 @@ document.addEventListener('visibilitychange', () => {
   // back again: the same door, unless the away rule below has already ended it
   try {
     hiddenHold = false;
-    if (sessionUp && !listening) { warn('the door is still open. tap the circle to speak.'); }
+    /* Build 295: on a phone the mic was closed on the way out, and he came back to a door that needed a tap
+       before it could hear him again. Coming back to a door you left open should put you back in it. */
+    if (sessionUp && !listening) {
+      warn('the door is still open. listening again.');
+      try { openMic(); } catch (e) { warn('the door is still open. tap the circle to speak.'); }
+    }
   } catch (e) {}
 });
 
@@ -1552,6 +1575,7 @@ const AWAY_LIMIT_S = 120;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { hiddenAt = Date.now(); return; }
   if (!hiddenAt) return;
+  if (glanceAway()) { hiddenAt = 0; return; }      // build 295: a tab switch does not age the door
   const away = (Date.now() - hiddenAt) / 1000;
   hiddenAt = 0;
   if (away > AWAY_LIMIT_S && (sessionUp || listening)) {
