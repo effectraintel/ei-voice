@@ -1,3 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Build 197. The scale is pinned, and it has to be. His phone reported, twice in one sitting,
+     layout width 750 against a 375pt screen and scale 0.50: Safari had zoomed the page out to half
+     size, so the words went small, the right side fell off the edge and the rest of the door was
+     empty space. Between 22:51 and 22:56 the same page was seen at 0.50, 0.57, 0.68, 0.77, 0.81,
+     0.90, 1.02 and back - Safari moving the zoom while he was typing. A door is not a document to
+     be magnified: it is one room, and it is built for exactly the screen it is on. -->
+<!-- Build 203. He could not get out of the full chat screen: "there is no easy option for me to exit
+     the full chat screen mode where the shelf and the exit button etc is". His own log said why, at
+     00:28: the page was laid out on the full screen while iOS had panned what he could SEE 86px down
+     to reach the line he was typing (visualViewport offsetTop 86). A fixed band is fixed to the laid-out
+     screen, not to the panned one, so the band - status, room and leave - was 86px above the top of the
+     screen, and the conversation was cut at the top by the same 86px. The shell is now the part of the
+     screen he can actually see (--vvtop/--vvh from visualViewport, re-read on every pan), the band sits
+     in that shell instead of being pinned to the layout, and the way back to the room is a labelled
+     button instead of a bare chevron. -->
+<!-- Build 198. Two things he asked for on 13 Nov at 23:24, both about the same complaint: the door
+     kept moving things he needs. The top band (wordmark, door status, minimise) was in the flow, so
+     when the room shrank or the page was panned to reach a line he had to scroll back up to find it,
+     and once the chat was long it was simply gone. It is now pinned to the screen and the conversation
+     scrolls underneath it. And the world rail defaulted to Wikipedia because Wikipedia was the only
+     engine it was ever told to use: any public fact now goes to Google's own search first. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14110f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Effectra Intelligence — the live door</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23b08d2f' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23b08d2f'/%3E%3C/svg%3E">
+<style>
+  :root { --gold:#b08d2f; --char:#14110f; --ink:#efe9df; --dim:#9a9184; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--char); color:var(--ink);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  /* Build 194. The page is a room, not a document: it is exactly as tall as the screen and it does not
+     scroll. While the document could scroll, iOS could move the window past the end of a page that was
+     then made shorter for the keyboard, and the screen went black with the door's own content just
+     outside it. A fixed shell cannot be panned away. */
+  /* Build 195. The shell IS the viewport: no height by script, so there is no room past the content
+     for iOS to pan into, and nothing to disagree with. */
+  /* Build 197. Fixed positioning belongs on the body, not on the root: with <html> fixed the root
+     stopped being the document and iOS began reporting a layout viewport twice the screen. */
+  html { overflow:hidden; -webkit-text-size-adjust:100%; height:100%; }
+  /* Build 203. THE SHELL IS WHAT HE CAN SEE. iOS lays a fixed page out on the whole screen and then
+     pans what is visible (visualViewport.offsetTop) to reach the line being typed, and neither a laid
+     out nor a fixed element can see that pan. So the box is placed at the visible top and given the
+     visible height, and the band lives inside it. When the phone pans, the whole room moves with it. */
+  body { position:fixed; left:0; right:0; top:var(--vvtop, 0px); height:var(--vvh, 100%);
+         min-height:0; width:100%; max-width:100%; }
+  /* Build 198. The top safe area belongs to the pinned band, not to the page box. */
+  body { display:flex; flex-direction:column; min-height:0; overflow:hidden;
+         padding:0 18px calc(env(safe-area-inset-bottom) + 12px); }
+  /* Build 198. The band is fixed to the screen, not carried in the column. Edwin, 13 Nov 23:24:
+     "the top menu with the details on the door status and minimise option need to always be there
+     and not fall away when the chat gets going. I need to always go and scroll back to find it."
+     A thing he has to go and find is not a status line, it is a lost object. --head is measured from
+     the band itself and the words start below it, so nothing hides underneath. */
+  header { position:relative; flex:0 0 auto; z-index:30; text-align:center;
+    background:var(--char); border-bottom:1px solid rgba(176,141,47,.16);
+    padding:calc(env(safe-area-inset-top) + 12px) 18px 6px; }
+  .wordmark { letter-spacing:.34em; font-size:11px; color:var(--gold); text-transform:uppercase; }
+  .sub { margin-top:6px; font-size:12px; color:var(--dim); letter-spacing:.06em; }
+  .state { margin-top:8px; font-size:13px; color:var(--ink); letter-spacing:.04em; min-height:18px; }
+  .state .clock { color:var(--gold); font-variant-numeric:tabular-nums; }
+  .warn { display:none; margin:10px 0 0; padding:10px 12px; border:1px solid #5a3a1c; background:#241a10;
+    color:#e8cfae; font-size:12.5px; line-height:1.5; border-radius:10px; text-align:left; }
+  .warn.show { display:block; }
+  main { flex:1; min-height:0; overflow-y:auto; padding:6px 2px 4px; -webkit-overflow-scrolling:touch; }
+  .turn { margin:0 0 14px; max-width:92%; }
+  .turn.you { margin-left:auto; text-align:right; }
+  .who { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
+  /* A long unbroken word could always push a bubble wider than the screen: not clipped, overflowed. */
+  .said { white-space:pre-wrap; overflow-wrap:anywhere; }
+  .turn.you .said { color:#cfc6b6; }
+  .lat { margin-top:5px; font-size:11.5px; color:var(--gold); letter-spacing:.04em; }
+  /* the gate: a shut door is the default state, not an error state */
+  #gate { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+    background:rgba(12,11,10,.93); backdrop-filter:blur(6px); padding:22px; }
+  #gate.open { display:none; }
+  #gate .gcard { width:100%; max-width:390px; border:1px solid #2c2823; border-radius:14px;
+    background:#151311; padding:22px 20px; box-shadow:0 24px 60px rgba(0,0,0,.5); }
+  #gate .gtitle { font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--gold); margin-bottom:12px; }
+  #gate .gtext { font-size:14.5px; line-height:1.55; color:#d8d0c4; margin:0 0 16px; }
+  #gate .glabel { display:block; font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:#6f675b; margin-bottom:6px; }
+  #gate input { width:100%; box-sizing:border-box; padding:10px 12px; border-radius:9px; border:1px solid #332e28;
+    background:#0f0d0c; color:#efe7db; font:inherit; font-size:15px; margin-bottom:14px; }
+  #gate .gbtn { width:100%; padding:13px 14px; border-radius:10px; border:1px solid #6d5a33;
+    background:#241d13; color:var(--gold); font:inherit; font-size:14px; letter-spacing:.04em; cursor:pointer; }
+  #gate .gbtn:disabled { opacity:.5; }
+  #gate .galt { display:block; width:100%; margin-top:10px; padding:8px; background:transparent;
+    border:0; color:#6f675b; font:inherit; font-size:11.5px; letter-spacing:.06em; cursor:pointer; text-decoration:underline dotted; }
+  #gate .ghidden { display:none; }
+  #gate .gmsg { min-height:16px; margin-top:12px; font-size:12px; color:#e8cfae; line-height:1.5; }
+  #gate .gnote { margin-top:10px; font-size:11px; color:#5f5850; line-height:1.55; }
+  .sess { margin:0 0 14px; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+    color:#6f675b; text-align:center; }
+  footer { text-align:center; padding-top:8px; }
+  .voicebar { display:flex; align-items:center; justify-content:center; gap:12px; margin:2px 0 10px; }
+  #voicechip { font:inherit; font-size:11.5px; letter-spacing:.08em; color:var(--dim);
+    background:transparent; border:1px solid #3a332a; border-radius:999px; padding:5px 12px; cursor:pointer; }
+  #voicechip span { color:var(--gold); }
+  #voicesheet { display:none; position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 12px);
+    z-index:20; background:#1a1613; border:1px solid #3a332a; border-radius:14px; padding:14px 14px 10px;
+    box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #voicesheet.open { display:block; }
+  #voicesheet .shead { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+  #voicesheet .vgrid { display:flex; flex-wrap:wrap; gap:6px; }
+  #voicesheet .vbtn { font:inherit; font-size:12.5px; padding:7px 11px; border-radius:999px;
+    border:1px solid #3a332a; background:#221d18; color:#cfc6b6; cursor:pointer; }
+  #voicesheet .vbtn.on { border-color:var(--gold); color:var(--gold); background:#2a2016; }
+  #voicesheet .vnote { font-size:11.5px; color:var(--dim); margin-top:10px; line-height:1.5; }
+
+  /* Liveness in three acts, the rule he set on 4 Nov 2026: a press has to be
+     answered before anything slow happens, and the button has to show it is
+     hearing him. Act one, the arming ring, spins on touch, before the browser
+     has even asked for the microphone. Act two is his actual level. Act three is
+     the clock and the plain line when it hears nothing. */
+  button#mic { width:92px; height:92px; border-radius:50%; border:1px solid #3a332a; background:#1d1916;
+    color:var(--ink); display:grid; place-items:center; margin:0 auto 8px; --lvl:0;
+    transition:transform .12s, background .2s, border-color .2s, box-shadow .08s linear;
+    box-shadow:0 0 0 calc(var(--lvl) * 12px) rgba(176,141,47,calc(var(--lvl) * .16)); }
+  button#mic.live { border-color:var(--gold); background:#231c14; }
+  button#mic.arming { border-color:var(--gold); animation:armpulse 1s ease-in-out infinite; }
+  @keyframes armpulse {
+    0%   { box-shadow:0 0 0 2px rgba(176,141,47,.10); }
+    50%  { box-shadow:0 0 0 10px rgba(176,141,47,.16); }
+    100% { box-shadow:0 0 0 2px rgba(176,141,47,.10); }
+  }
+  button#mic.talking { transform:translateY(-2px); }
+  #mic .glyph { font-size:26px; line-height:1; opacity:.9; }
+  #bars { display:flex; gap:3px; align-items:flex-end; height:16px; margin:0 auto 8px; justify-content:center; }
+  #bars i { width:3px; height:4px; background:#4a4237; border-radius:2px; transition:height .08s linear, background .2s; }
+  #bars i.hot { background:var(--gold); }
+  .hint { font-size:11.5px; color:#6f675b; letter-spacing:.04em; }
+
+
+  /* The shelf: what the door hands over rather than says. A URL read aloud is noise,
+     and a long exact string cannot be held in the ear. So links, addresses and
+     references arrive here as cards you can tap or copy. */
+  #shelf { display:none; flex:0 0 auto; gap:8px; overflow-x:auto; overflow-y:hidden;
+           padding:8px 2px; scrollbar-width:none; }
+  #shelf.on { border-top:1px solid #26221d; padding-top:10px; }
+  /* A permanent row must be quiet at rest: gold is what an arrival uses, not what a label
+     wears all day. (Build 40) */
+  #shelfline { flex:0 0 auto; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+               color:#7a7164; padding:6px 2px 0; }
+  #shelfline { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  #shelfline #shelfcount { flex:1 1 auto; }
+  /* Clearing hides what he has already dealt with. It removes nothing: the record keeps
+     every request, and the shelf comes back from it. (7 Nov 2026: "the shelf does become
+     a bit crowded now".) */
+  #shelfline #shelfclear { flex:0 0 auto; background:none; border:0; padding:2px 0 2px 10px;
+    color:#7a7164; font:inherit; font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; cursor:pointer; }
+  #shelfline #shelfclear:active { color:var(--gold); }
+  #shelfline #shelfclear.armed { color:var(--gold); }
+  /* Refresh (Edwin, 10 Nov 2026 13:21): "Add a refresh option on the shelf next to clear... so the user
+     can refresh and not wait on our timer only." The shelf already polls (cards every 60s, payment
+     requests every 15s), and a poll is invisible: he had to sit and wait for someone else's clock. This
+     is the same act, on his tap, and it reads back what happened rather than doing it silently. */
+  #shelfline #shelfrefresh { flex:0 0 auto; background:none; border:0; padding:2px 10px 2px 0;
+    font:inherit; color:var(--dim); letter-spacing:.18em; text-transform:uppercase; cursor:pointer; }
+  #shelfline #shelfrefresh:active { color:var(--gold); }
+  #shelfline #shelfrefresh.busy { color:var(--gold); opacity:.75; }
+  #shelfline #shelfrefresh[hidden] { display:none; }
+  #shelfline[hidden] { display:none; }
+  /* Build 40. He could not tell when something landed, because the whole shelf woke up
+     only once it had something on it. The row is now always present, and an arrival is
+     marked by one slow breath of the line's own colour - no badge, no bounce, no sound.
+     (Edwin, 7 Nov: "the shelf is not accessible or visible when it lands. it should be
+     even if it is empty.") */
+  #shelfline.arrived { animation:shelfBreath 1400ms ease-out 1; }
+  @keyframes shelfBreath {
+    0%   { color:var(--gold); }
+    30%  { color:var(--gold); }
+    100% { color:#7a7164; }
+  }
+  #shelfline #shelfclear[hidden] { display:none; }
+  #shelf.on { display:flex; }
+  #shelf::-webkit-scrollbar { display:none; }
+  /* Build 159 (Edwin, 10 Nov 2026 23:36): "look at how the artwork gets added to the shelf. This is
+     actually not a bad thing if there is artwork to show... It brightens up the shelf space and spaces
+     out the action labels/text so that it becomes more visible. We can keep this concept and if we don't
+     have artwork to display we simply fill it with a nice looking placeholder image. We can also reduce
+     the size of it to 1/8 of the current size."
+     So the picture stays, and now every card has one: the cover if the thing owns one, the door's own
+     quiet mark if it does not. It stops being a 230px band above the words and becomes an 80px square
+     beside them, an eighth of the old area, which gives the title, the line under it and the buttons
+     the room to be read rather than crowded. */
+  .card { flex:0 0 auto; min-width:200px; max-width:256px; background:#171412; border:1px solid #2e2a24;
+          border-radius:10px; padding:9px; text-align:left; position:relative;
+          display:flex; align-items:flex-start; gap:9px; }
+  /* Build 160 (Edwin, 10 Nov 2026 23:50): "make the white border slightly thinner with 50% and use our
+     theme goldfish colour not white." Then, at 23:56, seeing it: "the white border should be replaced
+     with the same border theme as the placeholder images."
+     So the frame is no longer its own invention: it is the mark's own frame, borrowed. The mark draws two
+     rings in #c9a86a - the outer at .34 opacity, 0.9 wide, set 1.5 units in from the edge of its 80 unit
+     box. Both card kinds now wear exactly that: a 0.9px ring at .34, with a 1.5px dark rim inside it, so
+     the art no longer touches the tile edge and the pale edge that read as white is gone. The mark keeps
+     padding:0, because it already draws its rings inside its own box.
+     And then, 00:02: "so we can't get rid of the white border?" He was right and the frame was innocent: the
+     border is INSIDE the covers. Measured on the art itself, "When You Were Young" carries 51px of pale
+     matte on all four edges of its 1024 - a 5% painted border - so no frame, rim or colour of ours could ever
+     remove it. The picture is now drawn 14% larger than its tile (scale 1.14 = 6.1% off each edge), which
+     crops the painted matte out and costs nothing: no new generation, no change to the stored art. The mark
+     is left alone, since it has no matte to lose. */
+  .card .thumb { flex:0 0 auto; width:80px; height:80px; border-radius:8px; overflow:hidden;
+                 background:#1d1915; position:relative; }
+  .card .thumb img { display:block; width:100%; height:100%; object-fit:cover;
+                     transform:scale(1.14); transform-origin:50% 50%; }
+  .card .thumb.ph img { transform:none; }
+  /* The frame is drawn ON TOP of the picture, not around it, because the picture is now cropped past the
+     tile (scale 1.14) and a padding rim would simply be painted over. Two inset rings: the dark one first
+     so it sits above, the gold one under it so only its outer 0.9 shows. Read from the edge inwards that is
+     gold ring, dark rim, art - the same order as build 161, which he approved. */
+  .card .thumb::after { content:''; position:absolute; inset:0; pointer-events:none; border-radius:8px;
+                        box-shadow: inset 0 0 0 0.9px rgba(201,168,106,.34), inset 0 0 0 2.4px #1d1915; }
+  .card .body { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
+  .card .k { display:block; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:#7a7164; }
+  .card .t { display:block; margin-top:3px; font-size:12.5px; line-height:1.4; color:#e8dfcc;
+             overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2;
+             -webkit-box-orient:vertical; }
+  .card .d { display:block; margin-top:5px; font-size:10.5px; line-height:1.3;
+             color:var(--gold); letter-spacing:.04em; }
+  .card a { text-decoration:none; color:inherit; display:block; min-width:0; }
+  /* The buttons get a line of their own with air above them, so a label is read before a chip is
+     pressed. margin-top:auto holds them to the bottom of the card whatever the words do. */
+  /* Build 219. The badges fit INSIDE the card, they do not decide its width. A row that could not wrap plus a
+     pill that could not break its line set a minimum width the card had to grow to, and the title and the
+     second badge were pushed out and clipped. (14 Nov 16:04: "The button just moves out the text now.") So the
+     row wraps when it must, and a badge shares the line when there is room or fills it when it is alone. */
+  .card .acts { display:flex; align-items:center; gap:7px; margin-top:auto; padding-top:9px;
+                flex-wrap:wrap; row-gap:6px; min-width:0; }
+  /* Build 218. The garage's two ways out, as badges rather than captions. Edwin, 14 Nov: "update the button
+     badges to something palatable ... also with badges that match the intentions." A badge says what a tap
+     will do before it is tapped: a return arrow and the door's own gold for putting a thing back where he can
+     see it, a cross and a muted brick for the one that ends it. Both are quiet at rest and answer on touch,
+     so the card stays a card. */
+  .card .act {
+    all: unset; box-sizing: border-box; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    flex: 1 1 auto; min-width: 0; max-width: 100%;
+    padding: 7px 9px 7px 8px; border-radius: 999px;
+    font-size: 9.5px; font-weight: 600; line-height: 1;
+    letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+    transition: background .16s ease, border-color .16s ease, color .16s ease, transform .12s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card .act .gl { font-size: 10px; letter-spacing: 0; opacity: .85; line-height: 1; }
+  .card .act.restore { color: var(--gold); background: rgba(176,141,47,.10); border: 1px solid rgba(176,141,47,.42); }
+  .card .act.restore:hover, .card .act.restore:focus-visible {
+    background: rgba(176,141,47,.18); border-color: rgba(176,141,47,.70); }
+  .card .act.destroy { color: #c4837a; background: rgba(158,72,60,.10); border: 1px solid rgba(158,72,60,.40); }
+  .card .act.destroy:hover, .card .act.destroy:focus-visible {
+    color: #e3a79d; background: rgba(158,72,60,.20); border-color: rgba(178,88,74,.68); }
+  .card .act:active { transform: scale(.97); }
+  .card .copy { background:none; border:1px solid #3a352d; color:#9b9182; font-size:10px;
+                letter-spacing:.08em; border-radius:6px; padding:3px 7px; line-height:1; }
+  .card .copy:active { background:#2b271f; color:#e8dfcc; }
+  .card .copy.share { margin-left:auto; color:#c9a86a; border-color:#4a3f26; }
+  /* Build 160: every card can be put away on its own. The chip is the quietest of the three and it
+     arms on the first tap like the row's own clear does, because a shelf is a thing he scrolls with a
+     thumb and a clear that acts on one tap is a clear that fires by accident. */
+  .card .copy.clear { color:#7a7164; border-color:#2f2b24; padding:3px 6px; }
+  .card .copy.clear.armed { color:var(--gold); border-color:#4a3f26; }
+  .card.thought { border-color:#4a3f26; }
+  /* The receipt opens over the door, not on someone else's address (7 Nov 2026:
+     Edwin - "it does view the certificate or receipt on the base44 url so we have
+     to correct that"). The frame is temporary while the plane has no name of its
+     own; the address bar never leaves the door. */
+  #sheetview { position:fixed; inset:0; z-index:60; display:none; flex-direction:column;
+    background:rgba(10,9,8,.96); padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 10px); }
+  #sheetview.on { display:flex; }
+  #sheetview .bar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:2px 4px 10px; }
+  #sheetview .bar .who { font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold); }
+  #sheetview .bar button { background:none; border:1px solid #3a352d; color:#cfc6b6; font-size:12px;
+    padding:7px 12px; border-radius:999px; }
+  #sheetview iframe { flex:1; width:100%; border:1px solid #2e2a24; border-radius:12px; background:#14141c; }
+  footer { position:relative; }
+  button#fold { position:absolute; top:2px; right:12px; background:none; border:0; padding:8px 10px;
+                color:#5f584d; font:inherit; font-size:13px; line-height:1; cursor:pointer; }
+  button#fold:hover { color:var(--gold); }
+  /* folded: the paper goes, the controls that are used stay */
+  body.tight .voicebar { display:none; }
+  body.tight .footmark { margin-top:2px; padding-top:2px; font-size:8px; letter-spacing:.16em; }
+  body.tight .footmark span { margin-top:1px; letter-spacing:.08em; }
+  body.tight .sub { display:none; }
+  body.tight header { padding:calc(env(safe-area-inset-top) + 4px) 18px 0; }
+  body.tight .wordmark { font-size:10px; letter-spacing:.24em; }
+  .footmark { margin-top:10px; font-size:9.5px; letter-spacing:.28em; color:#4f4a41; text-transform:uppercase; }
+  .footmark span { display:block; letter-spacing:.12em; margin-top:4px; color:#3f3a33; }
+
+  /* A short screen must give its height to the words. This block sat above the rules it
+     overrides, which is why the first attempt changed nothing: same specificity, later wins. */
+  @media (max-height: 720px) {
+    header { padding:calc(env(safe-area-inset-top) + 5px) 18px 0; }
+    .sub { display:none; }
+    .wordmark { font-size:10px; letter-spacing:.26em; }
+    .state { margin-top:3px; font-size:12px; min-height:16px; }
+    main { padding-top:4px; }
+    .turn { margin-bottom:10px; }
+    button#mic { width:56px; height:56px; margin-bottom:4px; }
+    #mic .glyph { font-size:21px; }
+    #bars { height:12px; margin-bottom:4px; }
+    .hint { font-size:10px; }
+    .voicebar { margin:0 0 4px; }
+    #voicechip { padding:3px 10px; font-size:10.5px; }
+    .footmark { padding-top:4px; margin-top:4px; font-size:8.5px; letter-spacing:.2em; }
+    .footmark span { margin-top:2px; }
+    #shelfline { padding:4px 0 0; font-size:9.5px; }
+    #shelf { padding:6px 0; }
+    #shelf.on { padding-top:6px; }
+    .card { padding:7px; min-width:0; max-width:min(84vw, 256px); gap:8px; }
+    .card .thumb { width:66px; height:66px; }
+    .card .t { -webkit-line-clamp:1; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+    .card .k { display:none; }
+    .card .t { margin-top:0; font-size:12px; }
+    .card .acts { padding-top:7px; }
+    .card .copy { padding:2px 6px; font-size:9px; }
+    .lat { margin-top:3px; font-size:10.5px; }
+    .turn { margin-bottom:8px; }
+  }
+  /* Build 183. A chat client needs a composer the voice never needed. It sits above the
+     mic row and appears only in text mode, so nothing about the spoken door moves. */
+  #modes { display:flex; gap:6px; justify-content:center; margin:10px 0 0; }
+  #modes button { font:inherit; font-size:11px; letter-spacing:.10em; text-transform:uppercase;
+    color:#6f675b; background:transparent; border:1px solid #3a332a; border-radius:999px;
+    padding:5px 13px; cursor:pointer; }
+  #modes button.on { color:#171310; background:var(--gold); border-color:var(--gold); }
+  #say { display:flex; gap:8px; align-items:center; width:min(760px,100%); margin:6px auto 10px; }
+  #say[hidden] { display:none; }
+  /* Build 196. SIXTEEN, and it is not a style choice. Safari zooms the whole page in when a field
+     smaller than 16px takes focus, and it does not always zoom back out when the keys go: at 22:48 his
+     screen showed the conversation cut off down the left side, with the words larger than they are
+     built to be, because the page was still magnified from the line he had typed a minute before.
+     A field at 16px is never zoomed, so the page is never left magnified. */
+  #say input { flex:1; min-width:0; font:inherit; font-size:16px; color:#efe7da; background:#14110f;
+    border:1px solid #3a332a; border-radius:10px; padding:12px 14px; outline:none; }
+  #say input:focus { border-color:var(--gold); }
+  #say button { font:inherit; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    color:#171310; background:var(--gold); border:0; border-radius:10px; padding:13px 17px; cursor:pointer; }
+  /* Build 204. The button says it was touched, in the same instant, before any work happens. On the
+     first typed line after a spell of speaking the door sometimes has to be opened again, which takes
+     a second or two; with no feedback that reads as a button that did not respond. */
+  #saysend.sent { background:#f2e0bb; box-shadow:0 0 0 2px rgba(242,224,187,.35); }
+
+  /* Build 189. The small screen, mostly the small screen in his hand.
+
+     On an iPhone SE the footer measured 246px of a 466px viewport - 53%, before the shelf took
+     its share - and the conversation itself was left about 150px to be read in. The door worked
+     and the chat was unusable, which from his side is the same thing. Nothing that does a job is
+     removed: the parts that exist only for a spoken door stand down when the mouth is shut, and
+     what is left is one composer, one row holding the two modes and the handle, and one line of
+     build. */
+  #controls { display:flex; flex-direction:column; align-items:center; }
+  body.textmode .voicebar { display:none; }
+  body.textmode #bars { display:none; }
+  body.textmode #controls { flex-direction:row; justify-content:center; align-items:center; gap:16px; }
+  body.textmode #modes { margin:0; }
+  body.textmode #mic { width:46px; height:46px; margin:0; }
+  body.textmode #mic .glyph { font-size:15px; }
+  body.textmode #say { margin:4px auto 8px; }
+  body.textmode .hint { font-size:10px; margin-top:2px; }
+  body.textmode .footmark { margin-top:4px; }
+  .footmark span.decls { display:inline; margin-top:0; letter-spacing:.12em; }
+  @media (max-height: 720px) {
+    body.textmode footer { padding-top:2px; }
+    body.textmode #say { margin:2px auto 6px; }
+    body.textmode #mic { width:42px; height:42px; }
+    /* One line, not three, in both modes: the branding and the build stay, the proof line and
+       the declarations fold away. A footer that says which build he is in has to survive; the
+       rest is diagnostics, and on a short screen it was 30px of a spoken door's last room. */
+    .footmark { margin-top:2px; padding-top:2px; font-size:8px; display:flex;
+      gap:6px; align-items:baseline; white-space:nowrap; overflow:hidden; justify-content:center;
+      letter-spacing:.10em; }
+    .footmark span { display:inline; margin:0; }
+    .footmark .mark { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .footmark .build { flex:0 0 auto; }
+    .footmark .proof { display:none; }
+    .footmark span.decls { display:none; }
+    /* One card, one line of title, one line of detail: the shelf is a row he scrolls, not a page
+       he reads, and its height was the other half of what the words lost. */
+    .card .thumb { width:48px; height:48px; }
+    .card .d { -webkit-line-clamp:1; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+    .card .acts { padding-top:5px; }
+    #shelf { padding:4px 2px; }
+    #shelf.on { padding-top:4px; }
+  }
+
+  /* Build 190. The keyboard, which is the one thing on an SE that takes more room than the page
+     has. With it up at 22:02 he had a wordmark, a state line, a shelf header with refresh and clear,
+     a shelf of twelve cards, a composer, a mode row and the handle, and then the keyboard: nothing
+     left to read the conversation in, and his own words had nowhere to sit.
+     While the keyboard is up the door becomes the two things it is for in that moment: what has
+     already been said, and the line being typed. The shelf, its header and the mode row stand down
+     and come back the moment the keyboard does. Nothing is removed from the door; it steps aside. */
+  body.kb #shelfline,
+  body.kb #shelf,
+  body.kb #controls,
+  body.kb .hint { display:none !important; }
+  body.kb header .sub { display:none; }
+  /* The wordmark is on the wall; it does not need the last line of room above the words. */
+  /* The wordmark and the minimise control were fighting for the same top line. The branding is in
+     the footer of this same screen, so the top line belongs to the control while the keys are up. */
+  body.kb header .wordmark { display:none; }
+  /* Build 203. The two controls are a real size now (they are buttons, not glyphs), so the band has to
+     be tall enough to hold them: measured, they run from 6px to 37px and a band of 23 cut them off over
+     the conversation. The band gives them 38 and the words keep the rest. */
+  body.kb header { padding:calc(env(safe-area-inset-top) + 3px) 18px 3px;
+    min-height:calc(env(safe-area-inset-top) + 38px); }
+  /* The state line shares the top row with the control, so it keeps clear of it. */
+  body.kb header .state { font-size:11px; padding-right:124px; }
+  body.kb #log { padding-top:4px; }
+  body.kb #say { margin:6px auto 4px; }
+
+  /* Build 191. He liked the keyboard door but there was no way back down: "the idea is good but we
+     need a minimise option at the top to bring down the chat". One control, top right, only while
+     the keyboard is up. It takes the keys away, the room comes back, and the shelf and the modes
+     return with it. Nothing is lost by typing; nothing is stuck by stopping. */
+  /* Build 198. The band is fixed, so a control inside it is absolute against the band and cannot be
+     scrolled away. Two of them now, both top right: the way down from the keyboard (only while the
+     keys are up) and the way out of the house (always). Edwin, 13 Nov: "we also need a leave button
+     on the top right, if someone wants to leave the house." */
+  .topctl { position:absolute; top:calc(env(safe-area-inset-top) + 6px); right:12px;
+    display:flex; align-items:center; gap:6px; }
+  .topctl button { background:none; border:1px solid rgba(176,141,47,.38); border-radius:8px;
+    padding:7px 9px; color:var(--gold); font:inherit;
+    font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
+  #minimise { display:none; }
+  body.kb #minimise { display:inline-block; }
+  /* A leave that fires on one tap beside a thumb that is reaching for something else is a lockout,
+     so it asks twice: the same pattern as the purge on the log, four seconds and no longer. */
+  #leave.armed { color:#e8cfae; }
+  .state { padding-right:56px; }
+  /* Build 203. The label stays. A lone chevron in the corner is not an option, it is a hint. */
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">Effectra Intelligence</div>
+  <div class="sub">the live door · speech straight through</div>
+  <div class="state" id="state">tap the circle to open the door</div>
+  <div class="topctl">
+    <button id="minimise" type="button" aria-label="back to the room">⌄<span class="lbl"> room</span></button>
+    <button id="leave" type="button" aria-label="leave the house">leave</button>
+  </div>
+</header>
+
+<main id="log"></main>
+<div id="shelfline"><span id="shelfcount">the shelf</span><button id="shelfrefresh" type="button">refresh</button><button id="shelfclear" type="button" hidden>clear all</button></div>
+<div id="shelf" aria-live="polite"></div>
+
+<footer>
+  <div class="voicebar">
+    <button id="voicechip">voice · <span id="voicename">Kore</span></button>
+  </div>
+  <form id="say" hidden>
+    <input id="saytext" type="text" autocomplete="off" autocapitalize="sentences" spellcheck="false"
+           placeholder="type it, then Enter">
+    <button id="saysend" type="submit">send</button>
+  </form>
+  <div id="controls">
+    <div id="modes">
+      <button id="modespeak" class="on" type="button">speak</button>
+      <button id="modetype" type="button">type</button>
+    </div>
+    <button id="mic" aria-label="open the door"><span class="glyph">◍</span></button>
+  </div>
+  <div id="bars"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="hint" id="hint">one tap opens the microphone and the stream together</div>
+  <div class="footmark"><span class="mark">Powered by Effectra Intelligence</span><span class="proof">Proof on chain. Payload in the vault.</span><span class="build" id="build"></span></div>
+  <button id="fold" type="button" aria-label="more or less room for the words">▾</button>
+</footer>
+
+<div id="gate" class="shut" role="dialog" aria-label="the door">
+  <div class="gcard">
+    <div class="gtitle">the door</div>
+    <p class="gtext" id="gtext">This door opens for a device you have set up, with a fingerprint or your device's own unlock. One touch opens this tab for thirty minutes; nothing behind it moves until the device has been read.</p>
+    <div id="gcode" class="ghidden">
+      <label class="glabel" for="code">the one-time code</label>
+      <input id="code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" placeholder="XXXX-XXXX-XXXX">
+    </div>
+    <button id="gbtn" class="gbtn" type="button">open the door</button>
+    <button id="galt" class="galt" type="button">set this device up instead</button>
+    <button id="glater" class="galt ghidden" type="button">not now</button>
+    <div class="gmsg" id="gmsg"></div>
+    <div class="gnote" id="gnote"></div>
+  </div>
+</div>
+
+<div id="voicesheet">
+  <div class="shead">the mouth <button id="vclose" style="float:right;background:transparent;border:0;color:#6f675b;font:inherit;font-size:11px;cursor:pointer">close</button></div>
+  <div class="vgrid" id="vgrid"></div>
+  <div class="vnote">Kore is the Effectra voice and the default. The others stay here so you can hear the difference; the choice is this device only, and the mouth is set when the door opens, so changing it asks for a fresh tap. The door speaks English: it will not switch to another language because it heard one.</div>
+</div>
+
+<script>
 /* The live door. One websocket, his microphone in, the model's audio out: no
    transcription step and no render step in between. Everything the page has to
    be honest about is on screen: what it heard, what it said, and how long it took
@@ -9974,3 +10471,6 @@ if (GIFT_CODE) {
     try { logLine('door.gift', 'arrived for ' + g.title + ' · ' + g.state, { level: 'info' }); } catch (e) {}
   }).catch(() => {});
 }
+</script>
+</body>
+</html>
