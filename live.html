@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T08:05';
-const BUILD_NO = 300;
+const BUILD = '2026-11-18T09:40';
+const BUILD_NO = 301;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1391,6 +1391,17 @@ function collapseRepeat(t) {
   if (a.length > 20 && a === b) return s.slice(0, n - half).trimEnd();
   return t;
 }
+
+/* BUILD 301. What the mouth may do while a song is being narrowed - and what it may never do with a name.
+   A proposal is a claim. The stores and his shelf are the record, and only the rail may put a song there. */
+const GUESS_BRIEF = '\n\nWhile a song is being narrowed (build 301):\n'
+  + '- You may suggest songs from your own knowledge, at most three at a time, each as Title by Artist, in one '
+  + 'short line.\n'
+  + '- Say once, briefly, that you have not checked them. A suggestion is a claim, never a find.\n'
+  + '- Never say a song is on the stores, on his shelf, or that you searched for it. Only the door asks the stores, '
+  + 'and only the stores can put a song on his shelf.\n'
+  + '- When he says "that is the one", the door checks it. Say nothing about the outcome until you are told.\n'
+  + '- If he names a line he remembers, use it: a lyric fragment is the best clue there is.\n';
 
 const MANNERS = '\n\nTwo rules about the working, added 8 November after he heard them break:\n'
   + '- Never narrate what you are doing. No "trying to find", no "let me look", no "one moment", no running '
@@ -2728,7 +2739,7 @@ async function openDoor() {
     // The corridor's first slice (card #167): facts from the session record, built
     // server-side, handed to the voice before the socket opens. If it cannot be had,
     // say so rather than letting the model guess at the clock.
-    let brief = BRIEF + SONG_SCRIPT + MANNERS + sittingHandover();
+    let brief = BRIEF + SONG_SCRIPT + MANNERS + GUESS_BRIEF + sittingHandover();
     const np = await nowPack;
     if (np && np.text) brief = BRIEF + '\n\n' + np.text + MANNERS;
     else brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)' + MANNERS;
@@ -4197,6 +4208,9 @@ function forkAnswer(heard) {
        while the rail was never called once (claim.unbacked, railCallsThisTurn 0). A question and the arming of the
        thing that answers it are one act: if the door asks which song, it is listening for the answer. */
     awaitSong = Date.now();
+    /* BUILD 301. THE HUNT OPENS AS A CONVERSATION. Nothing he says about the song is sent to the stores until he
+       says that is the one; the mouth proposes and he narrows it. */
+    guessHunt = true; guessLast = []; guessAt = Date.now();
     logLine('song.fork.answer', 'share · from the stores', { level: 'info', target: 'music' });
     /* Build 210. Nothing has been searched at this point, so there is no result and no failure to report.
        14 Nov 13:20: handed this note, the mouth answered "The sharing rail didn't answer, Boss" with no
@@ -6491,6 +6505,52 @@ function artistInWords(t) {
   if (shareArtistHint && flatten(shareArtistHint) === want) return x;
   return '';
 }
+/* BUILD 301. THE HUNT IS A CONVERSATION; THE RAIL IS A VERDICT.
+   Edwin, 18 Nov 2026, 01:10: "What I want to explore is if we can use pass certain things, like searching for a
+   song title to Gemini, and you keep on passing that through until I say, that is the one, and then we go to the
+   sharing rail."
+
+   So the narrowing is the mouth's: it proposes titles from what it knows, he says no or names a better one, and
+   nothing is asked of the rail until he says that is the one. Then the rail is asked once, with the name that is now
+   settled, and only the rail's answer can put a card on his shelf. The rule that keeps this honest is the one he
+   already holds us to: a proposal is a claim, never a find, so the mouth may offer a name and may never say it is on
+   the stores, on his shelf, or that it searched. */
+const GUESS_FIRST = true;          // the experiment: nothing goes to the rail until he says that is the one
+let guessHunt = false;             // his narrowing is with the mouth, not the rail
+let guessLast = [];                // [{title, artist}] - what the mouth last put in front of him
+let guessAt = 0;
+const GUESS_ONE = /\b(?:that(?:'s| is) (?:the one|it)|that one is it|this is the one|that(?:'s| is) the right one|lock (?:it|that)(?: in)?|go with (?:that|it)|take that one|that one please)\b/i;
+/* What the mouth put in front of him, read back out of its own words: "Title" by Artist, or Title by Artist. */
+function readProposals(text) {
+  const t = String(text || '');
+  const out = [];
+  const push = (title, artist) => {
+    const ti = String(title || '').trim().replace(/[.?!,;:]+$/, '');
+    if (!ti || ti.length > 60) return;
+    if (!out.some((x) => x.title.toLowerCase() === ti.toLowerCase())) out.push({ title: ti, artist: String(artist || '').trim() });
+  };
+  let m;
+  const quoted = /["\u201c]([^"\u201d]{2,60})["\u201d]\s*(?:by|from|\u2014|-)?\s*([A-Z][\w'\u2019.&-]*(?:\s+[A-Z][\w'\u2019.&-]*){0,3})?/g;
+  while ((m = quoted.exec(t))) push(m[1], m[2] || '');
+  const bare = /(?<![\w"\u201c])([A-Z][\w'\u2019.&-]*(?:\s+[A-Za-z'\u2019.&-]+){0,6})\s+by\s+([A-Z][\w'\u2019.&-]*(?:\s+[A-Z][\w'\u2019.&-]*){0,3})/g;
+  while ((m = bare.exec(t))) push(m[1], m[2]);
+  return out.slice(0, 4);
+}
+/* The name he settled on: his own words if they carry one, else the last single thing the mouth offered. */
+function settledName(said) {
+  const fix = correctionWords(said);
+  if (fix && fix.title) return fix;
+  const named = String(said || '').replace(GUESS_ONE, ' ').replace(/\b(?:yes|yeah|ok|okay|please|boss|the|one|it|that|is)\b/gi, ' ')
+    .replace(/[^a-z0-9'&\- ]/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (named && named.split(' ').length <= 6 && /[a-z]{2,}/i.test(named)) {
+    const hit = guessLast.find((c) => named.toLowerCase().split(' ').every((w) => (c.title + ' ' + (c.artist || '')).toLowerCase().includes(w)));
+    if (hit) return { title: hit.title, artist: hit.artist || '' };
+    return { title: named, artist: '' };
+  }
+  if (guessLast.length === 1) return { title: guessLast[0].title, artist: guessLast[0].artist || '' };
+  return null;
+}
+
 /* BUILD 299. A CORRECTION IS A TITLE AND AN ARTIST, NOT A SENTENCE.
    18 Nov 2026, 00:55:59: "No it is called for the light and the artist is foreign air" went to the rail whole, so it
    answered worship records - the words "the light" were all the rail could hear. Everything he said may be true, and
@@ -6862,6 +6922,11 @@ function doorHears(heard) {
   if (!said) return;
   // A new thing said is a new chance to be corrected: the mute above belongs to the fault, not to him.
   correctMuted = '';
+  /* BUILD 301. "THAT IS THE ONE" IS HIS VERDICT, AND IT COMES FIRST.
+     A yes is read by several steps (a choice list, a route question, a read-back), so the sentence that ends a hunt
+     was being taken as an answer to something else and the rail was never asked. While a hunt is being narrowed, his
+     verdict belongs to the hunt. */
+  if (guessHunt && GUESS_ONE.test(said)) { try { noteSongAnswer(said); } catch (e) {} return; }
   /* BUILD 298. THE FIRST THING SAID AFTER "WELCOME BACK" SETTLES THE CHOICE, and only an explicit "fresh" closes the
      memory. Anything else he says is him carrying on, which is what he asked for. */
   if (resumePending) {
@@ -6992,17 +7057,105 @@ function titleOwed(askAt, lockedAt, armed, now) {
   return (now - askAt) < 180000;
 }
 
-function noteSongAnswer(heard) {
+/* One narrowing turn: his words go to the mouth, never to the stores. */
+function guessTurn(said) {
+  awaitSong = 0;                       // the door does not take over with a rail search behind his back
+  clearTimeout(awaitSongNudge);
+  let words = String(said);
+  /* A "no" that carries a name is not a dead end: "no ehco" means Echo, and that is the best clue there is. */
+  let clue = '';
+  if (shareRejection(words)) {
+    const tail = words.replace(/^\s*(?:no+|nope|nah)[\s,.!-]*/i, '').replace(/^\s*(?:it'?s|it is)\s+/i, '').trim();
+    if (tail && /[a-z]{3,}/i.test(tail) && !/^(?:not|none|never|no|nothing|one of|any of|that|this|it|them|those|these|thanks|thank you|way|idea|sorry)\b/i.test(tail)) {
+      clue = tail;
+      logLine('share.guess.clue', 'a rejection carried a name: "' + tail.slice(0, 60) + '"',
+        { level: 'info', target: 'songShare' });
+    }
+  }
+  const fresh = readProposals(words);
+  if (fresh.length) guessLast = fresh;
+  guessAt = Date.now();
+  railNote('share · narrowing it with the mouth · ' + (clue || words).slice(0, 40));
+  logLine('share.guess', 'his words stay in the conversation, nothing is asked of the rail · ' + words.slice(0, 60),
+    { level: 'info', target: 'songShare' });
+  doorNote((clue ? 'He rejected what you offered and named "' + clue + '" instead. ' : '')
+    + 'He is narrowing the song with you, and NOTHING has been asked of the stores. Suggest at most '
+    + 'three songs from your own knowledge, each as Title by Artist, in one short line. Say once, briefly, that '
+    + 'you have not checked them. Never say a song is on his shelf, never say it is on the stores, and never say '
+    + 'you searched. Then ask which one he means.', true);
+  return true;
+}
+
+function noteSongAnswer(heard, opts) {
   const said = String(heard || '').trim();
+  const settledHere = !!(opts && opts.settled);   // build 301: the name he settled goes straight to the rail
   if (!said) return;
+  /* BUILD 301. First question: is this him settling it, or still narrowing it? */
+  if (guessHunt) {
+    const settle = GUESS_ONE.test(said) || (/^(?:yes|yeah|yep|ok|okay|correct|exactly|right)\b/i.test(said) && guessLast.length <= 3);
+    if (!settle) return guessTurn(said);
+    /* He has settled it: the rail is asked once, with the name that is now fixed. */
+    const pick = settledName(said);
+    guessHunt = false;
+    if (!pick || !pick.title) {
+      awaitSong = Date.now();
+      railNote('share · he settled it, but no name is in hand');
+      doorNote('He has chosen, but the door does not have the title and artist in hand. Ask him once, in one short '
+        + 'line, to say the title and who sings it. Nothing has been checked.', true);
+      return;
+    }
+    logLine('share.settled', 'he said that is the one · asking the rail once for "' + pick.title + '"'
+      + (pick.artist ? ' by ' + pick.artist : ''), { level: 'info', target: 'songShare' });
+    railNote('share · settled · ' + pick.title + (pick.artist ? ' by ' + pick.artist : ''));
+    if (pick.artist) { shareArtistHint = pick.artist; shareArtistFrom = 'said'; }
+    const q = (pick.title + (pick.artist ? ' ' + pick.artist : '')).trim();
+    awaitSong = Date.now();
+    return noteSongAnswer(q, { settled: true });   // the same path, now with the name he settled on
+  }
   // The fork owns the turn while it is open (build 169): at 07:56:49 the fork note and this arm note both
   // arrived, and the mouth answered "which song would you like to share?" instead of asking the fork.
   if (songFork && Date.now() - songFork < 90000) return;
+  /* Build 301: his words belong to the conversation until he settles them. One switch, so the experiment can be
+     turned off in a line if he does not like it. A COURTESY IS NOT A CLUE, though: a thank-you, a greeting or an
+     address is somebody else's turn, and the guards below know what to do with each. */
+  if (!settledHere && (guessHunt || GUESS_FIRST)) {
+    const courtesy = /^(?:thank(?:s| you)?(?:\s+(?:very|so)\s+much|\s+a\s+lot)?|cheers|ta|ok(?:ay)?|great|perfect|lovely|brilliant|awesome|amazing|beautiful|nice|cool|sure|got it|all right|alright|good|fine|wow|yep|nope|bye|goodbye|see you(?: soon)?|hello|hi|hey|hmm+|oh|ah)[\s.!,]*$/i;
+    const addrShaped = /@|\b(?:email|e-mail|mail|whatsapp|phone|number|cell)\b|(?:\+?\d[\d\s]{6,})/i.test(said);
+    const hearingCheck = /^(?:are you there|you still there|hello|anyone there|can you hear me)/i.test(said.trim());
+    /* A complaint is a complaint: "I just told you." is about the door, not about a song. */
+    const complaint = /^(?:i (?:just|already) (?:told|said)|you'?re not listening|that'?s not what i|i didn'?t (?:ask|say)|not what i)/i.test(said.trim());
+    /* And a step that is waiting for an answer is put down first, by the branches below. */
+    const stepOpen = sharePending || shareCard || shareStage === 'art' || shareStage === 'sheet';
+    if (!courtesy.test(said.trim()) && !addrShaped && !hearingCheck && !complaint && !stepOpen) {
+      guessHunt = true;
+      return guessTurn(said);
+    }
+  }
+
   // The fork takes the route, and this must not then search the same word as a title on the way past it.
   // A route word is where a song comes from, not a song: it is never sent to the rail.
   if (ROUTE_WORD_ONLY.test(said)) {
     awaitSong = Date.now();
     railNote('share · that is a route, not a title · ' + said.slice(0, 30));
+    return;
+  }
+  /* BUILD 301. When he asks to find a song, the hunt opens as a conversation rather than a rail query: the next
+     words he says are folded into the mouth's proposals until he says that is the one. */
+  /* Only when nothing else is in the way: a picture step or a sheet is somebody else's question, and the older
+     branches below put it down properly. */
+  const clearToGuess = !songFork && !guessHunt && !sharePending && !shareCard
+    && (shareStage === 'idle' || shareStage === 'closed') && !madeShare;
+  if (clearToGuess
+      && (SHARE_INTENT.test(said) || /\b(?:find|looking for|help me find)\b[^.?!]{0,30}\bsong\b/i.test(said))
+      && !correctionWords(said)) {
+    guessHunt = true; guessLast = []; guessAt = Date.now();
+    awaitSong = 0;
+    logLine('share.guess.open', 'the hunt opens as a conversation · ' + said.slice(0, 60),
+      { level: 'info', target: 'songShare' });
+    railNote('share · let us find it together');
+    doorNote('He wants to find a song. Do not search and do not propose a library of options: ask him one short '
+      + 'question about what he remembers of it - the title, a line, or who sings it. Nothing has been checked, and '
+      + 'nothing goes to the stores until he says that is the one.', true);
     return;
   }
   if (SHARE_INTENT.test(said)) {
@@ -7198,6 +7351,12 @@ function noteSongAnswer(heard) {
     }
     awaitSong = Date.now();                  // still armed: the next thing he says is the song
     return;
+  }
+  /* BUILD 301. Once a stale step has been put down, the title he said belongs to the conversation too - this is the
+     second door into the same room, and it exists because a sheet can be standing in the way of the first. */
+  if (!settledHere && (guessHunt || GUESS_FIRST)) {
+    guessHunt = true;
+    return guessTurn(said);
   }
   /* BUILD 286: the rejection and the artist, both before anything is searched. */
   if (shareRejection(said)) {
