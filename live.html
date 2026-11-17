@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T20:50';
-const BUILD_NO = 284;
+const BUILD = '2026-11-17T22:20';
+const BUILD_NO = 285;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4998,6 +4998,18 @@ async function handleWorldCall(call) {
      know because it is busy is a door that has stopped being useful. So the lookup always runs; only the card is
      held back while a song is being made. */
   const quietShelf = songInFlight();
+  if (worldNothingAskedYet()) {
+    result = 'The door has only just opened and he has not asked anything yet, so nothing was searched and nothing '
+      + 'was put on his shelf. Say nothing about the world and offer nothing: answer only what he actually said.';
+    logLine('world.refused', 'nothing has been asked in this session yet · ' + ask.slice(0, 60),
+      { level: 'warn', target: 'world' });
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch { /* the socket is gone */ }
+    return;
+  }
   if (bareAcknowledgement(lastHeardText)) {
     result = 'He said nothing that asks anything - it was an acknowledgement - so nothing was searched and nothing '
       + 'was put on his shelf. Answer him in one short line in your own words. Do not look anything up.';
@@ -9722,6 +9734,20 @@ function songMaking() {
    in the studio and a landing being watched. This answers that question from the make itself. */
 /* "Thank you", "ok", "yes", "nice": a turn that asks for nothing. It is not a question, so nothing is looked up
    and nothing lands on his shelf. */
+/* BUILD 285. 17 Nov 2026, 20:08:31, the second he opened the door. Before he had said one word the mouth called
+   the world tool with "what is the latest news", read him a report about the Crimean Bridge, and put a card called
+   "News" on his shelf. His words: "I didn't ask you for the news. Why did you give it to me?" A door that has just
+   opened has been asked nothing at all: until he speaks there is no question to answer, whatever the model thinks
+   it has noticed. This is the licence "no news before he asks", in one line. */
+let heardThisSession = false;
+function worldNothingAskedYet() {
+  if (String(lastHeardText || '').trim()) return false;
+  if (heardThisSession) return false;
+  /* Nothing heard at all. That is only possible while the session is opening, where the greeting is the whole
+     of the turn and nobody asked anything: that is the window this rule is for. */
+  const opened = Number(sessionOpenedAt || 0);
+  return opened > 0 && (Date.now() - opened) < 300000;
+}
 function bareAcknowledgement(t) {
   const w = String(t || '').toLowerCase().replace(/[^a-z\s']/g, ' ').replace(/\s+/g, ' ').trim();
   if (!w) return false;   // nothing heard is not an acknowledgement: it is a caller with no transcript to read
@@ -10030,6 +10056,7 @@ function sendOpeningLine(line, note) {
             + '(The door has just opened. Say this one line, in that tone: "'
             + line + '" It is the opening only: once you have said it, the instruction is spent for the whole '
             + 'conversation and must never be said again. Do not ask a question and do not offer anything. '
+            + 'Use no tool of any kind until he has spoken: no search, no news, no weather, nothing on his shelf. '
             + 'From his next words onward, answer only what he actually says.)' }],
         }],
         turnComplete: true,
@@ -10106,6 +10133,8 @@ function handleFrame(text) {
     // this instant is the "door opens but does not listen" failure exactly.
     if (micCtx && micCtx.state !== 'running') micCtx.resume().catch(() => {});
     stampSession();
+    /* BUILD 285: the moment the door opens is the start of "nothing has been asked yet". */
+    try { sessionOpenedAt = Date.now(); heardThisSession = false; } catch (e) {}
     logLine('door.open', 'door opened', { voice: sessionVoice, model: sessionModel, level: 'notice' });
     stopClock();
     foldForDoor(true);
@@ -10172,6 +10201,7 @@ function handleFrame(text) {
       silenceNudges = 0;
       correctedThisTurn = false;             // a new turn: the door may correct again if it has to
       lastHeardText = heard;
+      heardThisSession = true;
       doorHears(heard);
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
