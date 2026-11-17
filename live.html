@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 276;
+const BUILD_NO = 277;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5500,6 +5500,21 @@ function judgeClaim() {
           + 'the song lands.', true);
       return;
     }
+    /* BUILD 277. 17 Nov 2026, shortly after 21:32: he said "Thank you." and the mouth answered "I can't look up
+       the weather in Durban right now." He never asked about the weather, and no lookup was tried - build 276
+       had already refused one. So the sentence invented both the question and a fault, which is the worst kind
+       of answer: it is wrong about the world and wrong about us. A turn that asked nothing gets a short warm
+       line, never a refusal to a question nobody put. */
+    if (askedNothing(lastHeardText) && phantomRefusal(t)) {
+      if (Date.now() - unbackedWarnedAt >= 4000) {
+        unbackedWarnedAt = Date.now();
+        hiddenHold = true; hiddenHoldUntil = Date.now() + 1200;
+        logLine('mouth.ack.guard', t.slice(0, 160), { level: 'warn', target: 'copy' });
+        doorCorrect("You're welcome, Boss.",
+          'He only said thanks. Nothing was asked, so nothing was looked up and nothing is refused.');
+      }
+      return;
+    }
     // "It should arrive in your inbox in a few minutes" while the take is still being made (10 Nov 10:54:31).
     // He then went to his inbox and found nothing he had asked for. While a make is in flight the only true
     // sentence is that it lands on his shelf. (build 133)
@@ -9505,6 +9520,25 @@ function bareAcknowledgement(t) {
   if (!w) return false;   // nothing heard is not an acknowledgement: it is a caller with no transcript to read
   if (w.split(' ').length > 4) return false;
   return /^(?:(?:ok|okay|cool|great|nice|good|right|sure|yes|yeah|yep|no|nope|thanks|thank you|cheers|ta|please|perfect|lovely|awesome|brilliant|bye|goodbye|good bye|night|good night|morning|hello|hi|hey)\s*)+$/.test(w);
+}
+
+/* BUILD 277. Two questions the mouth got wrong in one evening: whether anything was asked, and whether a
+   refusal was owed. "Thank you" asks nothing. Neither does "ok", "cool" or "cheers". A yes or a no is NOT in
+   this list: during the making they are answers, and the door needs them. */
+function askedNothing(t) {
+  const w = String(t || '').toLowerCase().replace(/[^a-z\s']/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!w) return false;
+  if (w.split(' ').length > 5) return false;
+  return /^(?:(?:ok|okay|cool|great|nice|good|right|thanks|thank you|cheers|ta|perfect|lovely|awesome|brilliant|bye|goodbye|good bye|night|good night|morning|hello|hi|hey|you'?re welcome|please)\s*)+$/.test(w);
+}
+
+/* A refusal to do something nobody asked for. "I can't look up the weather in Durban right now" is the shape:
+   a lookup it did not do, offered as an apology, about a question he never put. */
+function phantomRefusal(t) {
+  const x = String(t || '');
+  if (/(?:can'?t|cannot|unable to|not able to|don'?t have|do not have|no access to|won'?t be able to)\s+(?:to\s+)?(?:look|check|search|access|get|see|tell you|reach|find)/i.test(x)) return true;
+  if (/\bright now\b/i.test(x) && /\b(?:look|check|search|weather|forecast|time)\b/i.test(x)) return true;
+  return false;
 }
 
 function songInFlight() {
