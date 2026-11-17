@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T22:45';
-const BUILD_NO = 286;
+const BUILD = '2026-11-17T23:05';
+const BUILD_NO = 287;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6246,7 +6246,12 @@ function artistInWords(t) {
   if (m) return m[1].replace(/\s+/g, ' ').trim();
   /* A name on its own is an artist. "Bryan Adams" as the whole answer to "which song?" is exactly how the hunt
      began, and the rail knew what to do with it. */
-  if (x.split(/\s+/).length <= 4 && /^[A-Z][\w'’.-]*(?:\s+[A-Z][\w'’.-]*){0,3}$/.test(x)
+  /* BUILD 287. "Hello." was read as an artist at 20:26:14, so the next search went out as "Hello Hello." and
+     locked a song he never named. A greeting, an acknowledgement or a complaint is never a name, and a bare
+     name needs more than one word: "Bryan Adams" is a name, "Hello" is a way of finding out if the room is
+     listening. */
+  if (/^(?:hello|hi|hey|hiya|howzit|yo|morning|evening|thanks|thank you|please|ok|okay|cool|right|sure|yes|no|sorry|what|why|huh)\b/i.test(x)) return '';
+  if (x.split(/\s+/).length <= 4 && /^[A-Z][\w'’.-]*(?:\s+[A-Z][\w'’.-]*){1,3}$/.test(x)
       && !/\b(?:song|track|tune|please|forgive|love|home|night|day)\b/i.test(x)) return x;
   return '';
 }
@@ -6290,7 +6295,17 @@ function narrowedQuery(said) {
 
 function wordsCover(text, title) {
   const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  const hay = norm(text), t = norm(title);
+  /* BUILD 287. 17 Nov 2026, 20:25:29: he said "Please Forgive Me from Bryan Adams" and the rail answered
+     "Please Forgive Me (Classic Version)". His words cover the song and not the store's edition suffix, so the
+     door read the name back to him, the read-back was never spoken, and 45 seconds later he was saying "Hello."
+     to see whether the door was alive. An edition suffix is not a doubt: the name he said, minus the bracket,
+     is the name that came back. */
+  const bare = (t) => String(t || '')
+    .replace(/\s*[([{][^)\]}]*[)\]}]\s*/g, ' ')
+    .replace(/\s*[-\u2013\u2014]\s*(?:remaster(?:ed)?|deluxe|expanded|anniversary|edition|version|mix|single|album).*$/i, ' ')
+    .replace(/\b(?:remaster(?:ed)?|deluxe edition|expanded edition|anniversary edition|special edition|classic version|album version|single version|radio edit|explicit|clean)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const hay = norm(text), t = norm(bare(title)) || norm(title);
   if (!t || !hay) return false;
   if (hay.includes(t)) return true;
   const words = t.split(' ').filter((w) => w.length > 2);
@@ -6302,10 +6317,17 @@ function askAboutCard(card, words) {
   railNote('share · reading the name back');
   logLine('share.confirm', (card.title || '') + ' | heard: ' + String(words || '').slice(0, 60),
     { level: 'info', target: 'songShare' });
-  doorNote('The door is not certain it heard the song correctly. What he said was: "' + String(words || '')
+  /* BUILD 287. A QUESTION THE MOUTH NEVER ASKS IS STILL THE DOOR'S TO ASK - and this one was never asked.
+     17 Nov 2026, 20:25:29: the read-back was queued as a note while his turn was still open, the queue never
+     released it, and nothing was said for forty-five seconds. He said "Hello." twice to find out whether the
+     door was alive, and that greeting then cost him the song. The read-back goes out through doorAsk, which
+     carries the watch that puts the line up and sends it once more if the mouth stays silent. */
+  doorAsk('Is that the one, Boss: ' + (card.title || 'that song')
+    + (card.sub ? ', ' + String(card.sub).split(' \u00b7 ')[0] : '') + '?',
+    'The door is not certain it heard the song correctly. What he said was: "' + String(words || '')
     + '". What the rail found was "' + (card.title || '') + '"' + (card.sub ? ' (' + card.sub + ')' : '')
     + '. Read that name back in one short line and ask if it is the right one. Put nothing on his shelf yet, '
-    + 'do not ask about a picture, and do not offer to send.', true);
+    + 'do not ask about a picture, and do not offer to send.');
 }
 
 function resolvePending(heard) {
@@ -6735,6 +6757,38 @@ function noteSongAnswer(heard) {
     doorNote('He is thinking, not answering: "' + said + '". Nothing has been searched and nothing is on his '
       + 'shelf. Say one short line that gives him the room, such as "Take your time, Boss." Do not name a '
       + 'song, do not search, and do not ask again.', true);
+    awaitSong = Date.now();                  // still armed: the next thing he says is the song
+    return;
+  }
+  /* BUILD 287. Two utterances that are never song titles.
+     20:26:14: he said "Hello." because the read-back had never been spoken, and the door threw away the song it
+     had found and searched the greeting instead. 20:26:25: he said "I just told you." and it searched that
+     sentence, found a song called "Hello", and told him it was on his shelf. Neither is a title, and neither may
+     ever put a song on his shelf. */
+  const greetingOnly = /^(?:hello|hi|hey|hiya|howzit|yo|morning|good morning|good evening|good afternoon|evening|anyone there|are you there|you there)\W*$/i.test(said.trim());
+  const repeatComplaint = /^(?:i (?:just|already) told you|i told you|as i (?:said|told you)|that'?s what i (?:just )?said|i already said(?: that)?|like i said)\b/i.test(said.trim());
+  if (greetingOnly || repeatComplaint) {
+    railNote('share · not a title · ' + said.slice(0, 40));
+    logLine('share.notatitle', said + (greetingOnly ? ' (a greeting)' : ' (he has already said it)'),
+      { level: 'warn', target: 'share' });
+    const pending = sharePending && sharePending.card ? sharePending.card : null;
+    if (pending) {
+      /* The door owes him the question it never finished asking, not a search. */
+      doorAsk('Is that the one, Boss: ' + (pending.title || 'that song')
+        + (pending.sub ? ', ' + String(pending.sub).split(' · ')[0] : '') + '?',
+        'Nothing was searched: he has not named another song. Say exactly this one line and nothing else: '
+        + '"Is that the one, Boss: ' + (pending.title || 'that song')
+        + (pending.sub ? ', ' + String(pending.sub).split(' · ')[0] : '') + '?"');
+    } else if (lastSongWords) {
+      doorAsk('You said ' + String(lastSongWords).slice(0, 80) + ', Boss. Is that the one you want?',
+        'Nothing was searched: he has not named another song, and what he said back to you is not a title. '
+        + 'The song he asked for is "' + String(lastSongWords).slice(0, 80) + '". Say exactly this one line and '
+        + 'nothing else, then stop.');
+    } else {
+      doorAsk('Which song is it, Boss? The title and who sings it.',
+        'Nothing was searched and nothing was put on his shelf: what he said is not the name of a song. Ask '
+        + 'him once, in one short line, for the title and who sings it.');
+    }
     awaitSong = Date.now();                  // still armed: the next thing he says is the song
     return;
   }
