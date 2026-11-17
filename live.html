@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T18:25';
-const BUILD_NO = 282;
+const BUILD = '2026-11-17T20:35';
+const BUILD_NO = 283;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4148,6 +4148,23 @@ function songRouteGate(heard) {
       + 'out to whoever he names. Then carry on with the make, asking what it should say if you do not have '
       + 'his words yet.', true);
   } else if (wantMake) {
+    /* BUILD 283, third piece. 17 Nov 2026, 18:18:14, same run: he asked for a song again and openSongBeat saw the
+       words already held and returned early, so the new making inherited the OLD subject and the OLD beat (the
+       sound), and his real passage could not be taken because a sound was what the door was asking for. A fresh
+       ask that names something new replaces the words held from before. A bare confirmation does not: "yes,
+       go ahead" is him answering the question already open, not starting over. */
+    try {
+      const bare = /^(?:yes|yeah|yep|ok|okay|sure|alright|all right|go|ahead|please|do|it|that|lets|let'?s|now|come|on)\b/i;
+      const words = raw.trim().split(/\s+/).filter(Boolean);
+      const confirmation = words.length <= 6 && bare.test(raw.trim());
+      /* "Make up something new" is not a new song: it is asking the door for different words around the ones he
+         gave, which the door does anyway. Only an ask that names something else replaces what is held. */
+      const forTheWords = /\b(?:something new|new words|different words|another one|one more)\b/i.test(raw);
+      const namesSomething = /\babout\b/i.test(raw) || words.length >= 7;
+      if (songDraft.said && !confirmation && !forTheWords && namesSomething) {
+        dropMaking('a new ask replaces the words held from before');
+      }
+    } catch (e) {}
     songRoute = { pick: 'make', at: Date.now() };
     openSongBeat();
     /* Build 233 · THE FIRST QUESTION OF THE JOURNEY IS THE DOOR'S, AND IT IS ASKED WHATEVER THE MOUTH DOES.
@@ -6310,6 +6327,70 @@ function subjectAnswerOpen() {
     return true;
   } catch (e) { return false; }
 }
+/* BUILD 283. 17 Nov 2026, 18:17, HIS RUN ON 282 - and this one cost him a song.
+   He said "I want to create a song", the door asked what it should say, and the answer it heard was
+   "Can we Okay, no. I don't want to create a song anymore." A WITHDRAWAL, taken as the lyric: the words went
+   on the record as his subject, the beat moved to the sound, and by the time he gave the passage he actually
+   wanted ("I am lonely... walking through the streets... people sitting in poverty and I feel sad") the door
+   could only hear a kind of music, because a sound was what it was asking for. "blues" became the sound, the
+   picture was answered, and the make went into the studio carrying the withdrawal line as the words. Nothing
+   about that sentence is words for a song: it is him changing his mind, and changing his mind has to be heard
+   before anything else in the turn. */
+const SONG_WITHDRAW = /\b(?:no\s+more\s+song|forget\s+(?:the\s+)?song|cancel\s+(?:the\s+)?song|stop\s+(?:the\s+|that\s+)?song|(?:i\s+)?(?:don'?t|do\s+not|didn'?t)\s+(?:want|wanna)\s+(?:to\s+)?(?:create|make|write|do|have)\s+(?:a\s+|another\s+|that\s+|the\s+)?song|(?:not|n'?t)\s+going\s+to\s+(?:create|make|write)\s+(?:a\s+|another\s+|the\s+)?song)\b/i;
+function songWithdrawn(t) {
+  const s = String(t || '');
+  if (!SONG_WITHDRAW.test(s)) return false;
+  /* Only while a making is open: "I don't want a song, I want a payment" mid-payment is not this. */
+  const open = !!(songDraft.at && (Date.now() - songDraft.at) < 20 * 60 * 1000);
+  return open;
+}
+function dropMaking(reason) {
+  try {
+    songDraftReset();
+    songDraft.at = 0;
+    pictureDone = false;
+    makeArmedSig = '';
+    if (songRoute && songRoute.pick === 'make') songRoute = { pick: '', at: Date.now() };
+    logLine('song.withdrawn', String(reason || '').slice(0, 120), { level: 'info', target: 'music' });
+  } catch (e) {}
+}
+
+/* BUILD 283, second half. 17 Nov 2026, 18:18:47, same run: the words he had actually written - a whole passage
+   about being lonely in the streets - arrived while the door was asking for a kind of music, so they were read
+   as a failed sound and the question was asked again. A passage is not a genre. When prose arrives while the
+   sound is open, the door takes it as the words (his words are always the subject) and asks the sound again.
+   Deliberately narrow: no money, no world questions, no route sentences, and it must read like a passage. */
+const NOT_WORDS = /\b(?:pay|payment|rand|dollars?|euros?|invoice|refund|weather|forecast|score|news|share|send|find|play|search)\b/i;
+function songTakesProse(t) {
+  try {
+    if (!songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000) return false;
+    if (String(songDraft.askBeat || '') !== 'sound') return false;
+    if (songDraft.said) return false;                     // he already has words; this is an addition, not the subject
+    const s = String(t || '').trim();
+    if (!s) return false;
+    if (/[?]\s*$/.test(s)) return false;
+    if (NOT_WORDS.test(s)) return false;
+    const words = s.split(/\s+/).filter(Boolean);
+    if (words.length < 6) return false;                   // "blues", "symphonic metal" are sounds, not passages
+    if (soundIsReal(s)) return false;
+    songDraft.said = s;
+    songDraft.askBeat = 'sound';
+    songDraft.build = 'around';
+    logLine('song.subject.late', 'the words arrived while the sound was open, so they are taken: ' + s.slice(0, 90),
+      { level: 'info', target: 'music' });
+    /* The sound is the very thing the door was listening for and did not hear, so it is asked now, in the
+       door's own words, or he would be left holding words the door never answered. */
+    const beatLine = (() => { try { return openJourneyBeat(); } catch (e) { return ''; } })();
+    if (beatLine) {
+      doorAsk(beatLine, 'His words are held and the song is built around them. Ask him exactly this, one short '
+        + 'line and nothing else: "' + beatLine + '"', true);
+    } else {
+      try { journeyAskNext(); } catch (e) {}
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
 function doorTakesSubject(t) {
   if (!subjectAnswerOpen()) return false;
   if (SUBJECT_OTHER_ACT.test(t)) return false;
@@ -6334,6 +6415,16 @@ function doorHears(heard) {
   if (/\b(?:share|send)\b|\b(?:make|write|create|do)\b[^.?!]{0,40}\b(?:for|to)\s+(?:my|his|her)\b/i.test(said)) {
     shareIntentAt = Date.now();
   }
+  /* Build 283: changing his mind is heard first, then a passage given at the wrong moment is still his words. */
+  try {
+    if (songWithdrawn(said)) {
+      dropMaking(said);
+      doorNote('He has withdrawn the song. Acknowledge it in one short line and ask nothing about the song. '
+        + 'What he said is not words for a song, so never hold it as one.', true);
+      return;
+    }
+  } catch (e) {}
+  try { if (songTakesProse(said)) return; } catch (e) {}
   /* Build 246: the question the door asked comes first. A subject he has just given is not a route. */
   if (doorTakesSubject(said)) { try { descentHear(said); } catch (e) {} return; }
   try { if (!forkAnswer(said)) songRouteGate(said); } catch (e) {}
