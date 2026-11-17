@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T17:55';
-const BUILD_NO = 280;
+const BUILD = '2026-11-17T18:20';
+const BUILD_NO = 281;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -7572,6 +7572,23 @@ function startMadeWatch() {
 
 // The song has landed. Find its own card on the rail so the sheet sends a real link, then either ask the
 // picture (if he has not described one) or open the sheet for the address.
+/* BUILD 281. 17 Nov 2026, ~19:58: "When I open the song on the shelf it goes here -
+   https://.../functions/songVault?play=...&t=..." The landing used whatever link the sharing rail handed back as
+   the card's own link, and that rail was answering with a minted stream address: tapping a song opened an mp3 and
+   the browser drew its grey bar. Two rules from here: a card's link is a PAGE, never a file, and the shelf's own
+   reader owns the link, so a landing cannot overrule it. (The rail was fixed first, in songShare; this is the door
+   refusing a file address even if some rail offers one.) */
+function cardLink(card) {
+  if (!card) return card;
+  const u = String(card.url || '');
+  if (!u) return card;
+  if (/\/functions\/songVault|\/functions\/songListen\b|\/functions\/songFile\b/i.test(u)) {
+    card.url = card.code ? ('https://door.effectra.ai/l/?c=' + card.code) : '';
+    if (!card.stream) card.stream = u;
+  }
+  return card;
+}
+
 async function madeReady(r) {
   if (!madeShare) return;
   makeDeliveredAt = Date.now();   // build 276: the studio is no longer working on anything
@@ -7587,6 +7604,7 @@ async function madeReady(r) {
           sub: w.found === 'shelf' ? 'made here · a day of listening'
             : [w.artist, w.album].filter(Boolean).join(' · '),
           url: w.url, code: w.code || '', song_id: w.song_id || '' };
+        cardLink(card);
         railNote('share · the made song · ' + (w.code || 'wrapped'));
       } else if (w && w.ok && w.found === 'choice' && (w.candidates || []).length === 1) {
         const c2 = await withTimeout(gatePost('songShare', { action: 'choose', candidate: w.candidates[0] }), 30000,
@@ -7594,6 +7612,7 @@ async function madeReady(r) {
         if (c2 && c2.url) {
           card = { kind: 'song', title: c2.title || title, sub: 'made here · a day of listening',
             url: c2.url, code: c2.code || '', song_id: c2.song_id || '' };
+          cardLink(card);
         }
       }
     }
@@ -7607,6 +7626,10 @@ async function madeReady(r) {
   const onShelfNow = () => !!shelf.some((c) => (sid && String(c.song_id || '') === sid)
     || (title && String(c.title || '').trim().toLowerCase() === String(title).trim().toLowerCase()));
   if (card) mergeCard(card);
+  /* The shelf reader is the authority on a card's link: it is the thing that knows the door's page for the song.
+     One read straight after the merge, so a landing without a link, or with one this build refused, is repaired
+     before he is told anything rather than on his next refresh. */
+  try { await withTimeout(refreshCards(true), 15000, 'the shelf did not answer'); } catch (e) {}
   let onShelf = onShelfNow();
   for (let i = 0; i < 2 && !onShelf; i++) {
     try { await withTimeout(refreshCards(true), 15000, 'the shelf did not answer'); } catch (e) {}
