@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T03:10';
-const BUILD_NO = 295;
+const BUILD = '2026-11-18T04:05';
+const BUILD_NO = 296;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -968,10 +968,17 @@ const BRIEF = NO_CLAIM +
   // ways that can happen are a socket that never closed or a model performing
   // familiarity it does not have. The second is the dangerous one: invented
   // continuity sounds exactly like real continuity.
-  'You have no memory of any earlier conversation. This one began when this door opened, ' +
-  'and nothing before it is available to you. Never say that you remember, that you discussed ' +
-  'something before, or that he told you something earlier. If he refers to a past conversation, ' +
-  'say plainly that you hold only this session and ask him to repeat what matters.';
+  /* BUILD 296. The old sentence was the fault, word for word: it told the mouth to answer any reference to
+     the past with "I hold only this session, Boss; please repeat what matters", and at 00:00 on 18 Nov he got
+     that twice in a row about a conversation that had happened one minute earlier, in the same sitting, because
+     the socket had been renewed behind a background tab. The rule against invented continuity stays; the
+     instruction to recite an amnesia does not. */
+  'You have no memory of any conversation that happened before this sitting began. Never invent a ' +
+  'continuity you do not have: do not claim you discussed something before, or that he told you ' +
+  'something earlier, unless it was said in this sitting and the door has handed it to you. ' +
+  'If he refers to something from before this sitting, say briefly that this is a fresh door and ' +
+  'ask only for what you actually need. Never say that you "hold only this session", and never ask ' +
+  'him to repeat something the door has just given you.';
 
 // If the page cannot say which build it is, every missing change becomes an argument with a cache.
 document.addEventListener('visibilitychange', () => {
@@ -1504,6 +1511,7 @@ function shutDoor() {
   } catch (e) {}
   try { ws && ws.close(); } catch {}
   ws = null; sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
+  try { clearSitting(); } catch (e) {}      // build 296: a shut door ends the sitting
   releaseRoom();
   // A greeting still in flight must not open a door that has been shut.
   greeting = false; if (greetWatch) { clearTimeout(greetWatch); greetWatch = null; }
@@ -1583,6 +1591,45 @@ document.addEventListener('visibilitychange', () => {
     warn('that door timed out after ' + Math.round(away / 60) + ' min away. tap the circle for a fresh one.');
   }
 });
+
+/* BUILD 296. THE SAME SITTING IS NOT AN OLD CONVERSATION.
+   18 Nov 2026, 00:00, right after he listened to his song: he came back to the voice and it said "I hold only
+   this session, Boss; please repeat what matters" - twice - because the socket had been replaced while the tab
+   was in the background, and a fresh session knows nothing. Build 242 is why nothing is handed over: at 21:59 on
+   15 Nov the door re-announced an old payment request and an old question into a session he had only just
+   opened, and he called it a ghost. Both complaints are right, and they are not the same thing.
+
+   A SITTING IS THE UNIT. This page keeps the turns of the sitting it is in - his lines and the mouth's - and
+   hands them over ONLY when the same sitting's socket is replaced (a background tab, a renewal). A door that is
+   shut, a pass that ran out, a fresh tap after two minutes away: all of those clear the record, so nothing from
+   an earlier sitting can walk into a new one. The record still leads: this is a memory of the last few minutes,
+   not a second source of truth. */
+let sittingTurns = [];             // [{who:'you'|'engine', text, at}] - this sitting only
+let sittingAt = 0;                 // when the sitting began
+const SITTING_MAX = 12;            // turns, not words: enough for "what I asked you just now"
+function sittingNote(who, text) {
+  const t = String(text || '').trim();
+  if (!t) return;
+  if (!sittingAt) sittingAt = Date.now();
+  sittingTurns.push({ who: who, text: t.slice(0, 400), at: Date.now() });
+  if (sittingTurns.length > SITTING_MAX) sittingTurns = sittingTurns.slice(-SITTING_MAX);
+}
+function clearSitting() { sittingTurns = []; sittingAt = 0; }
+/* What the new socket is told, in one block, and only when this page really has a same-sitting history. */
+function sittingHandover() {
+  if (!sittingTurns.length) return '';
+  const last = sittingTurns[sittingTurns.length - 1];
+  if (!last || Date.now() - last.at > 10 * 60 * 1000) { clearSitting(); return ''; }
+  const lines = sittingTurns.map(function (x) {
+    return (x.who === 'you' ? 'He said: "' : 'You answered: "') + x.text + '"';
+  });
+  return '\n\n(The microphone was interrupted a moment ago in this SAME sitting and the link was renewed. '
+    + 'Nothing has been lost. This is what passed between you just before, oldest first:\n'
+    + lines.join('\n')
+    + '\nTreat it as your own memory of the last few minutes: do not say you hold only this session, do not ask '
+    + 'him to repeat any of it, and never re-announce a thing from it as news. Anything he asked for that is '
+    + 'still unfinished is still open.)';
+}
 
 /* Every door states when it opened, in the transcript, so "this is a new
    session" is something he can see rather than something I assert. */
@@ -2648,7 +2695,7 @@ async function openDoor() {
     // The corridor's first slice (card #167): facts from the session record, built
     // server-side, handed to the voice before the socket opens. If it cannot be had,
     // say so rather than letting the model guess at the clock.
-    let brief = BRIEF + SONG_SCRIPT + MANNERS;
+    let brief = BRIEF + SONG_SCRIPT + MANNERS + sittingHandover();
     const np = await nowPack;
     if (np && np.text) brief = BRIEF + '\n\n' + np.text + MANNERS;
     else brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)' + MANNERS;
@@ -10572,6 +10619,7 @@ function handleFrame(text) {
       doorHears(heard);
       appendLive('you', heard);
       logLine('turn.you', heard, { role: 'you' });
+      try { sittingNote('you', heard); } catch (e) {}
       armSilenceWatch(heard);
       replyAudible = false;                  // a new answer begins
       turnBeganMuted = typed();              // and it belongs to this turn, muted or not (build 227), so its first sound may be held
@@ -10665,6 +10713,7 @@ function handleFrame(text) {
       renewLink('age');
       return;
     }
+    try { sittingNote('engine', said.engine || ''); } catch (e) {}
     logLine('turn.engine', said.engine || '', {
       role: 'engine',
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
