@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 278;
+const BUILD = '2026-11-17T17:55';
+const BUILD_NO = 280;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -828,8 +828,15 @@ const BRIEF = NO_CLAIM +
   + 'cannot follow a song while it is being made: never say you are checking, looking in on it, watching it, chasing '
   + 'it, waiting on it or coming back with news, and never say a take is not ready yet as though you had looked. If '
   + 'he asks whether it is done, say in one line that a song lands on his shelf when it is ready. ' +
-  'Never search the open web while a song is being made, and never look up a kind of music: what he names as a '
-  + 'sound is his answer, not a thing to search for. ' +
+  /* BUILD 280. 17 Nov 2026: "Never search the open web while a song is being made" was read as "while a song is
+     being made, answer nothing else", and a plain question about the weather in Ballito came back as "I don't know,
+     Boss." What must not happen is a kind of music being looked up (his sound is his answer) and a search result
+     landing on his shelf beside the song. A question about the world is always answered, from the world tool. */
+  'Never look up a kind of music: what he names as a sound is his answer, not a thing to search for. While a song '
+  + 'is being made, a search result does not go on his shelf, but a question about the world is still answered: ask '
+  + 'the world tool and speak what it returns. Never answer "I don\'t know" to a question about the world before the '
+  + 'world tool has been asked, and never meet a question about anything outside this house with a line about his '
+  + 'song. ' +
   'Nothing here can send him a message later, and nothing can come back to him on its own. Never say you will let '
   + 'him know, tell him, notify him, remind him, come back to him or get back to him, and never promise a message '
   + 'of any kind. A song simply appears on his shelf when it is ready: that is the whole of what happens, and it is '
@@ -2805,7 +2812,12 @@ const SONG_SCRIPT =
   // is being made." So the in-flight line now carries the cover too, and it is given as the words to say
   // rather than as a rule to obey: a rule invites a paraphrase, and every paraphrase is a place a word the
   // door does not have can appear.
-  'While a take is being made, say these words and nothing else about it: "It is being made now, and it ' +
+  /* BUILD 280. The rule below is about HIS SONG, not about every turn. 17 Nov 2026, 19:4x: "Now you can tell me
+     what the weather is in Belito" was answered with "A song lands on your shelf when it is ready, Boss." He was
+     not asking about the song and had not been waiting idly: he was moving on to something else while it made.
+     So the words below are for a turn that is about the song, and only then. */
+  'If - and only if - he asks about the song itself while a take is being made, say these words and nothing else '
+  + 'about it: "It is being made now, and it ' +
   'lands on your shelf. When you share it you will get the chance to make a cover for it, so you can be ' +
   'thinking about what it should look like while it is being made." Do not add a minute, a wait, a ' +
   'destination, or a next step. Where it goes has exactly one name, and it is your shelf: there is no other ' +
@@ -4949,20 +4961,14 @@ async function handleWorldCall(call) {
     } catch { /* the socket is gone; the turn will end on its own */ }
     return;
   }
-  /* BUILD 276. Two refusals, both from the run at 21:21 on 17 Nov: he said "Thank you." while his song was in
-     the studio, and the mouth went to the web for "the current time in South Africa" and shelved the answer.
-     A making is not a lookup, and a thank-you is not a question. */
-  if (songInFlight()) {
-    result = 'A song is in the studio right now, so nothing was searched and nothing was put on his shelf. '
-      + 'Answer only from what you did here, or say you do not know. Never invent a fact while his song is being made.';
-    logLine('world.refused', ask + ' · a song is in the studio', { level: 'info', target: 'world' });
-    try {
-      ws.send(JSON.stringify({
-        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
-      }));
-    } catch { /* the socket is gone */ }
-    return;
-  }
+  /* BUILD 280. 17 Nov 2026, 19:4x. He asked "Now you can tell me what the weather is in Belito" while his song was
+     in the studio and got "A song lands on your shelf when it is ready, Boss." Then, asking again, "I don't know,
+     Boss." Both from build 276, which refused every lookup while a making was in flight. That reading was wrong:
+     what 276 had to stop was a CARD landing beside the song (the "current time in South Africa" card), not the
+     answer. A man waiting for a song is still allowed to ask about the weather, and a door that says it does not
+     know because it is busy is a door that has stopped being useful. So the lookup always runs; only the card is
+     held back while a song is being made. */
+  const quietShelf = songInFlight();
   if (bareAcknowledgement(lastHeardText)) {
     result = 'He said nothing that asks anything - it was an acknowledgement - so nothing was searched and nothing '
       + 'was put on his shelf. Answer him in one short line in your own words. Do not look anything up.';
@@ -5008,15 +5014,22 @@ async function handleWorldCall(call) {
             .slice(0, 5).map((s) => ({ title: String(s.title || s.url).slice(0, 180), url: String(s.url) })),
         },
       };
-      shelfAdd(mapCard);
-      keepFound(mapCard);
-      shelfWriteAt = Date.now();
-      shelfWriteKind = 'fact';
+      if (!quietShelf) {
+        shelfAdd(mapCard);
+        keepFound(mapCard);
+        shelfWriteAt = Date.now();
+        shelfWriteKind = 'fact';
+      }
       looked = 'the world \u00b7 a map';
-      logLine('world.map', place + ' \u00b7 ' + mapCard.url.slice(0, 90), { level: 'info', target: 'world' });
-      result = 'A card with a map of ' + place + ' is on his shelf now, and tapping it opens the map. Say in '
-        + 'one short line that the map is on his shelf and that he can open it. Do not describe what the map '
-        + 'shows, because you cannot see it, and never say the links are beside the card.';
+      logLine('world.map', place + ' \u00b7 ' + (quietShelf ? 'card held: a song is in the studio' : mapCard.url.slice(0, 90)),
+        { level: 'info', target: 'world' });
+      result = quietShelf
+        ? 'The map of ' + place + ' is at ' + mapCard.url + '. Nothing was put on his shelf because his song is '
+          + 'being made and the shelf is for the song right now. Give him the map address in one short line, or '
+          + 'tell him the map is ready and it can go on his shelf when the song has landed.'
+        : 'A card with a map of ' + place + ' is on his shelf now, and tapping it opens the map. Say in '
+          + 'one short line that the map is on his shelf and that he can open it. Do not describe what the map '
+          + 'shows, because you cannot see it, and never say the links are beside the card.';
     } else if (!r || !r.ok) {
       result = 'the world lookup returned nothing for "' + ask + '"'
         + (r && r.error ? ' (' + r.error + ')' : '')
@@ -5028,7 +5041,11 @@ async function handleWorldCall(call) {
         .filter((s) => s && /^https?:\/\//i.test(String(s.url || ''))).slice(0, 5);
       result = facts
         + ' (source: ' + r.engine + ', as of ' + r.as_of + '. If you name a source, name this one and nothing else. '
-        + (srcList.length
+        + (quietShelf
+          ? 'A song of his is being made, so nothing was put on his shelf: answer him from these facts in one or '
+            + 'two short lines, say where it came from, and say the song is still being made. '
+          : '')
+        + (!quietShelf && srcList.length
           ? 'The door has put ONE card on his shelf and it carries the ' + srcList.length + ' source link'
             + (srcList.length === 1 ? '' : 's') + ' inside it, so say it is on his shelf and let him open it. '
             + 'Never say the links are beside it, because they are in it. '
@@ -5039,7 +5056,7 @@ async function handleWorldCall(call) {
       /* Build 220. A lookup is a finding, so it lands like one. shelfWriteAt is set because a row really was
          written: the shelf-write guard must not correct a true sentence, which is exactly what it did at 16:13
          today, out loud, as a second reply. */
-      const foundCard = worldCard(ask, r);
+      const foundCard = quietShelf ? null : worldCard(ask, r);
       if (foundCard) {
         if (!shelfReplace(foundCard.code, foundCard)) shelfAdd(foundCard);
         keepFound(foundCard);
@@ -11020,7 +11037,6 @@ if (GIFT_CODE) {
     try { logLine('door.gift', 'arrived for ' + g.title + ' · ' + g.state, { level: 'info' }); } catch (e) {}
   }).catch(() => {});
 }
-
 </script>
 </body>
 </html>
