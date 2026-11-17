@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-17T14:45';
-const BUILD_NO = 252;
+const BUILD = '2026-11-17T14:35';
+const BUILD_NO = 253;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -566,11 +566,19 @@ const mouthMaySound = () => !typed() && !turnBeganMuted;
    in one short line, right after the sound is locked, and never as a tap waiting at the end. A yes is drawn the
    moment the song lands; a no leaves it bare and nothing asks again. He is never asked what the picture should be,
    because the song's own scene is the brief. */
-const PICTURE_RULE = 'The picture is the second question of the making, asked once, in one short line, right after '
-  + 'he has chosen the sound: "Do you want a cover picture to go with that?" A yes means it is drawn the moment the '
-  + 'song lands and needs nothing more from him. A no leaves the song bare and the picture is never raised again. '
-  + 'Never ask what the picture should be, never offer versions, never ask it before the sound, and never ask it '
-  + 'twice. Never say a cover is drawn when he shares it: that reading was withdrawn on 10 Nov.';   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
+/* Build 253. ONE QUESTION A TURN, AND THE PICTURE IS A TAP, NOT A SENTENCE.
+   17 Nov 2026, testing 252: "The prompt came both questions in one... What kind of music should it be? Say you
+   choose and I will pick. Do you want a cover picture to go with that?" The rule written for 252 described the
+   order of the questions and lost the sentence that kept them apart, so the mouth asked the sequence in one breath.
+   So the picture is never spoken: the door puts it on his screen as a tap, right after the sound is answered, and
+   the mouth asks nothing about it. Order is subject, sound, picture, song. A yes is drawn the moment the song lands
+   from the song's own scene; a no leaves it bare and nothing asks again. */
+const PICTURE_RULE = 'The picture is answered by a TAP, not by a sentence: right after he answers the sound, the door '
+  + 'puts one row on his screen asking whether he wants a cover picture, and he taps yes or no. You never ask about '
+  + 'the picture in words, never mention a cover as a question, and never offer versions of one. ONE QUESTION A TURN: '
+  + 'never ask the sound and the picture in the same breath, and never ask the picture before the sound is answered. '
+  + 'When the tap has been taken the picture is settled: a yes is drawn the moment the song lands, a no leaves it bare. '
+  + 'Never say a cover is drawn when he shares it: that reading was withdrawn on 10 Nov.';   // 8 Nov: a reopened door resumes the session it was in, so it keeps the same voice.
 
 // GitHub Pages serves this file with cache-control: max-age=600, so a plain reload can hand back a
 // ten-minute-old copy of the door and make a finished change look missing. (Edwin, 5 Nov: "I can't
@@ -2973,12 +2981,16 @@ function afterSoundBeat() {
   if (songDraft.coverAnswered) return;      // he has already answered for this song
   songDraft.askBeat = 'cover';
   songDraft.coverTries = 0;
+  /* BUILD 253. The question goes on his screen, and the mouth is told to ask nothing about it. On 252 the mouth was
+     told to ask it in one short line and asked it in the same breath as the sound, which is the one thing this beat
+     exists to prevent. A tap cannot be bundled. */
+  try { askCoverFor({ title: String(songDraft.said || '').slice(0, 40) }, 'making'); } catch (e) {}
   try {
-    doorNote('The sound is locked. Before making it, ask ONE short line: "Do you want a cover picture to go with '
-      + 'that?" A yes means it is drawn the moment the song lands; a no means it goes bare. Never ask what the '
-      + 'picture should be, never offer versions, and make nothing until he answers.', true);
+    doorNote('The sound is locked, and the picture question is on his screen as a tap. Do NOT ask about the '
+      + 'picture in words, do not repeat the sound question, and ask no other question: one question a turn. Say '
+      + 'one short line that the sound is kept, and wait for the tap.', true);
   } catch (e) {}
-  try { railNote('journey \u00b7 sound locked \u00b7 picture asked'); } catch (e) {}
+  try { railNote('journey \u00b7 sound locked \u00b7 picture asked as a tap'); } catch (e) {}
 }
 
 function chainBeat(beat) {
@@ -6892,13 +6904,16 @@ function descentHear(heard) {
    the mouth: his song landed, nothing was asked, and the cover was drawn on the share sheet instead. A question
    that decides a spend is a tap. One row, two answers, asked once per song, and no third question about what the
    picture should be, because the song's own scene is the brief. Yes draws it there and then; no leaves it bare. */
-function askCoverFor(card) {
+function askCoverFor(card, mode) {
   const c = card || {};
+  const making = mode === 'making';      // asked at the sound beat, where there is no song to draw from yet
   const wrap = document.createElement('div');
   wrap.className = 'coverask';
   wrap.style.cssText = 'margin:10px 0 2px;padding:11px 12px;border:1px solid #2f2b24;border-radius:10px;background:#12110e';
   const q = document.createElement('div');
-  q.textContent = 'do you want a cover image drawn for it? one drawing, or leave it bare.';
+  q.textContent = making
+    ? 'do you want a cover picture to go with that?'
+    : 'do you want a cover image drawn for it? one drawing, or leave it bare.';
   q.style.cssText = 'font-size:13px;color:#e8dfcc;line-height:1.45;margin-bottom:9px';
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
@@ -6907,6 +6922,23 @@ function askCoverFor(card) {
     artOpen = null;
     shareArt = { want: !!want, brief: '', url: '' };
     try { saveDraft(); } catch (e) {}
+    if (making) {
+      /* The picture for THIS song, taken before it is made. Nothing is drawn here: there is no song yet, and the
+         drawing happens on landing, from the song's own scene (build 173's path). */
+      songDraft.cover = !!want;
+      songDraft.coverAnswered = true;
+      songDraft.coverTries = 0;
+      songDraft.askBeat = '';
+      logLine('song.journey.cover', want ? 'a picture, drawn when it lands' : 'no picture', { level: 'info', target: 'music' });
+      try {
+        doorNote(want
+          ? 'The picture is answered: yes, and it is drawn the moment the song lands. Draw nothing now and say '
+            + 'nothing more about it. Make the song.'
+          : 'The picture is answered: no, so the song goes bare and nothing is drawn. Make the song now.', true);
+      } catch (e) {}
+      try { railNote(want ? 'journey \u00b7 picture \u00b7 yes' : 'journey \u00b7 picture \u00b7 no'); } catch (e) {}
+      return;
+    }
     if (want) {
       logLine('cover.yes', 'drawing one \u00b7 ' + String(c.title || ''), { level: 'info' });
       try { drawDescent(); } catch (e) {}
