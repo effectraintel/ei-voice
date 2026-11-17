@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-17T15:25';
-const BUILD_NO = 271;
+const BUILD_NO = 272;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -587,6 +587,14 @@ const PICTURE_RULE = 'THE DOOR HOLDS THE SCRIPT AND YOU DO NOT. It has four asks
      Boss? And do you want a cover picture?" - it recited the script from this very rule and then, a turn later,
      invented a screen that does not exist: "While that sheet is open, just tap the picture you want." There is no
      sheet. It is named here because a model that fills a gap with a picture of a screen will do it again. */
+  /* BUILD 272. 17 Nov 2026, 18:33. Two inventions in one run, both from rewording: the door asked for the kind of
+     music and the mouth offered "Upbeat pop, feel-good funk, or something else?" - three genres of its own, then a
+     live web lookup to decide one - and at the words question it offered "or make up something new that captures the
+     feeling", a path the door cannot take. So a question of the making is SAID AS GIVEN, word for word: no examples,
+     no options, no third path, no paraphrase. */
+  + 'SAY THE DOOR\'S LINE WORD FOR WORD. When a note gives you the question in quotes, that sentence is what he '
+  + 'hears: add no examples, no shortlist, no third option and no paraphrase, and never go and look something up '
+  + 'to decorate it. '
   + 'THERE IS NO SHEET, no row, no card and no tapping: nothing about the making appears on his screen except what '
   + 'you say out loud. Never tell him to tap, choose, look at or open anything, and never mention a sheet, a panel, a '
   + 'picker, an address box or a message box. He answers in words, and the door takes the answer. '
@@ -3216,7 +3224,13 @@ function songHearTurn(heard) {
     }
     /* ---- BUILD 267: THE WORDS BEAT. Built around, or left exactly as he said them. ---- */
     if (beat === 'build') {
-      const around = /\b(?:build around|build it|build on|build out|expand|extrapolate|more words|fuller|longer|flesh it out|add to it|work around)\b/i.test(t)
+      /* BUILD 272. 17 Nov 2026, 18:33. The mouth offered a third path the door does not have - "or make up something
+         new that captures the feeling" - and he took it: "Make up something new." The door read it as unclear, then as
+         "leave the words as they are", and a 1:15 take came back with his three lines as the whole song. When he asks
+         for new words, the door writes them around his own: that is what 'around' means, and it is never 'as-is'. */
+      const newWords = /\b(?:make (?:up )?something new|something new|new words|your own words|write (?:me )?(?:the |some )?words|surprise me|you write)\b/i.test(t);
+      const around = newWords
+        || /\b(?:build around|build it|build on|build out|expand|extrapolate|more words|fuller|longer|flesh it out|add to it|work around)\b/i.test(t)
         || /^(?:yes|yeah|yep|y|sure|ok|okay|please|do it|go ahead|definitely|absolutely|of course)\b/i.test(t.trim());
       const asis = /\b(?:as is|as it is|leave it|leave them|keep it|keep them|just as|exact|unchanged|don'?t change|nothing)\b/i.test(t)
         || /^(?:no|nope|nah|n)\b/i.test(t.trim());
@@ -3402,9 +3416,12 @@ function journeyAskNext() {
         { level: 'info', target: 'music' });
       railNote('journey \u00b7 build');
       doorAsk('Do you want me to build around your words, or just leave it as it is?',
-        'His words are held and the door is asking one thing about them. Ask him exactly this, one short line in '
-        + 'your own voice: "Do you want me to build around your words, or just leave it as it is?" Say nothing '
-        + 'about length, nothing about how an earlier song came out, and ask nothing else.');
+        'His words are held and the door is asking one thing about them. Say this line word for word and add nothing '
+        + 'to it: "Do you want me to build around your words, or just leave it as it is?" These are the only two '
+        + 'answers the door can take, so offer no third path and no option of your own, and never choose for him. '
+        /* 1411's lesson, kept: a note that names a forbidden phrase puts it in the mouth, so the phrase is not
+           written here. The list simply says what the door can take. */
+        + 'Say nothing about length, nothing about how an earlier song came out, and ask nothing else.');
       return;
     }
     songDraft.askBeat = 'sound';
@@ -3417,8 +3434,9 @@ function journeyAskNext() {
        next) and never lists the words not to use. */
     doorAsk('What kind of music should it be?',
       'He has given what the song is about, in his own words, and the door is holding it. Ask him '
-      + 'exactly one question, short, in your own voice: "What kind of music should it be? Say you choose '
-      + 'and I will pick." Offer plainly that he can say "you choose" and you will pick, because no beat is '
+      + 'exactly one question, short. Say this line word for word and add nothing to it: "What kind of music '
+      + 'should it be? Say you choose and I will pick." Offer no three examples of your own, name no genre he '
+      + 'has not given, and never look a kind of music up. He can say "you choose" and the door will pick, because no beat is '
       + 'a gate. Do not describe the song and do not name a style he did not give. Say only what is true '
       + 'now: his words are held, and the sound is the next thing the making needs. Ask THAT question and '
       + 'nothing else.');
@@ -4634,10 +4652,10 @@ async function handleSongCall(call) {
         songDraft.at = Date.now();
         songDraft.askBeat = askBeat;
         result = 'Nothing has been made, and nothing should be yet: this is the route, and the journey has a '
-          + 'beat to go. Ask him this one question and stop, in your own voice, short: ' + ask + ' Offer '
-          + 'plainly that he can say "you choose" and you will pick, because no beat is a gate. Do not '
-          + 'describe the song, do not name a style you were not given, and do not call this tool again '
-          + 'until he has answered.';
+          + 'beat to go. Ask him this one question and stop, short, word for word: ' + ask + ' Offer '
+          + 'plainly that he can say "you choose" and you will pick, because no beat is a gate. Add no examples '
+          + 'of your own. Do not describe the song, do not name a style you were not given, never look a kind of '
+          + 'music up, and do not call this tool again until he has answered.';
         looked = 'song · ' + askBeat;
         railNote('journey · ' + askBeat);
       } else if (!hasSaid && action !== 'again') {
@@ -5347,7 +5365,15 @@ function judgeClaim() {
       logLine('claim.finding', 'a card was written for it, so it is true: ' + t.slice(0, 120),
         { level: 'info', target: 'claim' });
     }
-    if (readyClaim.test(t) && !negatedHere(t, readyClaim) && !madeRecently && !lastSongRequest
+    /* BUILD 272. 17 Nov 2026, 18:33, the glitch at the end of an otherwise perfect run. The mouth said "The song
+       will land on your shelf when it's ready" - the future, correctly stated, and the line the door had just asked
+       for - and this guard read "song ... it's ... ready" as a claim that it HAD landed. It corrected a true
+       sentence, and the mouth answered "I was mistaken, Boss, the song is still being made", which is the one thing
+       he has told us never to say. A promise about what will happen is not a claim about what has happened, so a
+       sentence that is plainly about the future is not this guard's business. */
+    const futureHere = /\b(?:will|'ll|shall|gonna|going to)\b[^.!?]{0,80}\b(?:land|lands|appear|arrive|be ready|be on|show up|come|drop)\b|\bwhen it'?s ready\b|\bwhen it is ready\b|\bonce it'?s ready\b|\bwhen the song is ready\b/i.test(t);
+    const finishedHere = /\b(?:has landed|have landed|just landed|has arrived|is on your shelf now|is ready now|is there now)\b/i.test(t);
+    if (readyClaim.test(t) && !negatedHere(t, readyClaim) && !(futureHere && !finishedHere) && !madeRecently && !lastSongRequest
         && !shelfBacksClaim(t) && !findingSentence) {
       /* What the correction is ABOUT, which decides its words and not whether it fires. A store song
          on his shelf means the sentence is most likely about a song even when it names no take, and
@@ -6652,10 +6678,16 @@ let noteQueue = [], noteTimer = null, noteQueuedAt = 0;
 // A closer is not information. It is the politeness a model appends when it has nothing to add, and
 // on 10 Nov 2026 it was said three times for one request. Two shapes: a whole utterance that is only a
 // closer (cut before it is spoken), and a closer tagged on the end of a real sentence (stripped).
-const CLOSER_ONLY = /^\s*(?:is there anything(?: else)?|anything else|i'?m still (?:here|with you)|i am still (?:here|with you)|still here|happy to help|let me know if (?:you )?(?:need|want) (?:anything|any more|more)|just let me know|of course[,.!]? is there|would you like anything)/i;
-const CLOSER_TAIL = /(?:^|[.!?,]\s*)(?:is there anything else[^.!?]*\?|anything else (?:i can|you need|you'?d like|for you)[^.!?]*\?|is there anything (?:else )?(?:i can|you'?d like|you would like|you need)[^.!?]*\?|can i help (?:you )?with anything else[^.!?]*\?|let me know if (?:you )?(?:need|want) (?:anything|any more|more)[^.!?]*[.!?]?|let me know if (?:there'?s|there is) anything[^.!?]*[.!?]?|just let me know[^.!?]*[.!?]?|i'?m still (?:here|with you)[^.!?]*[.!?]?|happy to help[^.!?]*[.!?]?)\s*$/i;
+/* BUILD 272. 17 Nov 2026, 18:33: "That's all I need, Boss. The song will land on your shelf when it's ready."
+   He has told us that closing line is untrue - nothing here can notify him - and the door's note had asked for one
+   short line. So it is a closer like the rest, cut before it is spoken. */
+const CLOSER_ONLY = /^\s*(?:that'?s all i need[^.!?]*[.!?]?|thats all i need[^.!?]*[.!?]?|is there anything(?: else)?|anything else|i'?m still (?:here|with you)|i am still (?:here|with you)|still here|happy to help|let me know if (?:you )?(?:need|want) (?:anything|any more|more)|just let me know|of course[,.!]? is there|would you like anything)/i;
+const CLOSER_TAIL = /(?:^|[.!?,]\s*)(?:that'?s all i need[^.!?]*[.!?]?|is there anything else[^.!?]*\?|anything else (?:i can|you need|you'?d like|for you)[^.!?]*\?|is there anything (?:else )?(?:i can|you'?d like|you would like|you need)[^.!?]*\?|can i help (?:you )?with anything else[^.!?]*\?|let me know if (?:you )?(?:need|want) (?:anything|any more|more)[^.!?]*[.!?]?|let me know if (?:there'?s|there is) anything[^.!?]*[.!?]?|just let me know[^.!?]*[.!?]?|i'?m still (?:here|with you)[^.!?]*[.!?]?|happy to help[^.!?]*[.!?]?)\s*$/i;
+/* BUILD 272. A closer can also OPEN a turn: "That's all I need, Boss. It will be on your shelf soon." The tail
+   rule left it in front of the true line, so the head is cut too, once, where it stands on its own sentence. */
+const CLOSER_HEAD = /^\s*(?:that'?s all i need|thats all i need)[^.!?]*(?:[.!?]|$)\s*/i;
 function stripClosers(t) {
-  let out = String(t || '');
+  let out = String(t || '').replace(CLOSER_HEAD, '');
   for (let i = 0; i < 3; i++) {
     const cut = out.replace(CLOSER_TAIL, '');
     if (cut === out) break;
