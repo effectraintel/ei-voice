@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T09:40';
-const BUILD_NO = 304;
+const BUILD_NO = 305;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1283,6 +1283,11 @@ if (stored !== voice) localStorage.setItem('ei-live-voice', voice);
 let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
 let listening = false, busy = false, sessionUp = false;
 let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency = null;
+/* BUILD 305. turnInFlight was read here and written three thousand lines below, never declared, so it lived
+   as an implicit global that only existed once something had assigned it. On 18 Nov 2026, 09:09:08 the very
+   first note of the visit was the welcome-back question, before any turn had run: Safari threw
+   "Can't find variable: turnInFlight" on the first read and the door carried on with a broken queue. */
+let turnInFlight = false;
 // Echo bookkeeping. A phone speaker feeds its own voice back into its own microphone.
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
 // owner interrupting, so the page used to cut its own sentence off mid-word.
@@ -7083,7 +7088,7 @@ async function handleShareCall(call) {
     if (resumePending) {
       resumePending = false;
       const low = said.toLowerCase();
-      if (/\b(?:fresh|start over|start again|start fresh|new session|new door|begin again|forget (?:it|that|everything|all of it)|clear (?:it|that)|wipe)\b/.test(low)) {
+      if (/\b(?:fresh|start over|start again|start fresh|start something (?:new|else)|something new|start new|new session|new door|new one|begin again|forget (?:it|that|everything|all of it)|clear (?:it|that)|wipe)\b/.test(low)) {
         clearSitting();
         logLine('sitting.cleared', 'he chose a fresh session · "this is a fresh door, and nothing before it"',
           { level: 'info', target: 'sitting' });
@@ -7092,12 +7097,21 @@ async function handleShareCall(call) {
           + 'the door is fresh and ask what he wants.', true);
         return;                     // the door's line answers this turn, not the old subject
       }
-      if (/\b(?:carry on|carrying on|continue|where we left|pick up|resume|go on|yes|yeah|sure|ok|okay|please)\b/.test(low)) {
+      /* BUILD 305. THE ANSWER TO "CARRY ON OR START FRESH" IS A CHOICE, NOT A SONG TITLE.
+         18 Nov 2026, 09:09: he was asked the welcome-back question, said "Let's carry on.", and the door opened a
+         song hunt on the words "Let's carry on." and then on "Let's start something new." Nothing said to that
+         question may reach the hunt: the choice spends the turn, and the door's own line answers it. */
+      const isChoice = said.split(/\s+/).filter(Boolean).length <= 6;
+      if (/\b(?:carry on|carrying on|continue|where we left|pick up|resume|go on|yes|yeah|sure|ok|okay|please)\b/.test(low)
+          && isChoice && !/\b(?:song|music|track|tune)\b/i.test(low)) {
         logLine('sitting.continued', 'he chose to carry on · ' + said.slice(0, 40), { level: 'info', target: 'sitting' });
-      } else {
-        logLine('sitting.kept', 'he carried on talking, so the sitting stays · ' + said.slice(0, 40),
-          { level: 'info', target: 'sitting' });
+        doorNote('He chose to CARRY ON where you both were. Pick it up in one short line: name what you were doing '
+          + 'with him and ask the next thing about it. Do not start a song hunt, do not ask for a song title, and do '
+          + 'not list what you can do.', true);
+        return;                     // the choice is answered by the door, not turned into a subject
       }
+      logLine('sitting.kept', 'he carried on talking, so the sitting stays · ' + said.slice(0, 40),
+        { level: 'info', target: 'sitting' });
     }
     if (heardStop(said)) return;
     // "I want to create a song and share it to somebody" is the intent that makes a made song a gift.
