@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 363;
+const BUILD_NO = 364;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4622,6 +4622,9 @@ function correctionCue(t) {
   return at;
 }
 let routeCorrectedAt = 0;      // a correction turn is a route, never a title to search for
+/* BUILD 364. A ROUTE THAT HAS ANSWERED OWNS THE TURN, so the sharing branch may not ask a second question on the
+   same sentence. 01:48: "I want to create a song." opened the making and then also asked "Which song, Boss?". */
+let routeAnsweredAt = 0;
 
 /* Build 137, change 6: a route sentence is never a query. "I want to create a song" carries no title in
    it, so nothing may be searched with those words. Everything in the sentence is the asking. */
@@ -5096,6 +5099,12 @@ function songRouteGate(heard) {
     askSongFork();
   }
   if (songRoute.pick) logLine('song.route', songRoute.pick, { level: 'info', target: 'music' });
+  /* BUILD 364. A ROUTE THAT HAS ANSWERED OWNS THE TURN.
+     19 Nov 2026, 01:48: he said "I want to create a song." (0.971), the door opened the making - "A new one, then.
+     What should the song be about?" - and then carried straight on into the sharing branch and asked "Which song,
+     Boss? The title and who sings it." Two deciders answered one sentence, and he was asked for a title for a song he
+     wanted to write. The gate now says whether it answered, and the turn stops when it has. */
+  return !!(songRoute.pick || negMake);
 }
 const SONG_FILLER = /\b(i|we|you|want|wanna|would|like|please|can|could|will|make|making|write|create|sing|do|need|give|me|us|a|an|the|to|for|about|of|on|in|with|some|song|songs|tune|tracks|track|music|thing|something|anything|one|another|new|it|that|this|and|my|our|his|her|their|just|now|again|actually|really|be|is|are|it's|its)\b/gi;
 const SONG_PERSON = /\b(friend|mate|buddy|girlfriend|boyfriend|wife|husband|partner|mom|mum|mother|dad|father|sister|brother|son|daughter|kid|child|family|someone|somebody|person|people|colleague|boss|client|gran|grandma|grandpa)\b/i;
@@ -8426,7 +8435,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     try { if (songTakesProse(said)) return; } catch (e) {}
     /* Build 246: the question the door asked comes first. A subject he has just given is not a route. */
     if (doorTakesSubject(said)) { try { descentHear(said); } catch (e) {} return; }
-    try { if (!forkAnswer(said)) songRouteGate(said); } catch (e) {}
+    try { if (!forkAnswer(said)) { if (songRouteGate(said)) routeAnsweredAt = Date.now(); } } catch (e) {}
     try { shadowRouteNote(said, songRoute && songRoute.pick); } catch (e) {}
     try { songHearTurn(said); } catch (e) {}
     try { descentHear(said); } catch (e) {}
@@ -8539,6 +8548,13 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   }
 
   function guessTurn(said) {
+    /* BUILD 364. ONE SENTENCE GETS ONE ANSWER. If the song route already opened a making on this very turn, the
+       sharing branch does not ask for a title on the back of it. */
+    if (routeAnsweredAt && Date.now() - routeAnsweredAt < 1500) {
+      logLine('share.ask.suppressed', 'the song route already answered this turn, so no title is asked on top of it',
+        { level: 'info', target: 'songShare' });
+      return false;
+    }
     /* Build 317: "Yes, I am actually." names nothing. With songs on the table it asks which one; with none it asks for
        a title. Either way his affirmation is never sent to the mouth as a clue and never becomes a title. */
     try {
