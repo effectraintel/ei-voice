@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T09:25';
-const BUILD_NO = 308;
+const BUILD = '2026-11-18T09:32';
+const BUILD_NO = 309;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6777,6 +6777,23 @@ async function handleShareCall(call) {
   
   /* A rejection is not a title. "Not one of those." was searched as a song name at 20:17:59 and came back empty,
      which read to him as the rail having nothing when the truth was that nobody had asked it anything sensible. */
+  /* BUILD 309. A THANK-YOU IS NOT A SEARCH.
+     18 Nov 2026, 07:28:16, live on 308: the song had landed, he said "Okay, fantastic. I see it there. Thank you." and
+     the door asked the rail for "fantastic I see there Thank you" and then told him "Nothing found for those exact
+     words" - a search nobody wanted, about a song already on his shelf. A line whose whole content is acknowledgement
+     is answered in words and searched for nothing. It is only ever read this way when nothing is being asked of him
+     (no fork, no open question, no hunt, nothing armed), so a "yes" to a real question still answers it. */
+  const ACK_WORDS = /\b(?:ok(?:ay)?|kay|fantastic|great|perfect|brilliant|awesome|amazing|lovely|nice|cool|wonderful|superb|excellent|beautiful|wow|thanks?|thank you|cheers|ta|appreciate it|i see it(?: there)?|i see|got it|see it there|there it is|glad|yes|yeah|yep|sure|please|haha|ha)\b/g;
+  const ACK_FILLER = /\b(?:and|the|it|is|are|was|there|for|you|i|me|my|on|in|to|of|a|an|that|this|so|really|very|much|now|already|can|see|do|did|all|good|fine|right|one|am|we|us|have|has)\b/g;
+
+  function acknowledgement(t) {
+    const x = String(t || '').toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!x || x.split(' ').length > 14) return false;
+    if (!/\b(?:thank|thanks|cheers|fantastic|great|perfect|wow|brilliant|awesome|amazing|lovely|okay|ok|got it|i see|yes|yeah|yep|sure|please)\b/.test(x)) return false;
+    const left = x.replace(ACK_WORDS, ' ').replace(ACK_FILLER, ' ').replace(/\s+/g, ' ').trim();
+    return left === '';
+  }
+
   function shareRejection(t) {
     /* BUILD 308. "NO" PLUS A NAME IS NOT A REJECTION, IT IS HIS ANSWER.
        18 Nov 2026, 07:23: he was stuck in a list he never asked for and typed "No, it is falling by a lesu." The
@@ -7120,6 +7137,18 @@ async function handleShareCall(call) {
     if (!said) return;
     // A new thing said is a new chance to be corrected: the mute above belongs to the fault, not to him.
     correctMuted = '';
+    /* BUILD 309: nothing is asked of him, and the whole line is acknowledgement, so nothing is searched. */
+    try {
+      const asking = songFork || guessHunt || sharePending || shareCard || madeShare
+        || (shareStage && shareStage !== 'idle' && shareStage !== 'closed' && shareStage !== 'sent');
+      if (!asking && acknowledgement(said)) {
+        awaitSong = 0; shareQuery = '';
+        logLine('share.ack', 'an acknowledgement, not a search · ' + said.slice(0, 50), { level: 'info', target: 'songShare' });
+        doorNote('He is acknowledging something the door has already done. Answer him in one short, warm line and ask '
+          + 'whether there is anything else. Do not search, do not mention the rail, and do not name a song.', true);
+        return;
+      }
+    } catch (e) {}
     /* BUILD 301. "THAT IS THE ONE" IS HIS VERDICT, AND IT COMES FIRST.
        A yes is read by several steps (a choice list, a route question, a read-back), so the sentence that ends a hunt
        was being taken as an answer to something else and the rail was never asked. While a hunt is being narrowed, his
