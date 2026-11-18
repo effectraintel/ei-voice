@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 349;
+const BUILD_NO = 350;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -907,7 +907,13 @@ function heardFlush(why) {
       if (!ws || ws.readyState !== 1) return;
       logLine('turn.forwarded', 'the door answered with nothing, so his own words go to the mouth · '
         + String(acted).slice(0, 120), { level: 'warn', target: 'hear' });
-      postTyped(acted);
+      /* BUILD 350. A TURN FORWARDED WITHOUT A LICENCE IS A TURN THE MOUTH MAY NOT ANSWER.
+         19 Nov 2026, 00:11 live: the forward worked and the model did answer, and every word of it was dropped -
+         "mouth.unheard ... I hear you, Boss. What were you saying?" - because build 341 says the mouth speaks only
+         when the door has licensed it, and a raw turn licenses nothing. That is why the door went quiet after one
+         exchange. The forward now carries its licence: his sentence, and one instruction to answer it in one line. */
+      doorNote('He said: "' + String(acted).slice(0, 300) + '". Answer him in one short line, in your own words, '
+        + 'and nothing else. Do not ask him to repeat it and do not say you did not hear him.', true);
     } catch (e) {}
   }, 1200);
 }
