@@ -816,6 +816,10 @@ function doorTurn(heard) {
     const fast = thinkFast(said);
     if (fast) {
       logLine('think.fast', fast.plan + ' \u00b7 ' + (fast.why || ''), { level: 'info', target: 'think' });
+      /* BUILD 332. THE THREE OUTPUTS ARE WRITTEN ON EVERY TURN, including the ones thinking settles without a
+         model call, so a run can be measured from the record alone. */
+      logLine('phase.think', fast.journey + ' \u00b7 ' + fast.plan + ' \u00b7 settled by the door’s own reader '
+        + '\u00b7 ' + (fast.why || ''), { level: 'info', target: 'think' });
       return obeyThinking(fast, said);
     }
     return thinkAndAct(said);
