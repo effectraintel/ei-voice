@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 346;
+const BUILD_NO = 347;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -13242,6 +13242,8 @@ async function openMic() {
     }
 
     if (!listening || !sessionUp || !ws || ws.readyState !== 1) return;
+    /* BUILD 347: his words go to the ear, not into the model that answers him. */
+    if (EAR && earOn()) { earFeed(data, rms, ours); return; }
     // While we are speaking, send our own silence unless he is genuinely talking over
     // us. Otherwise the server hears its own output, decides it was interrupted, and
     // stops generating half a sentence in. That is the other way a sentence dies.
@@ -13264,6 +13266,7 @@ async function openMic() {
   };
   src.connect(proc);
   proc.connect(micCtx.destination);
+  if (EAR) earOpen();
 }
 
 // A warm but not-yet-live microphone looks like nothing: no halo, no bars, no talking class.
@@ -13284,6 +13287,7 @@ function paintLevel(norm) {
 
 function closeMic() {
   listening = false; speaking = false;
+  try { earClose(); } catch (e) {}
   try { proc && proc.disconnect(); } catch {}
   try { micCtx && micCtx.close(); } catch {}
   try { micStream && micStream.getTracks().forEach(t => t.stop()); } catch {}
@@ -13305,6 +13309,118 @@ function downsample(float32, from, to) {
     out[i] = sum / Math.max(1, b - a);
   }
   return out;
+}
+
+/* BUILD 347. THE EAR IS GOOGLE'S, AND THE BOUNDARY IS OURS.
+
+   Until tonight the microphone went straight into the live audio model, and that model both heard him and answered
+   him. He paid for that twice: the transcription was noisy, and on 18 Nov at 20:16 the recogniser decided one of his
+   words was Japanese - "da capo from Ace of Base" came back as "カップ from Ace of Base". Google's own streaming
+   recognition, asked in English and only in English, is a better ear, and it is now the only ear: his words go to the
+   relay, the relay asks Google, and the words come back here.
+
+   Nothing about the corridor changes. A finished utterance goes through heardFlush exactly as it always did, so a
+   spoken turn and a typed turn remain one path, and every guard already written still applies to it.
+
+   The door decides when he has finished, not the recogniser: 1.1 seconds of quiet after speech. If the ear cannot be
+   reached, the old path is still underneath it, so a broken relay can never leave him talking to nothing. */
+const EAR = true;
+const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
+const EAR_END_MS = 1100;
+let earWs = null, earReady = false, earText = '', earSpeech = false, earLastVoiced = 0, earClosed = false;
+let earFails = 0, earWatch = 0, earOpenedAt = 0;
+
+function earOn() { return !!(earWs && earWs.readyState === 1); }
+
+function earOpen() {
+  if (earWs && (earWs.readyState === 0 || earWs.readyState === 1)) return;
+  try {
+    const s = new WebSocket(EAR_URL);
+    earWs = s;
+    s.binaryType = 'arraybuffer';
+    s.onopen = () => {
+      if (s !== earWs) { try { s.close(); } catch (e) {} return; }
+      earReady = true; earOpenedAt = Date.now();
+      logLine('ear.open', 'the ear is Google\u2019s: en-US, streaming, our own boundary', { level: 'info', target: 'hear' });
+    };
+    s.onmessage = (ev) => {
+      if (s !== earWs) return;
+      let f = null;
+      try { f = JSON.parse(ev.data); } catch (e) { return; }
+      if (!f) return;
+      if (f.t === 'partial') { if (f.text) earText = String(f.text); return; }
+      if (f.t === 'final') {
+        const t = String(f.text || '').trim();
+        if (t) earText = (earText && t.indexOf(earText) === 0) ? t : (earText ? earText + ' ' + t : t);
+        logLine('ear.final', t + ' \u00b7 conf ' + (f.conf == null ? '?' : f.conf) + ' \u00b7 ' + (f.lang || ''),
+          { level: 'info', target: 'hear' });
+        return;
+      }
+      if (f.t === 'end') { earFinish('the ear finished the turn'); return; }
+      if (f.t === 'error') {
+        earFails++;
+        earReady = false;
+        logLine('ear.refused', String(f.why || '').slice(0, 240), { level: 'error', target: 'hear' });
+        hint('the ear refused that one: ' + String(f.why || '').slice(0, 90));
+        try { s.close(); } catch (e) {}
+        return;
+      }
+    };
+    s.onerror = () => { if (s === earWs) logLine('ear.error', 'the ear connection failed', { level: 'error', target: 'hear' }); };
+    s.onclose = () => {
+      if (s !== earWs) return;
+      earReady = false;
+      if (Date.now() - earOpenedAt > 500) logLine('ear.closed', 'the ear closed', { level: 'warn', target: 'hear' });
+    };
+  } catch (e) {
+    logLine('ear.open.fail', String((e && e.message) || e), { level: 'error', target: 'hear' });
+  }
+}
+
+function earClose() {
+  earReady = false; earText = ''; earSpeech = false; earClosed = false;
+  if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
+  const s = earWs; earWs = null;
+  try { s && s.close(); } catch (e) {}
+}
+
+function earPcm(float32) {
+  if (!earOn()) return;
+  const i16 = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    const v = Math.max(-1, Math.min(1, float32[i]));
+    i16[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  try { earWs.send(i16.buffer); } catch (e) {}
+  turnInFlight = true;
+}
+
+function earFeed(data, rms, ours) {
+  const now = Date.now();
+  if (ours) return;                          // the speaker is in the air: the microphone is hearing us, not him
+  const voiced = rms > OPEN_RMS;
+  if (voiced) { earSpeech = true; earLastVoiced = now; }
+  if (voiced || earSpeech) {
+    if (!earOn()) earOpen();
+    earPcm(downsample(data, micCtx.sampleRate, 16000));
+  }
+  if (earSpeech && !voiced && !earClosed && now - earLastVoiced > EAR_END_MS) {
+    earClosed = true;
+    logLine('ear.turn.end', 'he stopped speaking; the ear is finishing the turn', { level: 'info', target: 'hear' });
+    try { if (earOn()) earWs.send(JSON.stringify({ t: 'end' })); } catch (e) {}
+    /* The door does not hang on the ear: if it never says it has finished, what it did hear is still used. */
+    earWatch = setTimeout(() => { if (earClosed) earFinish('the ear did not answer in time'); }, 2500);
+  }
+}
+
+function earFinish(why) {
+  if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
+  const text = String(earText || '').trim();
+  earText = ''; earSpeech = false; earClosed = false;
+  if (!text) { logLine('ear.empty', 'nothing came back from the ear', { level: 'warn', target: 'hear' }); return; }
+  logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
+  try { heardBuf = text; heardFlush(why); }
+  catch (e) { logLine('ear.turn.fail', String((e && e.message) || e), { level: 'error', target: 'hear' }); }
 }
 
 function sendPcm(float32) {
@@ -13336,7 +13452,7 @@ let idlePing = null;
 function idleTick() {
   try {
     if (!ws || ws.readyState !== 1 || !sessionUp) return;
-    if (!typed() || micStream) return;
+    if (!typed() && !EAR) return;
     const silence = new Uint8Array(1600);           // 50 ms of 16 kHz mono, all zeroes
     let bin = '';
     for (let i = 0; i < silence.length; i += 0x8000) {
