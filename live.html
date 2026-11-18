@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T15:30';
-const BUILD_NO = 321;
+const BUILD = '2026-11-18T15:39';
+const BUILD_NO = 322;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6993,7 +6993,7 @@ async function handleShareCall(call) {
          that opens with a pronoun or a verb, is ordinary speech and stays uncorrected. */
       if (bym) {
         const tWords = bym[1].trim().split(/\s+/).filter(Boolean);
-        const speechy = /^(?:i|you|we|they|he|she|it|there|this|that|here|am|is|are|was|were|want|need|like|look|looking|sitting|standing|listening)\b/i.test(bym[1].trim());
+        const speechy = /^(?:i|you|we|they|he|she|it|there|this|that|here|am|is|are|was|were|want|need|like|look|looking|sitting|standing|listening|share|sharing|make|making|play|playing|find|finding|give|get|put|add|search|can|could|would|please|let|do)\b/i.test(bym[1].trim());
         if (tWords.length <= 6 && !speechy && tWords.length >= 1) { title = bym[1]; artist = artist || bym[2]; }
       }
     }
@@ -7806,7 +7806,15 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
       /* A NAME SETTLES ONLY WHEN THERE IS SOMETHING TO SETTLE: a list he is choosing from, or a "no" that carries the
          song he wants instead. A title he offers into an open question is still the conversation, so the mouth keeps
          narrowing it - which is the rule he set on 18 Nov at 01:10. */
-      const answering = guessLast.length > 0 || /^\s*(?:no+|nope|nah)\b/i.test(said) || GUESS_ONE.test(said);
+      /* BUILD 322. A TITLE AND AN ARTIST IS HIS ANSWER EVEN BEFORE THERE IS A LIST.
+         18 Nov 2026, 13:34:55, live on 321: he said "anyone by Justin Bieber" straight after "I want to share a
+         song", the door had offered nothing yet, so `answering` was false and his answer was filed as more
+         narrowing - "share · narrowing it with the mouth · anyone by Justin Bieber" - and it took a second
+         prompt ("anyone") to make the same song land. The 01:10 rule it tripped over is about a BARE title
+         offered into an open question, and that rule stands. An artist is not a topic: a title plus an artist
+         is a name, and a name settles. */
+      const answering = guessLast.length > 0 || /^\s*(?:no+|nope|nah)\b/i.test(said) || GUESS_ONE.test(said)
+        || !!mine.artist;
       if (mine && mine.artist && answering) {
         guessHunt = false; guessLast = []; guessAt = 0;
         songFork = 0; songForkAsks = 0;      // a name ends the "from the stores or a new one?" fork too
