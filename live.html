@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T19:58';
-const BUILD_NO = 335;
+const BUILD = '2026-11-18T20:08';
+const BUILD_NO = 336;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -7889,6 +7889,8 @@ function beginTurn(raw) {
   curDirective = null;
   fillerCut = 0;
   mouthQuietUntil = 0; quietLogged = 0;      // build 335: he spoke, so the mouth is free again
+  unscriptedLogged = 0;
+  closeDirective('he spoke, so the door decides again before anything is said');   // build 336
   try {
     logLine('turn.open', said.slice(0, 200), {
       level: 'info', target: 'turn',
@@ -9093,6 +9095,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
       mouthQuietUntil = 0;                       // a new directive is the one thing that may be said
       try { hiddenHold = false; hiddenHoldUntil = 0; } catch (e) {}   // and it lifts any hold the door set
       try { askWatchAt = Date.now(); } catch (e) {}
+      openDirective();                           // build 336: and it is the only thing that opens the mouth
     }
     try {
       if (!ws) return;
@@ -9223,6 +9226,39 @@ function dropSentence() {
    first sound of anything else in it is dropped before it is played. He speaks, and the mouth is free again. */
 let mouthQuietUntil = 0, quietLogged = 0;
 
+/* BUILD 336. THE MOUTH MAY SOUND ONLY WHILE A DIRECTIVE IS OUTSTANDING.
+   18 Nov 2026, 19:50:00.5, live on 335: while the door was searching the rail the mouth said "Boss?" and then began
+   the door's own question again. The words were held the moment they arrived - but the audio for them had already
+   gone to the speaker, because a guard that reads words is always behind the sound the words describe. So the rule
+   is no longer about what it said. The door gives the mouth an exact line to say, and only while that line is owed
+   may any sound leave the door. Everything else is dropped before it plays. */
+let directiveOpen = false, directiveCap = null, unscriptedLogged = 0;
+
+function openDirective() {
+  directiveOpen = true;
+  try { if (directiveCap) clearTimeout(directiveCap); } catch (e) {}
+  try {
+    directiveCap = setTimeout(() => {
+      if (directiveOpen) {
+        directiveOpen = false;
+        logLine('mouth.directive.closed', 'twelve seconds and the line was never said, so the mouth is shut again',
+          { level: 'info', target: 'mouth' });
+      }
+    }, 12000);
+  } catch (e) {}
+}
+
+function closeDirective(why) {
+  if (!directiveOpen) return;
+  directiveOpen = false;
+  try { if (directiveCap) clearTimeout(directiveCap); } catch (e) {}
+  directiveCap = null;
+  logLine('mouth.directive.closed', why, { level: 'info', target: 'mouth' });
+}
+
+/* The one question the frame gate asks. A case can prove it without a socket. */
+function mouthScripted() { return !!directiveOpen; }
+
 function mouthPreempted() {
   try { return !!thinkHold && !!String(said.engine || '').trim(); } catch (e) { return false; }
 }
@@ -9246,6 +9282,7 @@ function mouthNotOwed(text) {
   if (n.includes(o)) {
     lineSaid = owedLine; lineSaidAt = Date.now(); owedLine = '';
     mouthQuietUntil = Date.now() + 25000;      // build 335: the line has been said, so the mouth rests
+    closeDirective('the line was said, so the mouth is shut until he speaks');   // build 336
     return false;
   }
   if (n.length >= 12 && o.includes(n)) return false;   // a piece has to be a piece, not one word of it
@@ -9253,6 +9290,7 @@ function mouthNotOwed(text) {
   if (ow.length >= 3 && ow.filter((w) => n.includes(w)).length / ow.length >= 0.6) {
     lineSaid = owedLine; lineSaidAt = Date.now(); owedLine = '';
     mouthQuietUntil = Date.now() + 25000;      // build 335: the line has been said, so the mouth rests
+    closeDirective('the line was said, so the mouth is shut until he speaks');   // build 336
     return false;
   }
   return true;                                                // one line was asked for, and this is not it
@@ -12597,6 +12635,17 @@ function handleFrame(text) {
          the door said so, and the mouth then invented the making's own question - "What should the song say?" - and
          the guard corrected it aloud, so he heard a question and its withdrawal in one breath. A sentence carrying
          a question inside the landing window is held, not played, so the invented question is never heard. */
+      /* BUILD 336. THE FIRST QUESTION IS WHETHER THE MOUTH WAS ASKED AT ALL. 19:50:00.5 on 335: the tail was
+         already in his ears before the words that described it arrived, so every later guard was late by design. */
+      if (!mouthScripted()) {
+        heldFrames++;
+        if (unscriptedLogged < 3) {
+          unscriptedLogged++;
+          logLine('mouth.unscripted', 'nothing was asked of the mouth, so this is never heard: '
+            + String(said.engine || '').slice(0, 120), { level: 'warn', target: 'mouth' });
+        }
+        continue;
+      }
       const askedAfterAct = actLandedAt && (Date.now() - actLandedAt < 15000) && /\?/.test(String(said.engine || ''));
       if (askedAfterAct) {
         heldFrames++;
