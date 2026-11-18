@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:14';
-const BUILD_NO = 313;
+const BUILD = '2026-11-18T10:20';
+const BUILD_NO = 314;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6086,7 +6086,7 @@ function judgeClaim() {
        not his ("those results") walked straight through, and the untrue sentence went out unchallenged until
        his next question exposed it. The verb and the shelf may now have words between them, and a claim about
        links and sources is a claim about the shelf, because that is exactly what he asked for. */
-    const shelfWriteClaim = /\b(?:is|are|it'?s|its) (?:now )?on (?:the|your|his) shelf\b|\b(?:has|have) been (?:put|added|placed|kept|saved) (?:on|to|in) (?:the|your|his) shelf\b|\b(?:put|puts|putting|added|add|adds|place|placed|placing|keep|kept|save|saved|saving|stuck)\b[^.!?]{0,48}\b(?:on|to|in|onto)\b[^.!?]{0,14}\b(?:the|your|his) shelf\b|\bshelf\b[^.!?]{0,40}\b(?:with|and)\b[^.!?]{0,20}\b(?:links?|sources?)\b|\bsitting (?:on|in) (?:the|your|his) shelf\b/i;
+    const shelfWriteClaim = /\b(?:is|are|it'?s|its|that'?s|those are|these are|they'?re) (?:now )?on (?:the|your|his) shelf\b|\b(?:has|have) been (?:put|added|placed|kept|saved) (?:on|to|in) (?:the|your|his) shelf\b|\b(?:put|puts|putting|added|add|adds|place|placed|placing|keep|kept|save|saved|saving|stuck)\b[^.!?]{0,48}\b(?:on|to|in|onto)\b[^.!?]{0,14}\b(?:the|your|his) shelf\b|\bshelf\b[^.!?]{0,40}\b(?:with|and)\b[^.!?]{0,20}\b(?:links?|sources?)\b|\bsitting (?:on|in) (?:the|your|his) shelf\b/i;
     // "What amount would you like to put on your shelf?" is an offer, not a claim: the same words
     // appear in both, so the asking shape is excluded rather than the whole rule weakened.
     const shelfAsk = /\?|\b(?:would you like|do you want|shall (?:i|we)|want me to|let me know)\b/i;
@@ -6777,9 +6777,20 @@ async function handleShareCall(call) {
       return flatSaid(m ? m[1] : q);
     })();
     if (namedAround && namedAround.split(' ').length <= 5) {
+      /* BUILD 314. THE SMALL WORDS IN A NAME ARE NOT THE CHOICE.
+         18 Nov 2026, 10:18, live: the door offered "How Deep Is Your Love" by the Bee Gees, by Calvin Harris and
+         Disciples, or someone else, and he answered "Calvin Harris and the Disciples". flatSaid compared the
+         strings with the "the" in them, so nothing matched, his answer was filed as narrowing, and the mouth
+         told him it was on his shelf when nothing had been searched. Small words are removed before the
+         comparison: the artist he says is still the artist on offer. */
+      const deSmall = (x) => String(x || '').toLowerCase().replace(/[^a-z ]/g, ' ')
+        .split(/\s+/).filter((w) => w && !/^(?:the|and|a|an|of|feat|ft|with|by|from)$/.test(w)).join('');
+      const namedSmall = deSmall(said.replace(/^\s*(?:the|that|this)\s+/i, ''));
       const hits = guessLast.filter((c) => {
         const fa = flatSaid(c.artist);
-        return fa && (fa === namedAround || fa.includes(namedAround) || namedAround.includes(fa));
+        const fs2 = deSmall(c.artist);
+        return (fa && (fa === namedAround || fa.includes(namedAround) || namedAround.includes(fa)))
+          || (fs2 && namedSmall && fs2 === namedSmall);
       });
       if (hits.length === 1) return hits[0];
     }
