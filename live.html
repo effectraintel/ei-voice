@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T09:25';
-const BUILD_NO = 305;
+const BUILD = '2026-11-18T09:16';
+const BUILD_NO = 306;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5736,6 +5736,20 @@ function judgeClaim() {
   try {
     const t = String(said.engine || '');
     if (!t) return;
+    /* BUILD 306. THE MAKING'S FIRST QUESTION IS ONLY EVER ASKED OF A MAKING HE ASKED FOR.
+       18 Nov 2026, 09:09:58, live: nothing was being made and he had not asked for a song - he had said "let us
+       start something new" - and the mouth closed with "What should the song say, Boss?". His words: "it just
+       jumped straight into the song making. I didn't asked for that." A question about a song nobody asked for is
+       the start of a spend, so it is caught here and replaced with the only true line: nothing is being made. */
+    const asksMaking = /\bwhat should (?:the |your |this )?song (?:say|be about)\b|\bwhat should it say\b|\bwhat kind of music\b|\bwhat style of music\b/i.test(t);
+    const armed = !!(songDraft && songDraft.at) || (() => { try { return songMaking() || songInFlight(); } catch (e) { return false; } })();
+    if (asksMaking && !armed && !(madeShare && madeShare.stage && madeShare.stage !== 'idle')) {
+      logLine('make.unarmed', t.slice(0, 140), { level: 'warn', target: 'music' });
+      doorNote('Nothing is being made, and he has not asked for a song: no words were taken and nothing is in the '
+        + 'studio. Drop the question about the song. Say in one short line that nothing is being made, and ask what '
+        + 'he wants to do instead.', true);
+      return;
+    }
     /* Build 233 · THE DOOR DOES NOT LOSE WHAT IT IS HOLDING.
        15 Nov 2026, 00:03: "My apologies, Boss. I hold only this session, so could you please repeat what you
        asked for earlier?" Nothing had been lost - his ask was on the record and the subject question was
