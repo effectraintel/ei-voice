@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T09:32';
-const BUILD_NO = 309;
+const BUILD = '2026-11-18T09:56';
+const BUILD_NO = 310;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -741,7 +741,7 @@ const DECLS = [{
               // prompt me. For the song name." He names it, and the rail looks in three places in his
               // order before answering: MTShare's own links, then his own songs, then a store.
               name: 'share',
-              description: 'Find a song by name and get the right link for sharing it, then put it on his shelf. Use when he says he wants to share a song, or asks for a link to a song. Call it with the song title he said as the query. If he has not named a song yet, do NOT call it at all: ask him which song, one short question, and stop. Never pass a question of your own as the query.',
+              description: 'Find a song by name and get the right link for sharing it, then put it on his shelf. Use when he says he wants to share a song, or asks for a link to a song. Call it with the song title he said as the query. If he has not named a song yet, do NOT call it at all: ask him which song, one short line, and nothing else. Never pass a question of your own as the query.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
@@ -5903,7 +5903,7 @@ function judgeClaim() {
           'Nothing is being made: the rail has not been asked, so there is no take and no request. '
           + (beat
             ? 'Ask him this one question, short, and stop: "' + beat + '"'
-            : 'Ask him for the one thing the song still needs, in one short question, and stop.'));
+            : 'Ask him for the one thing the song still needs, in one short line, and nothing else.'));
       }
       return;
     }
@@ -6308,7 +6308,7 @@ async function handleShareCall(call) {
       }
   
       if (!query) {
-        result = 'He has not named a song yet. Ask him which song, in one short question, and stop '
+        result = 'He has not named a song yet. Ask him which song, in one short line, and nothing else '
           + 'there: do not guess at a title and do not call this tool again until he answers.';
         looked = 'sharing · which song';
         return;
@@ -6321,7 +6321,7 @@ async function handleShareCall(call) {
         const v = resolveAnswer('title', query);
         result = v.kind === 'meta'
           ? repairLine('title', query, 'the song we are sharing')
-          : 'He has not named a song yet. Ask him which song it is, in one short question, and stop. '
+          : 'He has not named a song yet. Ask him which song it is, in one short line, and nothing else. '
             + 'Never put your own question in as the search.';
         looked = v.kind === 'meta' ? 'sharing · was that a name?' : 'sharing · which song';
         railNote('share · held · ' + (v.kind === 'meta' ? 'talked about it, did not name it' : 'no title yet'));
@@ -6345,7 +6345,7 @@ async function handleShareCall(call) {
         return;
       }
       if (!query) {
-        result = 'He has not named a song yet. Ask him which song, in one short question, and stop.';
+        result = 'He has not named a song yet. Ask him which song, in one short line, and nothing else.';
         looked = 'sharing · which song';
         return;
       }
@@ -6708,6 +6708,23 @@ async function handleShareCall(call) {
     for (const c of guessLast) {
       const ft = flatSaid(c.title);
       if (ft && ft.length >= 4 && t.includes(ft)) return c;
+    }
+    /* BUILD 310. THE ARTIST HE NAMES IS THE CHOICE.
+       18 Nov 2026, 07:54: the mouth offered "My Way by Calvin Harris, or My Way by Frank Sinatra, or My Way by Fetty
+       Wap" and he answered "The one from Calvin Harris." The door heard the artist, wrote it down as a wish, and asked
+       him which song again - having just been told. So when the artist in his words picks out exactly one of the songs
+       in front of him, that is his answer, not a narrowing. Two artists in the words is not a choice and is left alone. */
+    const namedAround = (() => {
+      const q = String(said || '').replace(/^\s*(?:the|that|this)\s+/i, '').trim();
+      const m = q.match(/\b(?:by|from|with|sang by|sung by)\s+([\w'&.\- ]{2,40})$/i);
+      return flatSaid(m ? m[1] : q);
+    })();
+    if (namedAround && namedAround.split(' ').length <= 5) {
+      const hits = guessLast.filter((c) => {
+        const fa = flatSaid(c.artist);
+        return fa && (fa === namedAround || fa.includes(namedAround) || namedAround.includes(fa));
+      });
+      if (hits.length === 1) return hits[0];
     }
     return null;
   }
@@ -9149,7 +9166,7 @@ async function handleShareToCall(call) {
     }
     if (!shareDraft.channel) {
       result = 'He named a person but not how to reach them. Ask for their email address or their WhatsApp '
-        + 'number, one short question, and stop.';
+        + 'number, one short line, and nothing else.';
       looked = 'sharing · which way';
       return;
     }
