@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T16:16';
-const BUILD_NO = 325;
+const BUILD_NO = 326;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -553,6 +553,230 @@ let arrivalNote = '';
 
 let turnBeganMuted = false;
 const mouthMaySound = () => !typed() && !turnBeganMuted;
+
+/* ---------------------------------------------------------------------------------------------------------------
+   BUILD 326 - STAGE 2 AND STAGE 3. The door's thinking, and the boundary it thinks at.
+
+   Everything below replaces a decision that used to be made by a regex. `doorThink` is a backend function: it reads
+   one finished utterance with the state, the open question and the songs already in front of him, and answers with
+   one object. The door obeys that object and nothing else on the song path.
+   ------------------------------------------------------------------------------------------------------------- */
+let thinkHold = false;         // output audio is held while a thinking call is outstanding
+let thinkSeq = 0;              // the newest thinking call; an older answer is discarded, not obeyed
+let lastAsked = '';            // the one question the door is waiting on an answer to
+let thinkLast = null;          // the last thinking object, kept for the record
+let heardBuf = '';             // his words, accumulated while he speaks
+let heardQuiet = 0;            // the last-resort flush
+const THINK_ON = true;         // one switch, so this can be turned off in a line if he does not like it
+
+const THINK_ABOUT_SONGS = /\b(?:song|songs|track|tracks|tune|music)\b|\bshare\b/i;
+
+function thinkStateNow() {
+  if (guessHunt) return (guessLast && guessLast.length) ? 'HUNT_CONFIRM' : 'HUNT_TITLE';
+  if (songFork && Date.now() - songFork < 90000) return 'SHARE_ASK';
+  return 'IDLE';
+}
+
+/* Which turns thinking owns. A making owns its own turn (its script is fixed and not this build's work), and so does
+   any step that is waiting for its own answer: those are the door's questions, not a reading of his words. */
+function thinkGoverns(said) {
+  try {
+    if (!THINK_ON) return false;
+    if (resumePending) return false;                                       // the welcome-back choice is a choice
+    if (songDraft.at && Date.now() - songDraft.at < 180000) return false;   // a making is in flight
+    if (sharePending || shareCard || shareStage === 'art' || shareStage === 'sheet') return false;
+    if (guessHunt) return true;
+    if (guessLast && guessLast.length) return true;
+    if (songFork && Date.now() - songFork < 90000) return true;
+    if (THINK_ABOUT_SONGS.test(said)) return true;
+    /* A title with its artist, said out of nowhere: "My Way by Calvin Harris". Nothing else on the page reads that
+       shape reliably, and it is the one sentence that must never be turned into a question. */
+    if (/\S\s+by\s+\S/.test(String(said)) && String(said).split(/\s+/).length <= 12) return true;
+    return false;
+  } catch (e) { return false; }
+}
+
+/* THE TWO SHAPES THAT ARE NEVER AMBIGUOUS, ANSWERED WITHOUT THE MODEL.
+   Thinking costs about four seconds of held silence. That is the right price for a sentence whose meaning has to be
+   worked out ("It's a song from Avril Lavigne", "Falling from a Lesu", a correction), and the wrong price for the two
+   things he says most: a title with its artist, and a plain thank-you. Both are read here, by the same rules thinking
+   would apply, and neither can reach the rail unless the name is complete. */
+function thinkFast(said) {
+  const t = String(said || '').trim();
+  if (!t) return null;
+  /* A plain acknowledgement is never a song. */
+  if (/^(?:okay|ok|right|great|nice|perfect|fantastic|brilliant|lovely|wonderful)?[\s,.!]*(?:thanks|thank you|cheers|much appreciated|got it|i see it|i see it there)[\s,.!]*$/i.test(t)
+    || /^(?:okay|ok|great|nice|perfect|fantastic)[\s,.!]+(?:thanks|thank you)[\s,.!]*$/i.test(t)) {
+    return { ok: true, journey: 'TALK', step: 'IDLE', plan: 'talk', question: '', resolved: { title: '', artist: '', confidence: 1 }, refusal: '', why: 'a plain acknowledgement', fast: true, ms: 0 };
+  }
+  /* A title with its artist, said in full. */
+  const m = t.match(/^\s*(?:it'?s\s+|it is\s+|i want\s+|i'?d like\s+|play\s+|share\s+|the song is\s+)?["']?(.+?)["']?\s+(?:by|from)\s+(.+?)\s*[.!?]*$/i);
+  if (m) {
+    const title = String(m[1] || '').replace(/^(?:the|a)\s+/i, '').trim();
+    const artist = String(m[2] || '').trim();
+    const words = title.split(/\s+/).length;
+    if (title.length >= 2 && words <= 8 && artist.length >= 2 && artist.split(/\s+/).length <= 5
+      && !/\b(?:song|songs|track|tune|music|one)\b/i.test(title)) {
+      return { ok: true, journey: 'SHARE', step: 'DONE', plan: 'settle', question: '', resolved: { title, artist, confidence: 0.9 }, refusal: '', why: 'he gave the title and who sings it', fast: true, ms: 0 };
+    }
+  }
+  return null;
+}
+
+function thinkAndAct(said) {
+  const id = ++thinkSeq;
+  thinkHold = true;
+  const state = thinkStateNow();
+  const body = {
+    said: String(said || '').slice(0, 400),
+    state,
+    question_text: lastAsked,
+    last_mouth: String((said && said.engine) || '').slice(-200),
+    candidates: (guessLast || []).slice(0, 6).map((c) => ({ title: c.title || '', artist: c.artist || '' })),
+  };
+  logLine('think.ask', state + ' \u00b7 ' + String(said).slice(0, 60), { level: 'info', target: 'think' });
+  /* A hold that is never released is a door that never speaks again, so the hold has its own deadline. */
+  setTimeout(() => {
+    if (thinkHold && id === thinkSeq) {
+      thinkHold = false;
+      logLine('think.hold.cleared', 'the thinking call never came back, so the mouth is released', { level: 'warn', target: 'think' });
+    }
+  }, 8000);
+  return fetchT(FNBASE + 'doorThink', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }, 6000).then((r) => r.json()).then((o) => {
+    if (id !== thinkSeq) {
+      logLine('think.stale', 'he said something newer, so this answer is dropped', { level: 'info', target: 'think' });
+      return;
+    }
+    if (!o || !o.ok) {
+      thinkHold = false;
+      logLine('think.failed', (o && o.why) || 'no answer from thinking', { level: 'warn', target: 'think' });
+      return doorHears(said);
+    }
+    logLine('think.back', o.journey + ' \u00b7 ' + o.plan + ' \u00b7 ' + (o.why || '') + ' \u00b7 ' + (o.ms || 0) + 'ms',
+      { level: 'info', target: 'think' });
+    return obeyThinking(o, said);
+  }).catch((e) => {
+    thinkHold = false;
+    logLine('think.failed', (e && e.message) || 'the thinking call failed', { level: 'warn', target: 'think' });
+    return doorHears(said);
+  });
+}
+
+/* The door obeys the thinking object. One plan, one act, one line. */
+function obeyThinking(o, said) {
+  thinkLast = o;
+  try {
+    /* A making and a payment keep the door's own script: thinking only named them. */
+    if (o.journey === 'MAKE' || o.journey === 'PAY') {
+      logLine('think.handoff', o.journey + ' keeps the door\'s own path \u00b7 ' + String(said).slice(0, 40),
+        { level: 'info', target: 'think' });
+      thinkHold = false;
+      return doorHears(said);
+    }
+    if (o.plan === 'settle') {
+      const t = (o.resolved && o.resolved.title) ? String(o.resolved.title).trim() : '';
+      const a = (o.resolved && o.resolved.artist) ? String(o.resolved.artist).trim() : '';
+      if (!t) {
+        /* It said settle and named nothing: that is a question, not a search. */
+        logLine('think.settle.empty', 'settle with no name: asking instead', { level: 'warn', target: 'think' });
+        guessHunt = true; guessLast = []; guessAt = Date.now();
+        lastAsked = 'Which song is it, Boss? The title and who sings it.';
+        thinkHold = false;
+        return doorAsk(lastAsked, 'Nothing was searched and nothing is on his shelf: no name is in hand. Put it to him '
+          + 'that the title is what is missing, and let him say it.');
+      }
+      const name = a ? (t + ' by ' + a) : t;
+      /* The settled name is put in front of the door as the one song on the table, and his own words are the name.
+         The hunt's settle machinery then asks the rail exactly once and locks what comes back - the path that is
+         already proved, rather than a second copy of it written here. */
+      songFork = 0; guessHunt = true; guessLast = [{ title: t, artist: a }]; guessAt = Date.now(); lastAsked = '';
+      logLine('think.settle', name + ' \u00b7 ' + (o.resolved.confidence || 0), { level: 'info', target: 'think' });
+      railNote('share \u00b7 he settled it \u00b7 ' + name.slice(0, 60));
+      thinkHold = false;
+      return noteSongAnswer(name, { settled: true });
+    }
+    if (o.plan === 'ask') {
+      const q = String(o.question || '').trim() || 'Which song is it, Boss? The title and who sings it.';
+      guessHunt = true; guessLast = []; guessAt = Date.now(); lastAsked = q.slice(0, 200);
+      logLine('think.ask.gate', q, { level: 'info', target: 'think' });
+      thinkHold = false;
+      return doorAsk(q, 'The question he is owed, in your own few words: "' + q + '"');
+    }
+    if (o.plan === 'talk') {
+      lastAsked = '';
+      logLine('think.talk', String(said).slice(0, 60), { level: 'info', target: 'think' });
+      thinkHold = false;
+      return doorNote('Answer him in one or two short lines, in your own words. Search nothing, name no song, and say '
+        + 'nothing about the shelf.', true);
+    }
+    if (o.plan === 'refuse') {
+      const why = String(o.refusal || 'that is not something the door does from here').slice(0, 160);
+      logLine('think.refuse', why, { level: 'info', target: 'think' });
+      thinkHold = false;
+      return doorNote('Say this plainly, in one line, and nothing else: ' + why, true);
+    }
+    logLine('think.none', String(said).slice(0, 40), { level: 'info', target: 'think' });
+  } finally {
+    thinkHold = false;
+  }
+}
+
+/* STAGE 2. One utterance, one act. His words accumulate while he speaks; the turn is committed at the boundary and
+   never before it. */
+function heardFragment(text) {
+  const t = String(text || '').trim();
+  if (!t) return;
+  /* A frame is either the utterance so far or a new piece of it. Either way `heardBuf` is what he has said. */
+  heardBuf = (heardBuf && t.indexOf(heardBuf) === 0) ? t : (heardBuf ? (heardBuf + ' ' + t) : t);
+  if (heardQuiet) { try { clearTimeout(heardQuiet); } catch (e) {} heardQuiet = 0; }
+  heardQuiet = setTimeout(() => { try { heardFlush('he stopped speaking'); } catch (e) {} }, 1400);
+}
+
+function heardFlush(why) {
+  if (heardQuiet) { try { clearTimeout(heardQuiet); } catch (e) {} heardQuiet = 0; }
+  const heard = String(heardBuf || '').trim();
+  heardBuf = '';
+  if (!heard) return;
+  if (isNoise(heard)) {
+    appendLive('noise', heard);
+    logLine('turn.noise', heard + ' \u00b7 ' + why, { role: 'noise' });
+    return;
+  }
+  userTurns++;
+  silenceNudges = 0;
+  correctedThisTurn = false;
+  lastHeardText = heard;
+  heardThisSession = true;
+  appendLive('you', heard);
+  logLine('turn.you', heard, { role: 'you' });
+  logLine('turn.heard', 'finished utterance \u00b7 ' + why, { level: 'info', target: 'hear' });
+  try { sittingNote('you', heard); } catch (e) {}
+  armSilenceWatch(heard);
+  replyAudible = false;
+  turnBeganMuted = typed();
+  try { doorTurn(heard); } catch (e) { try { doorHears(heard); } catch (e2) {} }
+}
+
+/* The one entry a finished utterance takes. */
+function doorTurn(heard) {
+  const said = String(heard || '').trim();
+  if (!said) return;
+  if (thinkGoverns(said)) {
+    try { beginTurn(said); } catch (e) {}
+    const fast = thinkFast(said);
+    if (fast) {
+      logLine('think.fast', fast.plan + ' \u00b7 ' + (fast.why || ''), { level: 'info', target: 'think' });
+      return obeyThinking(fast, said);
+    }
+    return thinkAndAct(said);
+  }
+  return doorHears(said);
+}
+
 
 /* Build 138: ONE rule about the picture, in one place.
    At 14:23 on 10 Nov the descent moved to the end of the making and the cover stopped being a tap on the
@@ -11899,26 +12123,15 @@ function handleFrame(text) {
 
   if (sc.inputTranscription && sc.inputTranscription.text) {
     dbgHeard++;
-    const heard = String(sc.inputTranscription.text || '');
-    if (isNoise(heard)) {
-      // "Eu", "It", "and it is": he was thinking, and each bought a turn and a reply. Noise is
-      // logged as noise and does not advance the turn count, so it cannot be mistaken for an answer.
-     appendLive('noise', heard);
-      logLine('turn.noise', heard, { role: 'noise' });
-    } else {
-      userTurns++;
-      silenceNudges = 0;
-      correctedThisTurn = false;             // a new turn: the door may correct again if it has to
-      lastHeardText = heard;
-      heardThisSession = true;
-      doorHears(heard);
-      appendLive('you', heard);
-      logLine('turn.you', heard, { role: 'you' });
-      try { sittingNote('you', heard); } catch (e) {}
-      armSilenceWatch(heard);
-      replyAudible = false;                  // a new answer begins
-      turnBeganMuted = typed();              // and it belongs to this turn, muted or not (build 227), so its first sound may be held
-    }
+    /* BUILD 326, STAGE 2. A frame is not a turn. His words accumulate here and are committed once, at the boundary
+       below: his turn ending, the mouth being about to answer, or 1.4 s of quiet. Before this the door could act on
+       half a sentence and could not tell a pause from a finished thought. */
+    heardFragment(String(sc.inputTranscription.text || ''));
+  }
+  /* His turn has ended, as the server heard it. This is the boundary the plan asks for. */
+  if (sc.activityEnd) {
+    logLine('hear.boundary', 'the server heard his turn end', { level: 'info', target: 'hear' });
+    try { heardFlush('his turn ended'); } catch (e) {}
   }
   if (sc.outputTranscription && sc.outputTranscription.text) {
     // A closer is cut here, at the source, before it reaches his ears. If the mouth opens with one the
@@ -11981,6 +12194,9 @@ function handleFrame(text) {
   }
 
   const parts = (sc.modelTurn && sc.modelTurn.parts) || [];
+  /* BUILD 326. The mouth is about to answer, so this is the last moment his words can be read: the boundary, if the
+     server has not already given us one. */
+  if (parts.length && heardBuf) { try { heardFlush('the mouth was about to answer'); } catch (e) {} }
   for (const p of parts) {
     // Build 184. Typed mode is a MUTED session, not a text session. The reply still arrives
     // as audio because that is all this model produces; it just never reaches the speaker. The
@@ -11992,7 +12208,9 @@ function handleFrame(text) {
     // while the search is still open.
     if (data) {
       engineSpokeNow();          // build 233: a sound is an answer, even while the door is holding it
-      if (doorSearching || (hiddenHold && !replyAudible)) { heldFrames++; }
+      /* BUILD 326: while thinking decides, the mouth is silent. He must never hear it guess and then
+         correct itself - that is the fault this stage exists to end. */
+      if (doorSearching || thinkHold || (hiddenHold && !replyAudible)) { heldFrames++; }
       else { replyAudible = true; playPcm(data, p.inlineData.mimeType); }
     }
   }
