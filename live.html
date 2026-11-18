@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T15:00';
-const BUILD_NO = 320;
+const BUILD = '2026-11-18T15:30';
+const BUILD_NO = 321;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -7379,6 +7379,7 @@ async function handleShareCall(call) {
    =========================================================================================== */
 let turnSeq = 0, dirSeq = 0;
 let curTurn = null, curDirective = null;
+let fillerCut = 0;
 
 function doorStateLabel() {
   // PROVISIONAL, and named as such. The real labels are the declared roadmaps of Stage 4; until
@@ -7416,6 +7417,7 @@ function beginTurn(raw) {
     directive_id: '',
   };
   curDirective = null;
+  fillerCut = 0;
   try {
     logLine('turn.open', said.slice(0, 200), {
       level: 'info', target: 'turn',
@@ -7425,6 +7427,18 @@ function beginTurn(raw) {
   return curTurn;
 }
 
+/* BUILD 321. THE DIRECTIVE KEEPS ITS OWN WORDS, SO A SENTENCE CAN BE COMPARED WITH THEM.
+
+   18 Nov 2026, the first live Stage 1 run (build 320, 13:19-13:25), read back from the record: six of the
+   seven engine lines were logged turn.orphan, and every one of those was FALSE. Notes the door holds are
+   released by flushNotes, which does go through sendNoteNow, but the door's own ask-watch retry sent a note
+   with a raw ws.send and minted nothing, and a note that is dropped (correctly) leaves no directive at all
+   while the mouth still speaks. Worse, the one line that WAS attributed was attributed falsely: a note
+   saying "nothing is being made" was recorded as the ancestor of the mouth's "What should the song say?".
+
+   A record that claims an ancestry it cannot prove is the same fault as the payment question, only quieter.
+   So the directive now carries its words, and attribution compares them: a sentence that does not match the
+   note it arrived under is mouth.diverged, named as such, never dressed as the note's own sentence. */
 function mintDirective(text) {
   dirSeq++;
   curDirective = {
@@ -7437,20 +7451,77 @@ function mintDirective(text) {
   return curDirective;
 }
 
+/* The words that carry meaning, for comparing what was asked for with what was said. Short function words
+   are dropped so "the door has put it on your shelf" and "it is on your shelf, Boss" are recognised as the
+   same instruction spoken in his mouth's own voice. */
+const DIR_STOP = /^(?:the|a|an|and|or|but|so|if|of|to|in|on|at|for|with|by|is|are|was|were|be|been|it|its|this|that|these|those|he|she|they|you|i|we|his|her|their|your|my|our|do|does|did|not|no|yes|say|says|said|exactly|then|stop|one|two|three|short|line|only|nothing|else|him|me|us|as|from|up|out|there|here|what|which|who|when|why|how|all|just|now|again|once|please)$/i;
+function dirWords(t) {
+  return String(t || '').toLowerCase().replace(/[^a-z0-9\s']/g, ' ').split(/\s+/)
+    .filter((w) => w && w.length > 1 && !DIR_STOP.test(w));
+}
+function spokenAgainstDirective(spoken, directiveText) {
+  const said = dirWords(spoken);
+  if (!said.length) return { known: false, matched: false, share: 0 };
+  const asked = new Set(dirWords(directiveText));
+  if (!asked.size) return { known: false, matched: false, share: 0 };
+  let hit = 0;
+  for (const w of said) if (asked.has(w)) hit++;
+  const share = hit / said.length;
+  // A sentence whose every meaningful word the note also used is that note, spoken. Half of them is a
+  // reply that leans on it. Anything less is the mouth talking on its own, and the record says so.
+  // Two meaningful words with one in common is not a match: "What should the song say?" shares only "song"
+  // with a note about a song, and 320 called that the note's own sentence. A match needs most of the
+  // sentence, or at least three words of it.
+  const matched = share >= 0.6 || (hit >= 3 && share >= 0.5);
+  return { known: true, matched, share: Math.round(share * 100) / 100 };
+}
+
 function attributeEngine(text) {
-  // The one question this build exists to answer: which directive produced this sentence?
+  /* The one question this build exists to answer: which directive produced this sentence?
+
+     Three answers, and the third is the one 320 could not give:
+       orphan    nothing was asked for, so nothing licensed this sentence
+       matched   a note was outstanding and this sentence is that note, spoken
+       diverged  a note was outstanding and this sentence is not it - the mouth went its own way
+
+     Divergence is not corrected here (Stage 6 is where a diverging frame is not played). It is counted,
+     because "the door told it one thing and it said another" is the fault this whole inversion exists for,
+     and it cannot be fixed while it is invisible. */
+  const spoken = String(text || '');
   const out = {
     turn_id: curTurn ? curTurn.id : '',
     directive_id: curDirective ? curDirective.id : '',
     orphan: !(curDirective && curDirective.id),
+    diverged: false,
+    share: 0,
   };
+  if (!out.orphan) {
+    const cmp = spokenAgainstDirective(spoken, curDirective.text);
+    out.diverged = cmp.known ? !cmp.matched : false;
+    out.share = cmp.share;
+  }
+  try {
+    if (curTurn) {
+      curTurn.spoken = (curTurn.spoken || []).slice(-5);
+      curTurn.spoken.push(spoken.slice(0, 160));
+      curTurn.orphans = (curTurn.orphans || 0) + (out.orphan ? 1 : 0);
+      curTurn.diverged = (curTurn.diverged || 0) + (out.diverged ? 1 : 0);
+    }
+  } catch (e) {}
   if (out.orphan) {
     // A sentence with no directive behind it is the fault that cost 18 November. It is not
     // corrected here and not hidden: it is counted, so the record shows it and Stage 6 has a
     // number to drive to zero.
     try {
-      logLine('turn.orphan', String(text || '').slice(0, 200),
+      logLine('turn.orphan', spoken.slice(0, 200),
         { level: 'warn', target: 'turn', turn_id: out.turn_id });
+    } catch (e) {}
+  } else if (out.diverged) {
+    try {
+      logLine('mouth.diverged', 'asked for "' + String(curDirective.text || '').slice(0, 90)
+        + '" · said "' + spoken.slice(0, 90) + '"',
+        { level: 'warn', target: 'turn', turn_id: out.turn_id, directive_id: out.directive_id,
+          share: String(out.share) });
     } catch (e) {}
   }
   return out;
@@ -7466,6 +7537,8 @@ function endTurn(reason) {
       level: 'info', target: 'turn',
       turn_id: curTurn.id, state_after: curTurn.state_after,
       directive_id: curTurn.directive_id, commit: curTurn.commit ? '1' : '',
+      orphans: String(curTurn.orphans || 0), diverged: String(curTurn.diverged || 0),
+      filler: String(fillerCut || 0),
       ms: curTurn.closed_at - curTurn.at,
     });
   } catch (e) {}
@@ -8600,11 +8673,11 @@ function armAskWatch(askedAt, line) {
     logLine('mouth.silent', 'nothing was said for ' + Math.round((Date.now() - askWatchAt) / 1000)
       + 's · the door puts its own question up: ' + q.slice(0, 100), { level: 'warn', target: 'mouth' });
     railNote(q);
-    try {
-      ws.send(JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text:
-        noteEnvelope('say exactly this, in one line, and nothing else: "' + q + '"', true) }] }],
-        turnComplete: true } }));
-    } catch (e) { /* the line is on screen either way */ }
+    // BUILD 321: this retry used to post its note with a raw ws.send, so the line the door was asking for
+    // had no directive and every sentence it produced was counted as an orphan. The door's own question is
+    // as much a directive as any other.
+    try { sendNoteNow('say exactly this, in one line, and nothing else: "' + q + '"', true); }
+    catch (e) { /* the line is on screen either way */ }
   }, 9000);
   try { if (askWatch && askWatch.unref) askWatch.unref(); } catch (e) {}
 }
@@ -11761,8 +11834,14 @@ function handleFrame(text) {
           { level: 'warn', target: 'filler' });
         outText = '';
       } else {
-        if (cleaned !== outText) logLine('mouth.filler', 'closer stripped: ' + outText.slice(0, 100),
-          { level: 'warn', target: 'filler' });
+        if (cleaned !== outText) {
+          // BUILD 321: one row per spoken word is not a record, it is noise - 77 of the 213 rows in the first
+          // live Stage 1 run were this line. The first three per turn are kept (enough to see the shape) and
+          // the rest are counted, so the log stays readable and nothing is hidden.
+          fillerCut++;
+          if (fillerCut <= 3) logLine('mouth.filler', 'closer stripped: ' + outText.slice(0, 100),
+            { level: 'info', target: 'filler', n: String(fillerCut) });
+        }
         outText = cleaned;
       }
     }
