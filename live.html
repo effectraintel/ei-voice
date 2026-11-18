@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T15:39';
-const BUILD_NO = 322;
+const BUILD = '2026-11-18T15:46';
+const BUILD_NO = 323;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6861,16 +6861,30 @@ async function handleShareCall(call) {
        Long by AC/DC? I haven't checked them, but which one did you mean?" - the old reader took "How about Back in
        Black" as a title and "AC" as the artist, so a repeat of the real title still matched but the record was junk.
        Each piece is cleaned of the words that introduce it, and only a piece with a "by" or a quote is a song. */
-    const clean = (x) => String(x || '')
-      .replace(/^[\s"\u201c'(\-\u2013\u2014]+/, '')
-      .replace(/^(?:how about|what about|maybe|perhaps|could it be|i think you mean|i mean|try|or|and|is it|you mean|that would be|it could be|do you mean|did you mean|are you thinking of|thinking of|talking about|you're after|you are after|the one|one of them|so)\s+/i, '')
-      /* BUILD 311. 18 Nov 2026, 08:01: the mouth said "I haven't checked this, but do you mean My Way by Calvin Harris?
-         Or is it a different one?" and the reader took "I haven't checked this, but do you mean My Way" as the title.
-         A title is short; anything that reads like the sentence around it is not one. */
-      .replace(/^.*?\b(?:do you mean|did you mean|you mean|you're after|after|thinking of|talking about)\s+/i, '')
-      .replace(/^(?:i|we)\s+(?:haven'?t|have not|don'?t)\b.*?\b(?:but|so)\s+/i, '')
-      .replace(/["\u201d')\s.?!,;:]+$/, '')
-      .trim();
+    const clean = (raw) => {
+      const x0 = String(raw || '');
+      /* BUILD 323. THE SONG IS NEVER CUT AWAY BY THE QUESTION AROUND IT.
+         18 Nov 2026, 13:44:01, live on 322: the mouth said 'I have "Don't Fear The Reaper" by Blue Oyster Cult. Is
+         that the one you mean, Boss, or another one?' and the reader returned NOTHING, because the strip below
+         removes everything up to "you mean" - and that sentence puts the song before it. He answered "That's the
+         one." and the door had no name in hand ("share · he settled it, but no name is in hand"), asked the rail
+         anyway, and took a second prompt to land a song he had already named. A piece that already carries a quote
+         or a "by" is a song, and the sentence around it is not allowed to eat it. */
+      const anchored = /["\u201c\u201d]/.test(x0) || /\s(?:by|from)\s/i.test(x0);
+      let x = x0
+        .replace(/^[\s"\u201c'(\-\u2013\u2014]+/, '')
+        .replace(/^(?:how about|what about|maybe|perhaps|could it be|i think you mean|i mean|try|or|and|is it|you mean|that would be|it could be|do you mean|did you mean|are you thinking of|thinking of|talking about|you're after|you are after|the one|one of them|so|i have|i've got|i have got|i found|i see|there is|there's|that's|it's)\s+/i, '')
+        /* BUILD 311. 18 Nov 2026, 08:01: the mouth said "I haven't checked this, but do you mean My Way by Calvin Harris?
+           Or is it a different one?" and the reader took "I haven't checked this, but do you mean My Way" as the title.
+           A title is short; anything that reads like the sentence around it is not one. */
+        .replace(/^(?:i|we)\s+(?:haven'?t|have not|don'?t)\b.*?\b(?:but|so)\s+/i, '');
+      if (!anchored) {
+        x = x.replace(/^.*?\b(?:do you mean|did you mean|you mean|you're after|after|thinking of|talking about)\s+/i, '');
+      }
+      return x
+        .replace(/["\u201d')\s.?!,;:]+$/, '')
+        .trim();
+    };
     const out = [];
     const push = (title, artist) => {
       const ti = clean(title);
@@ -6883,9 +6897,11 @@ async function handleShareCall(call) {
     for (const piece of pieces) {
       const p = clean(piece);
       if (!p) continue;
-      const quoted = p.match(/["\u201c]([^"\u201d]{2,60})["\u201d]\s*(?:by|from|[\u2014-])?\s*(.{0,40})?/);
+      /* BUILD 323: the artist ends with its sentence. "by Blue Oyster Cult. Is that the one you mean" gave an artist
+         of "Blue Oyster Cult. Is that the one you mean", which would never match the rail or his own naming of it. */
+      const quoted = p.match(/["\u201c]([^"\u201d]{2,60})["\u201d]\s*(?:by|from|[\u2014-])?\s*([^.?;!]{0,40})?/);
       if (quoted) { push(quoted[1], String(quoted[2] || '').replace(/^(?:by|from)\s+/i, '')); continue; }
-      const by = p.match(/^(.{2,60}?)\s+(?:by|from)\s+([^?]{2,40})/i);     // the artist ends at the question mark
+      const by = p.match(/^(.{2,60}?)\s+(?:by|from)\s+([^.?;!]{2,40})/i);     // the artist ends at the sentence
       if (by) push(by[1], by[2]);
     }
     return out.slice(0, 4);
