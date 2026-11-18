@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T20:08';
-const BUILD_NO = 336;
+const BUILD = '2026-11-18T20:58';
+const BUILD_NO = 337;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1836,6 +1836,7 @@ function shutDoor() {
   } catch (e) {}
   try { ws && ws.close(); } catch {}
   ws = null; sessionUp = false; listening = false; busy = false; connecting = false; doorGen++;
+  autoStarted = false;   // build 337: a door he left may be opened again in the same page
   /* BUILD 297. A DOOR CLOSED A MINUTE AGO IS STILL THE SAME VISIT. 18 Nov 2026, 00:20: he shut the voice, opened it
      again, and the door had no idea what he had been doing - "it is a fresh door". True to the letter of build 296
      and useless to him. Build 242's rule (a new sitting is not the last conversation) still holds for a real
@@ -2739,15 +2740,49 @@ async function unlockFingerprint(mode, enrolCode) {
     return unlockWithFingerprint('unlock', null);
   }
 
+  /* BUILD 337. A NEW PASS IS A NEW ROOM. 18 Nov 2026, 20:40:17: Control had closed his session, the unlock issued a
+     fresh one, and the page kept the room it had before - so the voice was never started for the pass he had just
+     proved, and the pass it did hold was already closed. */
+  adoptPass(done);
+  passBack();
+  gBtn.disabled = false; gAlt.disabled = false;
+  return done;
+}
+
+/* BUILD 337. A PASS THAT WAS ISSUED NOW REPLACES THE ONE BEFORE IT, AND THE ROOM WITH IT. */
+let passRotated = false;
+function adoptPass(done) {
+  let prev = null;
+  try { prev = JSON.parse(sessionStorage.getItem(DOOR_KEY) || 'null'); } catch (e) { prev = null; }
+  const rotated = !prev || !prev.token || prev.token !== done.session_token;
   sessionStorage.setItem(DOOR_KEY, JSON.stringify({
     token: done.session_token,
     expires_at: done.expires_at,
     device: done.device_label,
     tier: done.verification_tier,
   }));
-  passBack();
-  gBtn.disabled = false; gAlt.disabled = false;
-  return done;
+  passRotated = rotated;
+  if (rotated) {
+    try { if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) {} } } catch (e) {}
+    sessionUp = false; listening = false; busy = false; connecting = false;
+    autoStarted = false;                 // the latch that kept the voice shut after a closed door
+    logLine('session.new', 'a new pass was issued, so the room before it is not this room',
+      { level: 'info', target: 'door' });
+  }
+  return rotated;
+}
+
+/* BUILD 337. A PASS THE DOOR HAS CLOSED IS NOT A DOOR THAT WILL NOT OPEN. It is a pass to ask for again. */
+function dropClosedPass(why) {
+  try { sessionStorage.removeItem(DOOR_KEY); } catch (e) {}
+  try { if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) {} } } catch (e) {}
+  sessionUp = false; listening = false; busy = false; connecting = false; autoStarted = false;
+  try { closeMic(); } catch (e) {}
+  try { stopClock(); } catch (e) {}
+  logLine('session.closed.detected', 'the door closed this pass, so it is dropped and the fingerprint asked for: '
+    + String(why || '').slice(0, 120), { level: 'warn', target: 'door' });
+  try { setState('the pass was closed \u00b7 open the door again'); } catch (e) {}
+  try { showGate('the door was closed from Control, so this pass no longer opens it. One fingerprint and you are back in.'); } catch (e) {}
 }
 
 function showGate(reason) {
@@ -2782,8 +2817,11 @@ async function onUnlockTap() {
       gatePassed();
       /* Build 201: if the room never went away - the clock ran out while he sat in it - there is nothing to
          open. A second channel here would be two sessions from one phone, and the door only allows one. */
-      if (sessionUp) { setState('the pass is back \u00b7 carrying on'); }
+      /* BUILD 337. CARRYING ON REQUIRES A LIVE SOCKET, NOT A FLAG. `sessionUp` survives a session that was closed
+         underneath the page, so it cannot be the thing that decides whether the voice opens. */
+      if (sessionUp && ws && ws.readyState === 1 && !passRotated) { setState('the pass is back \u00b7 carrying on'); }
       else { setState('opening the voice'); startChannel('unlock'); }
+      passRotated = false;
     }, 120);
   } catch (e) {
     gateSay(String(e.message || e), 'bad');
