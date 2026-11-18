@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 357;
+const BUILD_NO = 358;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -895,6 +895,24 @@ function heardFlush(why) {
   turnBeganMuted = typed();
   notesSentThisTurn = 0;
   try { doorTurn(acted); } catch (e) { try { doorHears(acted); } catch (e2) {} }
+  /* BUILD 358. THE LINE HE READS IS WHAT THE DOOR UNDERSTOOD, EVEN WHEN IT UNDERSTANDS IT A MOMENT LATE.
+     19 Nov 2026, 01:06: he said "start fresh", the ear wrote "Stored fresh." at 0.669, and the door took it as a fresh
+     start - correctly. But the bubble had already been painted with the raw hearing before the door resolved it, so
+     what he read was "Stored fresh." and the screen disagreed with the door. The raw hearing stays underneath, as a
+     note, so nothing is hidden. */
+  try {
+    if (heardAs && turns.you) {
+      const raw = String(acted || '').trim();
+      turns.you.querySelector('.said').textContent = heardAs;
+      let tag = turns.you.querySelector('.lat.heard');
+      if (!tag) { tag = document.createElement('div'); tag.className = 'lat heard'; turns.you.appendChild(tag); }
+      tag.textContent = 'heard as \u201c' + raw + '\u201d';
+      logLine('turn.you.corrected', 'the line he reads is what the door understood: ' + heardAs + ' \u00b7 heard as '
+        + raw.slice(0, 60), { level: 'info', target: 'hear' });
+      heardAs = '';
+      try { logEl.scrollTop = logEl.scrollHeight; } catch (e) {}
+    }
+  } catch (e) {}
   /* BUILD 349. A TURN THE DOOR ANSWERED WITH NOTHING IS A TURN THE MOUTH NEVER HEARD.
      19 Nov 2026, 00:03:48 live: he said "And you tell me the weather in ballito", the ear gave it back at 0.958,
      the contracts route named the world - and then silence. Nothing was sent to the model at all, because the door
