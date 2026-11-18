@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T22:06';
-const BUILD_NO = 344;
+const BUILD = '2026-11-18T22:34';
+const BUILD_NO = 345;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -598,7 +598,13 @@ function thinkGoverns(said) {
     if (!THINK_ON) return false;
     if (resumePending) return false;                                       // the welcome-back choice is a choice
     if (songDraft.at && Date.now() - songDraft.at < 180000) return false;   // a making is in flight
-    if (sharePending || shareCard || shareStage === 'art' || shareStage === 'sheet') return false;
+    /* BUILD 345. A LANDED SONG IS NOT AN OPEN STEP. 18 Nov 2026, 20:16:40, live: he typed "da capo from Ace of Bas"
+       and the door answered "Which song, Boss?" without asking the rail, because shareCard (the song already LOCKED at
+       20:15:49) had barred thinking ever since. A finished thing may not hold a gate shut. Only an open step may: a
+       share in flight, or the picture step. The twenty seconds after a landing still hold the song path so a rejection
+       said straight away is read as a rejection. */
+    if (sharePending || shareStage === 'art' || shareStage === 'sheet') return false;
+    if (shareCard && railAnsweredAt && Date.now() - railAnsweredAt < 20000) return false;
     if (guessHunt) return true;
     if (guessLast && guessLast.length) return true;
     /* BUILD 328. THE DOOR ASKED FOR A NAME, SO THE ANSWER IS A NAME. With the hunt gone there is no guessHunt to keep
@@ -609,7 +615,10 @@ function thinkGoverns(said) {
     if (THINK_ABOUT_SONGS.test(said)) return true;
     /* A title with its artist, said out of nowhere: "My Way by Calvin Harris". Nothing else on the page reads that
        shape reliably, and it is the one sentence that must never be turned into a question. */
-    if (/\S\s+by\s+\S/.test(String(said)) && String(said).split(/\s+/).length <= 12) return true;
+    /* BUILD 345. "DA CAPO FROM ACE OF BASE" IS A TITLE WITH ITS ARTIST. The shape test only knew "by", so a name said
+       with "from" reached nothing once the door had stopped waiting for one - 18 Nov 2026, 20:16:40, and the rail was
+       never asked. Both words are how a person gives a title and its singer. */
+    if (/\S\s+(?:by|from)\s+\S/.test(String(said)) && String(said).split(/\s+/).length <= 12) return true;
     return false;
   } catch (e) { return false; }
 }
@@ -8477,7 +8486,11 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
        which song, with the mouth proposing from memory. Now it asks the one question the door ever asks about a song,
        arms the answer, and stops. His reply is a name, and a name goes to the rail once. */
     guessHunt = false; guessLast = []; guessAt = 0; shareChoices = []; shareChoicesAt = 0;
-    const q = 'Which song, Boss? The title and who sings it.';
+    /* BUILD 345. A REJECTION IS ACKNOWLEDGED IN THE LINE THAT ASKS. He said "No, not that one." at 20:16:08 and the
+       door answered a bare "Which song, Boss?", as if he had said nothing at all. One line, and it carries both. */
+    const q = shareRejection(words) && !clue
+      ? 'Not that one, Boss. Which song is it? The title and who sings it.'
+      : 'Which song, Boss? The title and who sings it.';
     lastAsked = q; awaitSong = Date.now();
     railNote('share · waiting for the name' + (clue ? ' · a rejection carried "' + clue.slice(0, 30) + '"' : ''));
     logLine('share.ask.name', (clue ? 'a rejection carried "' + clue.slice(0, 40) + '" · ' : '') + 'asking for the name',
