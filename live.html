@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T19:52';
-const BUILD_NO = 334;
+const BUILD = '2026-11-18T19:58';
+const BUILD_NO = 335;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6705,14 +6705,17 @@ async function handleShareCall(call) {
              to search anyway, the gate refused it, and the mouth read the refusal out loud - "I can't search for that
              right now" - in front of the question. The question was then asked a second time to replace it. So the
              voice for that turn is dropped at the gate, and the door speaks its own question exactly, once. */
+          /* BUILD 335. THE REFUSAL IS STILL DROPPED AT THE GATE, BUT IT NO LONGER PUTS A NOTE ON HIS SHELF. The hold
+             is kept, because a refusal must never be heard - and it is released the moment the door mints its own
+             line (sendNoteNow), so it can no longer hold the question itself back for twelve seconds, which is what
+             made the tail he caught on 334. */
           try { hiddenHold = true; hiddenHoldUntil = Date.now() + 12000; } catch (e) {}
-          logLine('mouth.held.refusal', 'a search was refused while he is narrowing, so nothing it says is heard',
+          logLine('mouth.held.refusal', 'a search was refused while he is naming a song, so nothing it says is heard',
             { level: 'info', target: 'think' });
           result = 'Nothing was searched and nothing is said about searching. The door has already asked him one '
             + 'question and is asking it now, so say nothing about this at all: no apology, no mention of the '
-            + 'stores, and never the words "I cannot search". If you must speak, ask only which song he means.';
-          looked = 'sharing · narrowing';
-          railNote('share · narrowing · nothing was searched');
+            + 'stores, and never the words "I cannot search".';
+          looked = 'sharing · naming';
           return;
         }
         /* He named one of the offered songs: that is a verdict, and the rail is asked once, here. */
@@ -7885,6 +7888,7 @@ function beginTurn(raw) {
   };
   curDirective = null;
   fillerCut = 0;
+  mouthQuietUntil = 0; quietLogged = 0;      // build 335: he spoke, so the mouth is free again
   try {
     logLine('turn.open', said.slice(0, 200), {
       level: 'info', target: 'turn',
@@ -9081,7 +9085,15 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     // STAGE 1: a note the mouth must SPEAK is a directive, and it is minted here, before anything is
     // sent, so the words that follow can be traced back to it. A context note (speak false) is not a
     // directive: it licenses nothing and is never the ancestor of a sentence.
-    if (speak) { try { mintDirective(text); } catch (e) {} }
+    if (speak) {
+      try { mintDirective(text); } catch (e) {}
+      /* BUILD 335. THE CLOCK RUNS FROM DELIVERY. The watch counted nine seconds from the moment the question was
+         minted, so a note held behind a live turn was "silent" before it had been sent (19:42:52.918, 51ms before
+         the note left at 19:42:52.969) and the door asked twice. */
+      mouthQuietUntil = 0;                       // a new directive is the one thing that may be said
+      try { hiddenHold = false; hiddenHoldUntil = 0; } catch (e) {}   // and it lifts any hold the door set
+      try { askWatchAt = Date.now(); } catch (e) {}
+    }
     try {
       if (!ws) return;
       ws.send(JSON.stringify({
@@ -9193,6 +9205,24 @@ let recentNotes = [];
 let sentenceInFlight = false;
 let owedLine = '', owedAt = 0, lineSaid = '', lineSaidAt = 0;
 
+/* BUILD 335. A SENTENCE THE DOOR WILL NOT HAVE IS CUT, DROPPED, AND OWES NO SOUND. 19:42:42.1 to 19:42:52.9 on 334:
+   the preempted sentence left `awaitingFirstAudio` standing, so the door believed a reply was still coming, held its
+   own question for eight seconds and then forced it out - which is how the silence watch came to send a second copy
+   first. One place does the cutting now, so a case can prove it without a socket. */
+function dropSentence() {
+  try { barge(); } catch (e) {}
+  speaking = false;
+  awaitingFirstAudio = false;
+  said.engine = '';
+  if (turns.engine) { try { turns.engine.remove(); } catch (e) {} turns.engine = null; }
+}
+
+/* BUILD 335. ONCE THE DOOR HAS ASKED, THE MOUTH HAS NOTHING TO ADD. 19:43:15.6, live on 334: while he named the
+   song, the mouth said a closer ("Boss?"), which was cut after its first sound, and then began the door's own
+   question again - the tail of echo he caught. A line that has been delivered buys this window of silence, and the
+   first sound of anything else in it is dropped before it is played. He speaks, and the mouth is free again. */
+let mouthQuietUntil = 0, quietLogged = 0;
+
 function mouthPreempted() {
   try { return !!thinkHold && !!String(said.engine || '').trim(); } catch (e) { return false; }
 }
@@ -9213,11 +9243,16 @@ function mouthNotOwed(text) {
   const o = norm(owedLine);
   if (!o) return false;
   /* A piece of the line is the line being said, and the full line marks it delivered. */
-  if (n.includes(o)) { lineSaid = owedLine; lineSaidAt = Date.now(); owedLine = ''; return false; }
+  if (n.includes(o)) {
+    lineSaid = owedLine; lineSaidAt = Date.now(); owedLine = '';
+    mouthQuietUntil = Date.now() + 25000;      // build 335: the line has been said, so the mouth rests
+    return false;
+  }
   if (n.length >= 12 && o.includes(n)) return false;   // a piece has to be a piece, not one word of it
   const ow = o.split(' ').filter((w) => w.length > 2);
   if (ow.length >= 3 && ow.filter((w) => n.includes(w)).length / ow.length >= 0.6) {
     lineSaid = owedLine; lineSaidAt = Date.now(); owedLine = '';
+    mouthQuietUntil = Date.now() + 25000;      // build 335: the line has been said, so the mouth rests
     return false;
   }
   return true;                                                // one line was asked for, and this is not it
@@ -12570,6 +12605,13 @@ function handleFrame(text) {
           logLine('mouth.asked.after.act', String(said.engine || '').slice(0, 140),
             { level: 'warn', target: 'music' });
         }
+      } else if (Date.now() < mouthQuietUntil) {
+        heldFrames++;
+        if (quietLogged < 2) {
+          quietLogged++;
+          logLine('mouth.quiet', 'the door has asked and is waiting for him, so this is not said: '
+            + String(said.engine || '').slice(0, 120), { level: 'info', target: 'mouth' });
+        }
       } else if (doorSearching || thinkHold || (hiddenHold && !replyAudible)) { heldFrames++; }
       else { replyAudible = true; playPcm(data, p.inlineData.mimeType); }
     }
@@ -12604,15 +12646,11 @@ function handleFrame(text) {
     if (mouthPreempted()) {
       logLine('mouth.preempted', 'thinking was still out, so this is not the answer: '
         + String(said.engine || '').slice(0, 140), { level: 'warn', target: 'mouth' });
-      try { barge(); } catch (e) {}
-      said.engine = '';
-      if (turns.engine) { try { turns.engine.remove(); } catch (e) {} turns.engine = null; }
+      dropSentence();
     } else if (mouthNotOwed(said.engine)) {
       logLine('mouth.not.owed', 'the door asked for one line and this is not it: '
         + String(said.engine || '').slice(0, 140), { level: 'warn', target: 'mouth' });
-      try { barge(); } catch (e) {}
-      said.engine = '';
-      if (turns.engine) { try { turns.engine.remove(); } catch (e) {} turns.engine = null; }
+      dropSentence();
     }
     flushNotes();
     judgeClaim();
