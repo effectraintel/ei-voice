@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:05';
-const BUILD_NO = 312;
+const BUILD = '2026-11-18T10:14';
+const BUILD_NO = 313;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5278,7 +5278,28 @@ async function handleWorldCall(call) {
      answer. A man waiting for a song is still allowed to ask about the weather, and a door that says it does not
      know because it is busy is a door that has stopped being useful. So the lookup always runs; only the card is
      held back while a song is being made. */
-  const quietShelf = songInFlight();
+  /* BUILD 313. THE SCREEN SAID BRITNEY WHILE THE VOICE SAID CALVIN HARRIS.
+     18 Nov 2026, 10:13, live: he was settling "My Way by Calvin Harris" and the mouth asked the world for Britney
+     Spears songs, so a list card ("from Wikipedia and Apple Music") landed on his shelf and the door's own line
+     underneath it read "share · narrowing · nothing was searched". Two screens, two answers, one of them invented.
+     A song never comes from the web while he is settling one: the ask is refused before it is searched, and no
+     lookup of his is ever shelved while a hunt is open. */
+  const huntLive = (() => { try { return !!(guessHunt || (awaitSong && Date.now() - awaitSong < 180000)); } catch (e) { return false; } })();
+  const songShapedAsk = /\b(?:songs?|tracks?|tunes?|albums?|discography|hits|singles|lyrics?|band)\b/i.test(ask)
+    || (() => { try { return guessLast.some((c) => c && c.artist && new RegExp('\\b' + String(c.artist).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(ask)); } catch (e) { return false; } })();
+  if (huntLive && songShapedAsk) {
+    result = 'He is settling which song he means, and a song never comes from the web: nothing was searched and '
+      + 'nothing was put on his shelf. Do not list songs and do not name any you were not asked about. Keep to the '
+      + 'title and artist he named and let him settle it.';
+    logLine('world.refused', ask.slice(0, 80) + ' \u00b7 a song list while he is settling one', { level: 'warn', target: 'world' });
+    try {
+      ws.send(JSON.stringify({
+        toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
+      }));
+    } catch { /* the socket is gone */ }
+    return;
+  }
+  const quietShelf = songInFlight() || huntLive;
   if (worldNothingAskedYet()) {
     result = 'The door has only just opened and he has not asked anything yet, so nothing was searched and nothing '
       + 'was put on his shelf. Say nothing about the world and offer nothing: answer only what he actually said.';
@@ -5364,8 +5385,11 @@ async function handleWorldCall(call) {
       result = facts
         + ' (source: ' + r.engine + ', as of ' + r.as_of + '. If you name a source, name this one and nothing else. '
         + (quietShelf
-          ? 'A song of his is being made, so nothing was put on his shelf: answer him from these facts in one or '
-            + 'two short lines, say where it came from, and say the song is still being made. '
+          ? (songInFlight()
+            ? 'A song of his is being made, so nothing was put on his shelf: answer him from these facts in one or '
+              + 'two short lines, say where it came from, and say the song is still being made. '
+            : 'He is settling a song, so nothing was put on his shelf: answer him from these facts in one or two '
+              + 'short lines and say where it came from. ')
           : '')
         + (!quietShelf && srcList.length
           ? 'The door has put ONE card on his shelf and it carries the ' + srcList.length + ' source link'
