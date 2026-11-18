@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 347;
+const BUILD_NO = 348;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -9413,7 +9413,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
       if (!speaking && (turnInFlight || awaitingFirstAudio) && held > 8000) {
         logLine('note.stale.turn', 'a turn stayed open ' + Math.round(held / 1000) + 's · the note goes anyway',
           { level: 'warn', target: 'note' });
-        turnInFlight = false; awaitingFirstAudio = false;
+        turnInFlight = false; awaitingFirstAudio = false; sentenceInFlight = false;
       }
       // busy means a turn is open, sound is in the air, or the reply has not started yet — all three cut a
       // sentence if a note lands in them. Only silence counts as free.
@@ -13327,7 +13327,7 @@ function downsample(float32, from, to) {
 const EAR = true;
 const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
 const EAR_END_MS = 1100;
-let earWs = null, earReady = false, earText = '', earSpeech = false, earLastVoiced = 0, earClosed = false;
+let earWs = null, earReady = false, earText = '', earLive = '', earSpeech = false, earLastVoiced = 0, earClosed = false;
 let earFails = 0, earWatch = 0, earOpenedAt = 0;
 
 function earOn() { return !!(earWs && earWs.readyState === 1); }
@@ -13348,10 +13348,11 @@ function earOpen() {
       let f = null;
       try { f = JSON.parse(ev.data); } catch (e) { return; }
       if (!f) return;
-      if (f.t === 'partial') { if (f.text) earText = String(f.text); return; }
+      /* A partial is what the ear thinks so far, and it is never the turn. The finals are the turn. */
+      if (f.t === 'partial') { if (f.text) earLive = String(f.text); return; }
       if (f.t === 'final') {
         const t = String(f.text || '').trim();
-        if (t) earText = (earText && t.indexOf(earText) === 0) ? t : (earText ? earText + ' ' + t : t);
+        if (t) earText = earText ? earText + ' ' + t : t;
         logLine('ear.final', t + ' \u00b7 conf ' + (f.conf == null ? '?' : f.conf) + ' \u00b7 ' + (f.lang || ''),
           { level: 'info', target: 'hear' });
         return;
@@ -13378,7 +13379,7 @@ function earOpen() {
 }
 
 function earClose() {
-  earReady = false; earText = ''; earSpeech = false; earClosed = false;
+  earReady = false; earText = ''; earLive = ''; earSpeech = false; earClosed = false;
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
   const s = earWs; earWs = null;
   try { s && s.close(); } catch (e) {}
@@ -13392,7 +13393,6 @@ function earPcm(float32) {
     i16[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
   }
   try { earWs.send(i16.buffer); } catch (e) {}
-  turnInFlight = true;
 }
 
 function earFeed(data, rms, ours) {
@@ -13415,8 +13415,8 @@ function earFeed(data, rms, ours) {
 
 function earFinish(why) {
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
-  const text = String(earText || '').trim();
-  earText = ''; earSpeech = false; earClosed = false;
+  const text = String(earText || earLive || '').trim();
+  earText = ''; earLive = ''; earSpeech = false; earClosed = false;
   if (!text) { logLine('ear.empty', 'nothing came back from the ear', { level: 'warn', target: 'hear' }); return; }
   logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
   try { heardBuf = text; heardFlush(why); }
