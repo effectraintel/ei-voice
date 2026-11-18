@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:34';
-const BUILD_NO = 315;
+const BUILD = '2026-11-18T10:38';
+const BUILD_NO = 316;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6718,6 +6718,40 @@ async function handleShareCall(call) {
      the song it had offered and asked the rail once for "Women by Def Leppard", and the SAME turn also wrote
      "share · narrowing it with the mouth · Women by Dave Lippman" and told the mouth nothing had been asked of the
      stores. So the card played Def Leppard while the line above it said Dave Lippman. One turn, two descriptions. */
+  /* BUILD 316. A MICROPHONE MISHEARING IS NOT A SONG TITLE.
+     18 Nov 2026, 10:37, live on 315: he was asked "Carry on where we left off, or start fresh?", the microphone
+     heard "Stout fish", and the door wrote it down as him carrying on AND fed it to the song hunt as a clue
+     ("share · narrowing it with the mouth · Stout fish") while the mouth answered "Fresh it is, Boss". Two readings
+     of one turn. A hearing this close to one of the two answers is that answer, so the choice is settled by how it
+     sounds, not only by how it is spelled. */
+  function lettersOf(x) {
+    return String(x || '').toLowerCase().replace(/[^a-z]/g, '');
+  }
+  /* The skeleton of a phrase: vowels gone and doubles collapsed, so "stout fish" and "start fresh" are one word
+     apart instead of eight letters apart. */
+  function skel(x) {
+    return lettersOf(x).replace(/[aeiou]/g, '');
+  }
+  function nearSound(a, b) {
+    const x = skel(a), y = skel(b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    /* Measured on his own mishearing: "stout fish" is sttfsh and "start fresh" is strtfrsh, two edits apart over
+       eight consonants. A third of the longer word is the width of a microphone, not of a different answer. */
+    const max = Math.max(x.length, y.length);
+    if (max < 5) return false;
+    const m = x.length, n = y.length;
+    const row = new Array(n + 1).fill(0).map((_, j) => j);
+    for (let i = 1; i <= m; i++) {
+      let prev = row[0]; row[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const tmp = row[j];
+        row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (x[i - 1] === y[j - 1] ? 0 : 1));
+        prev = tmp;
+      }
+    }
+    return row[n] / max <= 0.34;
+  }
   let settledAt = 0;
   const GUESS_FIRST = true;          // the experiment: nothing goes to the rail until he says that is the one
   let guessHunt = false;             // his narrowing is with the mouth, not the rail
@@ -7271,6 +7305,26 @@ async function handleShareCall(call) {
          song hunt on the words "Let's carry on." and then on "Let's start something new." Nothing said to that
          question may reach the hunt: the choice spends the turn, and the door's own line answers it. */
       const isChoice = said.split(/\s+/).filter(Boolean).length <= 6;
+      /* Build 316: how it SOUNDS settles it too, so a mishearing of either answer is that answer. */
+      const FRESH_SOUNDS = ['start fresh', 'start new', 'start over', 'start again', 'fresh session', 'new session',
+        'new door', 'begin again', 'wipe it'];
+      const CARRY_SOUNDS = ['carry on', 'continue', 'where we left off', 'pick up', 'resume', 'go on', 'carry on then'];
+      if (isChoice && !/\b(?:song|music|track|tune)\b/i.test(low) && FRESH_SOUNDS.some((o) => nearSound(said, o))) {
+        logLine('sitting.heard', 'he was heard as "' + said.slice(0, 30) + '", which is a fresh start',
+          { level: 'info', target: 'sitting' });
+        clearSitting();
+        try { dropMaking('he started fresh'); } catch (e) {}
+        try { guessLast = []; guessHunt = false; awaitSong = 0; shareQuery = ''; } catch (e) {}
+        startFreshSession();
+        return;
+      }
+      if (isChoice && !/\b(?:song|music|track|tune)\b/i.test(low) && CARRY_SOUNDS.some((o) => nearSound(said, o))) {
+        logLine('sitting.heard', 'he was heard as "' + said.slice(0, 30) + '", which is carrying on',
+          { level: 'info', target: 'sitting' });
+        doorNote('He chose to CARRY ON where you both were. Pick it up in one short line and ask the next thing about '
+          + 'it. Do not start a song hunt.', true);
+        return;
+      }
       if (/\b(?:carry on|carrying on|continue|where we left|pick up|resume|go on|yes|yeah|sure|ok|okay|please)\b/.test(low)
           && isChoice && !/\b(?:song|music|track|tune)\b/i.test(low)) {
         logLine('sitting.continued', 'he chose to carry on · ' + said.slice(0, 40), { level: 'info', target: 'sitting' });
@@ -7279,8 +7333,14 @@ async function handleShareCall(call) {
           + 'not list what you can do.', true);
         return;                     // the choice is answered by the door, not turned into a subject
       }
-      logLine('sitting.kept', 'he carried on talking, so the sitting stays · ' + said.slice(0, 40),
-        { level: 'info', target: 'sitting' });
+      /* Build 316: while the welcome-back question is open, an answer that is neither option asks once more and
+         never becomes a subject. Before this, a misheard "start fresh" opened a song hunt on the mishearing. */
+      logLine('sitting.kept', 'the welcome-back answer was not one of the two, so the sitting stays and nothing is '
+        + 'searched · ' + said.slice(0, 40), { level: 'info', target: 'sitting' });
+      doorNote('He was asked whether to carry on where you left off or start fresh, and what he said does not settle '
+        + 'it. Ask him once, in one short line, which of the two he wants. Do not ask for a song title, do not search '
+        + 'for anything, and do not treat what he just said as a subject.', true);
+      return;
     }
     if (heardStop(said)) return;
     // "I want to create a song and share it to somebody" is the intent that makes a made song a gift.
