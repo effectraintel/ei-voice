@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 361;
+const BUILD_NO = 362;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1851,6 +1851,19 @@ const GUESS_BRIEF = '\n\nAbout songs (build 328):\n'
   + 'and only the stores can put a song on his shelf.\n'
   + '- When he names one, the door asks the stores once. Say nothing about the outcome until you are told.\n'
   + '- If he names a line he remembers, use it: a lyric fragment is the best clue there is.\n';
+
+/* BUILD 362. HOW THE MOUTH SPEAKS, because a race against time is a design fault, not a mood.
+   19 Nov 2026, 01:33: "Is there settings to slow down the speech and then after it finished give more time for input...
+   At the moment it feels like a race against time and a bit unnatural. Humans speak with bits and pieces and stutters."
+   The pace of the voice is not a setting on this model, so it is said plainly in the brief instead. */
+const PACE = '\n\nHow to speak, added 19 November because he said it felt like a race:\n'
+  + '- Speak at a calm, measured pace, slower than feels natural to you, and leave a short pause at the end of each line. '
+  + 'He is listening, not reading.\n'
+  + '- One thought per turn. Never stack two questions, and never fill a silence with "I am here" or a list of what you '
+  + 'can do.\n'
+  + '- If he interrupts you, stop at once, say one short word of acknowledgement such as "Go on, Boss", and then be '
+  + 'silent until he has finished. Never finish the sentence he interrupted.\n'
+  + '- If you only caught part of what he said, ask for the part you missed, in one short line. Never guess it.\n';
 
 const MANNERS = '\n\nTwo rules about the working, added 8 November after he heard them break:\n'
   + '- Never narrate what you are doing. No "trying to find", no "let me look", no "one moment", no running '
@@ -3368,9 +3381,9 @@ async function openDoor() {
     // The corridor's first slice (card #167): facts from the session record, built
     // server-side, handed to the voice before the socket opens. If it cannot be had,
     // say so rather than letting the model guess at the clock.
-    let brief = BRIEF + SONG_SCRIPT + MANNERS + GUESS_BRIEF + sittingHandover();
+    let brief = BRIEF + PACE + SONG_SCRIPT + MANNERS + GUESS_BRIEF + sittingHandover();
     const np = await nowPack;
-    if (np && np.text) brief = BRIEF + '\n\n' + np.text + MANNERS;
+    if (np && np.text) brief = BRIEF + PACE + '\n\n' + np.text + MANNERS;
     else brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)' + MANNERS;
 
     stage('opening the voice');
@@ -13381,7 +13394,7 @@ async function openMic() {
       /* BUILD 361. NO BARGE-IN ON OUR OWN SOUND. The speaker's own voice was loud enough to count as a voice and cut
          the door's sentence to a fragment - the "shhh" heard at 01:24. While our audio is playing, only a voice well
          above the bleed may stop it. */
-      if (!speaking && (!ours || (loudFrames >= BARGE_FRAMES * 3 && rms > ECHO_RMS * 2 && Date.now() - playRunStart > 400))) {
+      if (!speaking && (!ours || (loudFrames >= BARGE_FRAMES && rms > ECHO_RMS * 1.2 && Date.now() - playRunStart > 250))) {
         speaking = true;
         if (ours) barge();
       }
@@ -13391,7 +13404,12 @@ async function openMic() {
       if (speaking) {
         speaking = false;
         lastWordAt = Date.now();
-        awaitingFirstAudio = true;
+        /* BUILD 362. WITH THE EAR, NOTHING IS AWAITING FIRST AUDIO.
+           This flag means "he has stopped and the model has not begun answering yet", and every note waits on it. It
+           was set by the microphone, and only the model could clear it - so from 347 on, every answer waited for the
+           eight-second stale line. That is the wait he felt at 01:33. The model is not answering his audio any more;
+           the door's note is what makes it speak, so the flag stays down. */
+        if (!(EAR && earOn())) awaitingFirstAudio = true;
       }
     }
 
@@ -13480,7 +13498,10 @@ function downsample(float32, from, to) {
    reached, the old path is still underneath it, so a broken relay can never leave him talking to nothing. */
 const EAR = true;
 const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
-const EAR_END_MS = 1100;
+/* BUILD 362. HUMANS PAUSE. 19 Nov 2026, 01:33: "it feels like a race against time and a bit unnatural". 1.1 seconds
+   after his last syllable is a machine's idea of a finished sentence; a breath, a stutter or a second thought ends it
+   early and the door answers half of what he meant. 1.9 seconds, and every extra word he says restarts the clock. */
+const EAR_END_MS = 1900;
 let earWs = null, earReady = false, earText = '', earLive = '', earConf = null, earSpeech = false, earLastVoiced = 0, earClosed = false;
 let earFails = 0, earWatch = 0, earOpenedAt = 0, earPend = [], earEndPending = false, earBeat = 0;
 
@@ -13649,11 +13670,28 @@ function earFinish(why) {
     return;
   }
   logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
-  if (looksLikeOurOwnWords(text)) {
+  /* BUILD 362. HIS WORDS SAID OVER THE DOOR ARE HIS WORDS, NOT NOISE.
+     19 Nov 2026, 01:33: "I speak now and don't get cut off, but I'm not being heard." Build 361 threw away every
+     hearing that arrived while the door's own sound was in the air, and a person who starts talking as the door
+     finishes was being erased. Now only a piece of the door's own line is dropped; anything else is HELD until the
+     door's voice is out of the air, and then handed over. Nothing is lost and nothing is answered twice. */
+  const ownWords = looksLikeOurOwnWords(text);
+  if (ownWords) {
     logLine('ear.self', 'that is the door\u2019s own line coming back, not his words: ' + text.slice(0, 80)
       + ' \u00b7 after "' + String(lastEngineLine).slice(0, 60) + '"', { level: 'warn', target: 'hear' });
     return;
   }
+  try {
+    const inAir = playing() || (ourSoundEndsAt && performance.now() < ourSoundEndsAt + 200);
+    if (inAir) {
+      const wait = Math.max(200, (ourSoundEndsAt || 0) - performance.now() + 250);
+      logLine('ear.held', 'he spoke over the door, so his words wait ' + Math.round(wait) + 'ms for the door to stop: '
+        + text.slice(0, 80), { level: 'info', target: 'hear' });
+      setTimeout(() => { try { earFinish('he spoke over the door'); } catch (e) {} }, Math.min(wait, 4000));
+      earText = text; earConf = conf;
+      return;
+    }
+  } catch (e) {}
   /* BUILD 353. A HEARING THE EAR IS NOT SURE OF IS NOT HIS WORDS.
      19 Nov 2026, 00:22:11: he said "start fresh" and the ear gave back "Goldfish." at confidence 0.157, and the door
      acted on it. At 00:24:01 "R100" came back as "100 grand" at 0.543. A word the recogniser is not sure of is a word
