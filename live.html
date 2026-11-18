@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T21:44';
-const BUILD_NO = 340;
+const BUILD = '2026-11-18T21:22';
+const BUILD_NO = 341;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -9383,6 +9383,25 @@ function closeDirective(why) {
    sentence WAS the answer and is played. */
 let mouthLicenceUntil = 0, pendingMouth = [], pendingMouthAt = 0;
 function mouthScripted() { return !!directiveOpen || Date.now() < mouthLicenceUntil; }
+/* BUILD 341. THE LICENCE BELONGS TO THE NOTE. 18 Nov 2026, 19:13:49, live on 340: he asked for the weather, the door
+   knew it, the mouth answered, and every frame was dropped - because 339 licensed the mouth only in the talk branch of
+   thinking, and that turn never reached thinking at all (the route came from the contracts and the door answered it
+   directly). So the door now opens the mouth wherever it asks for words of its own, and anything the mouth said while
+   the door was still deciding is played instead of destroyed. */
+function mouthLicence(why) {
+  mouthLicenceUntil = Date.now() + 25000;
+  const held = pendingMouth;
+  pendingMouth = []; pendingMouthAt = 0;
+  if (!held.length) return;
+  try {
+    for (const f of held) playPcm(f.data, f.mime);
+    replyAudible = true; heardAt = Date.now(); unheardAt = 0;
+    logLine('mouth.released.licence', 'the door asked for its own words, so what it already said is played \u00b7 '
+      + held.length + ' frame(s) \u00b7 ' + String(why || ''), { level: 'info', target: 'mouth' });
+  } catch (e) {
+    logLine('mouth.release.fail', String(e && e.message || e), { level: 'warn', target: 'mouth' });
+  }
+}
 
 function mouthPreempted() {
   try { return !!thinkHold && !!String(said.engine || '').trim(); } catch (e) { return false; }
@@ -9457,6 +9476,9 @@ function doorNote(text, speak) {
   try {
     const q = (String(t).match(/"([^"]{6,})"/) || [])[1];
     if (speak && q) { owedLine = q.trim(); owedAt = Date.now(); }
+    /* BUILD 341. THE NOTE THAT ASKS FOR WORDS IS THE LICENCE TO SAY THEM. An exact line is not: the door's own question
+       must never be replaced by the mouth's paraphrase of it. */
+    if (speak && !q && !/^\s*say exactly this/i.test(t)) mouthLicence('note');
   } catch (e) {}
   // A turn in flight is not the same as a sound in the air: from the moment he stops talking until the model
   // finishes, a note would cut the reply. Everything waits for the end of the turn, and only the end of a
@@ -12762,26 +12784,18 @@ function handleFrame(text) {
          a question inside the landing window is held, not played, so the invented question is never heard. */
       /* BUILD 336. THE FIRST QUESTION IS WHETHER THE MOUTH WAS ASKED AT ALL. 19:50:00.5 on 335: the tail was
          already in his ears before the words that described it arrived, so every later guard was late by design. */
-      if (!mouthScripted() && thinkHold) {
-        /* The door is still deciding. Keep the sound: if it comes back with talk, this was the answer. */
+      /* BUILD 341. HELD, NOT DESTROYED. 19:13:49 on 340: the answer was spoken before the door had asked for it, so
+         every frame was thrown away and he heard nothing. A sound that arrives before the door has asked is now kept:
+         if the door asks for its own words, it is played; if the turn closes without that, it is dropped and recorded. */
+      if (!mouthScripted()) {
         if (pendingMouth.length < 60) pendingMouth.push({ data: data, mime: p.inlineData.mimeType });
         pendingMouthAt = pendingMouthAt || Date.now();
         heldFrames++;
         unheardAt = Date.now();
         if (unscriptedLogged < 3) {
           unscriptedLogged++;
-          logLine('mouth.held.think', 'the door is still deciding, so this waits: '
+          logLine('mouth.held', 'nothing has asked for words yet, so this waits: '
             + String(said.engine || '').slice(0, 120), { level: 'info', target: 'mouth' });
-        }
-        continue;
-      }
-      if (!mouthScripted()) {
-        heldFrames++;
-        unheardAt = Date.now();
-        if (unscriptedLogged < 3) {
-          unscriptedLogged++;
-          logLine('mouth.unscripted', 'nothing was asked of the mouth, so this is never heard: '
-            + String(said.engine || '').slice(0, 120), { level: 'warn', target: 'mouth' });
         }
         continue;
       }
@@ -12882,7 +12896,10 @@ function handleFrame(text) {
     /* BUILD 338. A SENTENCE NOBODY HEARD IS NOT THE DOOR'S LINE. */
     if (!sentenceWasHeard() && String(said.engine || '').trim()) {
       logLine('mouth.unheard', 'dropped before it was played, so the door never said this: '
-        + String(said.engine || '').slice(0, 120), { level: 'warn', target: 'mouth' });
+        + String(said.engine || '').slice(0, 120)
+        + (pendingMouth.length ? ' \u00b7 ' + pendingMouth.length + ' held frame(s) dropped with it' : ''),
+        { level: 'warn', target: 'mouth' });
+      pendingMouth = []; pendingMouthAt = 0;
       unheardAt = 0; heardAt = 0;
       try { endTurn('nothing was heard'); } catch (e) {}
       return;
