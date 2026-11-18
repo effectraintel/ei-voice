@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:38';
-const BUILD_NO = 316;
+const BUILD = '2026-11-18T10:47';
+const BUILD_NO = 317;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5422,6 +5422,7 @@ async function handleWorldCall(call) {
       + '. Say plainly that you could not look, and never invent the fact.';
     logLine('world.miss', ask + ' · ' + ((e && e.message) ? e.message : String(e)), { level: 'warn', target: 'world' });
   }
+  closeHuntForTalk('a question about the world');
   logLine('tool.world', result.slice(0, 160), { ms: Date.now() - t0, args: JSON.stringify(args), level: result.indexOf('could not') === 0 ? 'warn' : 'info' });
   try {
     ws.send(JSON.stringify({
@@ -5451,6 +5452,7 @@ async function handleHouseCall(call) {
   } catch (e) {
     result = 'the house could not be read: ' + ((e && e.message) ? e.message : String(e));
   }
+  closeHuntForTalk('a question about the house');
   logLine('tool.house', result, { ms: Date.now() - t0, args: JSON.stringify(call.args || {}), level: result.indexOf('could not') === 0 ? 'warn' : 'info' });
   try {
     ws.send(JSON.stringify({
@@ -6752,6 +6754,75 @@ async function handleShareCall(call) {
     }
     return row[n] / max <= 0.34;
   }
+  /* BUILD 317. THE CONVERSATION KEEPS ITS THREAD UNTIL HE OPENS A NEW ONE.
+     18 Nov 2026, 10:42, live on 316: he was talking tennis ("Yes, I am actually."), a hunt left open from an earlier
+     song was still standing, and that sentence settled it - the rail was searched for "I am actually" and a track by
+     U SungEun was locked onto his shelf while the mouth was saying "Enjoy the tennis this weekend".
+     Two rules, both mechanical: a sentence with no name in it is never a title, and a song route may not open on a
+     word trigger while he is in the middle of something else. */
+  let threadKind = '';               // 'talk' while he is on anything that is not a song
+  let threadAt = 0;
+  /* Build 317: a hunt left standing while he talks about tennis is how a stray "yes" locked a song onto his shelf.
+     Answering something that is not a song moves the thread, so the hunt is put down - but never while a making or a
+     share is in flight, because a question in the middle of a song must be answered without losing the song. */
+  function closeHuntForTalk(why) {
+    try {
+      if (!guessHunt && !GUESS_FIRST) return;
+      if (!guessHunt) { threadKind = 'talk'; threadAt = Date.now(); }
+      if (songDraft.at || sharePending || shareCard || shareStage) return;
+      if (!guessHunt) { threadKind = 'talk'; threadAt = Date.now(); return; }
+      guessHunt = false; guessLast = []; guessAt = 0;
+      threadKind = 'talk'; threadAt = Date.now();
+      logLine('share.guess.closed.talk', 'he moved to ' + why + ', so the song is put down · nothing is searched',
+        { level: 'info', target: 'songShare' });
+    } catch (e) {}
+  }
+  function inHand() {
+    try {
+      return !!(guessHunt || songDraft.at || sharePending || shareCard || songFork || shareStage);
+    } catch (e) { return !!guessHunt; }
+  }
+  /* A song is asked for, not stumbled into: a verb about a song, or a verb about a shelf. */
+  const SONG_ASK = new RegExp([
+    '\\b(?:make|write|create|build|do|record)\\b[^.!?]{0,30}\\b(?:a |one |another |new )?(?:song|track|tune|music)\\b',
+    '\\b(?:share|send|put|add|find|search for|look for|get me|play)\\b[^.!?]{0,30}\\b(?:song|track|tune|music|shelf)\\b',
+    '\\b(?:song|track|tune)\\b[^.!?]{0,20}\\b(?:on my shelf|for me|please|now)\\b',
+    '\\b(?:on|to) my shelf\\b',
+    "\\blet'?s (?:do|have|make|share|find)\\b",
+  ].join('|'), 'i');
+  function explicitSongAsk(said) {
+    const t = String(said || '');
+    if (!SONG_ASK.test(t)) return false;
+    /* "Let's carry on" is a choice, not a song. Only a song word or a shelf makes it one. */
+    return /\b(?:song|track|tune|music|shelf)\b/i.test(t);
+  }
+  /* The signature of a sentence that names nothing: every word is a yes, a pronoun or filler. */
+  const FILLER_WORD = /^(?:i|im|am|is|are|was|were|be|been|being|you|your|youre|we|us|our|they|them|their|he|she|it|its|me|my|mine|that|thats|this|these|those|and|but|or|so|just|actually|really|quite|very|now|then|also|too|please|thanks|thank|you|right|correct|indeed|exactly|sure|of|course|well|oh|hmm+|ok|okay|yes|yeah|yep|no|nope|not|do|does|did|have|has|had|can|will|would|should|could|a|an|the|for|to|at|on|in|with|about|all|good|great|nice|fine|cool|think|thought|mean|say|saying|said|told|tell|here|there|thing|things|way|much|more|most|know|see|got|get|let|lets)$/i;
+  function saysNoName(said) {
+    const words = String(said || '').toLowerCase().replace(/[^a-z' ]/g, ' ').split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    return words.every((w) => FILLER_WORD.test(w));
+  }
+  /* A QUESTION ABOUT SOMETHING ELSE IS NOT A NARROWING ANSWER. 18 Nov 2026, 10:41: with a hunt still open he asked
+     "Who is playing in the tennis semifinal on Saturday?" and the door wrote it down as a clue. If he asks a question
+     whose words appear nowhere in the songs on the table, he has changed subject: the song is put down and the
+     question is answered. */
+  function looksLikeOtherQuestion(said) {
+    const t = String(said || '').trim();
+    if (!t) return false;
+    /* Anything that talks about a song, or asks the door to play, find, make or shelve something, is a song turn. */
+    if (explicitSongAsk(t)) return false;
+    if (/\bsongs?\b|\btracks?\b|\btunes?\b|\bmusic\b|\bshelf\b/i.test(t)) return false;
+    if (/\b(?:play|sing|find|share|add|make|write|create|build|record)\b/i.test(t)) return false;
+    const asks = /\?\s*$/.test(t)
+      || /^(?:who|what|when|where|why|how|which|is|are|was|were|do|does|did|can|could|will|would|should|any|tell me|is there|are there|give me|show me)\b/i.test(t);
+    if (!asks) return false;
+    const words = t.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter((w) => w.length >= 4);
+    if (!words.length) return true;                     // a question with no long words names nothing on the table
+    if (!guessLast.length) return true;                 // an ordinary question, and no song on the table to narrow
+    const table = guessLast.map((c) => (c.title + ' ' + (c.artist || '')).toLowerCase()).join(' ');
+    return !words.some((w) => table.indexOf(w) >= 0);
+  }
   let settledAt = 0;
   const GUESS_FIRST = true;          // the experiment: nothing goes to the rail until he says that is the one
   let guessHunt = false;             // his narrowing is with the mouth, not the rail
@@ -6844,6 +6915,14 @@ async function handleShareCall(call) {
     if (fix && fix.title) return fix;
     const named = String(said || '').replace(GUESS_ONE, ' ').replace(/\b(?:yes|yeah|ok|okay|please|boss|the|one|it|that|is)\b/gi, ' ')
       .replace(/[^a-z0-9'&\- ]/gi, ' ').replace(/\s+/g, ' ').trim();
+    /* Build 317: "Yes, I am actually." is not a song. A sentence made only of yes and filler names nothing, so the
+       door has no name in hand and asks, rather than inventing one out of his affirmation. */
+    if (named && saysNoName(said)) {
+      logLine('share.noname', 'nothing in those words is a title · ' + String(said).slice(0, 40),
+        { level: 'info', target: 'songShare' });
+      if (guessLast.length === 1) return { title: guessLast[0].title, artist: guessLast[0].artist || '' };
+      return null;
+    }
     if (named && named.split(' ').length <= 6 && /[a-z]{2,}/i.test(named)) {
       const hit = guessLast.find((c) => named.toLowerCase().split(' ').every((w) => (c.title + ' ' + (c.artist || '')).toLowerCase().includes(w)));
       if (hit) return { title: hit.title, artist: hit.artist || '' };
@@ -7473,6 +7552,23 @@ async function handleShareCall(call) {
   }
 
   function guessTurn(said) {
+    /* Build 317: "Yes, I am actually." names nothing. With songs on the table it asks which one; with none it asks for
+       a title. Either way his affirmation is never sent to the mouth as a clue and never becomes a title. */
+    try {
+      if (saysNoName(said) && !matchOffered(said)) {
+        guessAt = Date.now();
+        logLine('share.affirm.ask', 'no name in that sentence, so the songs stay on the table · ' + String(said).slice(0, 40),
+          { level: 'info', target: 'songShare' });
+        railNote('share · asked which one · ' + String(said).slice(0, 24));
+        doorNote((guessLast.length
+          ? 'He answered without naming a song. Already offered: '
+            + guessLast.map((c) => c.title + (c.artist ? ' by ' + c.artist : '')).join('; ')
+            + '. Ask him once, in one short line, which of those he means, or for the title as he knows it. '
+          : 'He has not named a song yet. Ask him once, in one short line, for the title as he knows it and who sings it. ')
+          + 'Nothing has been searched, so never say anything is on his shelf.', true);
+        return;
+      }
+    } catch (e) {}
     /* The close is checked here, at the one place every narrowing turn passes through, so no second door into the
        hunt can skip it. */
     if (huntClosedBy(said)) return;
@@ -7545,13 +7641,31 @@ async function handleShareCall(call) {
   
   function noteSongAnswer(heard, opts) {
     const said = String(heard || '').trim();
+    /* Build 317: a question about something else puts the song down and is answered. First thing in, so no branch can
+       turn it into a clue, and never while a making is armed - a question in the middle of a song is answered without
+       losing the song. */
+    try {
+      if ((guessHunt || GUESS_FIRST) && !songDraft.at && looksLikeOtherQuestion(said)) {
+        guessHunt = false; guessLast = []; guessAt = 0;
+        threadKind = 'talk'; threadAt = Date.now();
+        logLine('share.guess.closed.question', 'he asked about something else, so the song is put down · '
+          + said.slice(0, 50), { level: 'info', target: 'songShare' });
+        doorNote('He has changed subject, so the song is put down and nothing is searched. Answer his question in one '
+          + 'or two short lines. Do not mention a song, a title, or the shelf.', true);
+        return;
+      }
+    } catch (e) {}
     const settledHere = !!(opts && opts.settled);   // build 301: the name he settled goes straight to the rail
     if (!said) return;
     /* BUILD 301. First question: is this him settling it, or still narrowing it? */
     if (guessHunt) {
       /* Build 302: naming one of the songs the mouth offered IS the verdict, with or without "that is the one". */
+      /* Build 317: a bare "yes" chooses between songs only when there is one song to choose. With three on the table
+         it used to make a title out of whatever he said next to it ("Yes, I am actually." -> "I am actually"). */
+      const bareYes = /^(?:yes|yeah|yep|ok|okay|correct|exactly|right)\b/i.test(said);
       const settle = GUESS_ONE.test(said) || !!matchOffered(said)
-        || (/^(?:yes|yeah|yep|ok|okay|correct|exactly|right)\b/i.test(said) && guessLast.length <= 3);
+        || (bareYes && guessLast.length === 1)
+        || (bareYes && guessLast.length > 1 && !!correctionWords(said));
       if (!settle) return guessTurn(said);
       /* He has settled it: the rail is asked once, with the name that is now fixed. */
       let pick = settledName(said);
@@ -7585,6 +7699,18 @@ async function handleShareCall(call) {
       const q = (pick.title + (pick.artist ? ' ' + pick.artist : '')).trim();
       awaitSong = Date.now();
       return noteSongAnswer(q, { settled: true });   // the same path, now with the name he settled on
+    }
+    /* Build 317: he is in the middle of a conversation and has not asked for a song, so no song route opens here.
+       This sits before the fork and before the hunt so no other branch can reach them first. */
+    if (!settledHere && !inHand() && threadKind === 'talk' && !explicitSongAsk(said)
+      && !/^(?:yes|yeah|yep|ok|okay|correct|exactly|right|no|nope)\b[\s.!]*(?:that|it)?[\s.!]*(?:is|was)?[\s.!]*(?:the one|that)?[\s.!]*$/i.test(said.trim())
+      && !GUESS_ONE.test(said)) {
+      logLine('share.notopened', 'he is mid-conversation and has asked for no song · ' + String(said).slice(0, 50),
+        { level: 'info', target: 'songShare' });
+      doorNote('He is in the middle of a conversation about something else. Answer what he just said, in one or two '
+        + 'short lines, and keep that thread going. A song only happens when he asks for one, so do not offer a song, '
+        + 'do not ask for a title, and say nothing about the shelf.', true);
+      return;
     }
     // The fork owns the turn while it is open (build 169): at 07:56:49 the fork note and this arm note both
     // arrived, and the mouth answered "which song would you like to share?" instead of asking the fork.
