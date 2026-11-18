@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T09:40';
-const BUILD_NO = 303;
+const BUILD_NO = 304;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1305,7 +1305,14 @@ let clockT = null, clockStart = 0;
 // Build 35: the wait says where it is, so "a while" is a stage and a number on screen
 // rather than a blank circle that might be stuck. (Edwin, 7 Nov: "it still took a while")
 let clockLabel = 'opening the door';
-function stage(label) { clockLabel = label; }
+function stage(label) {
+  clockLabel = label;
+  /* BUILD 304. THE STAGE IS THE ONE THING THE SCREEN SAYS, SO IT IS THE ONE THING THE LOG MUST ALSO SAY.
+     18 Nov 2026, 02:15: the fingerprint returned at 00:15:22 and the record holds nothing after it, while the
+     screen sat on "opening the voice". Nothing was wrong with the log; the door never said which step it had
+     reached. Now it does, one short line each, so a stall names itself instead of looking like a dead page. */
+  try { logLine('door.stage', String(label || '')); } catch (e) {}
+}
 
 el('voicename').textContent = voice;
 
@@ -2748,7 +2755,18 @@ async function openDoor() {
     let micWarmError = null;
     // In text mode there is no microphone to warm, and asking for one would raise a permission
     // prompt for a door that is not listening.
-    const micWarm = typed() ? Promise.resolve() : openMic().catch((e) => { micWarmError = e; });
+    const micWarm = typed() ? Promise.resolve() : Promise.race([
+      openMic().catch((e) => { micWarmError = e; }),
+      /* BUILD 304. A MICROPHONE THAT NEVER ANSWERS IS NOT A DOOR THAT WILL NOT OPEN.
+         getUserMedia can stay pending for ever: a permission sheet dismissed behind the page, another app
+         holding the input, a Mac waking from sleep. The old code awaited it forever after the door was
+         already open, which is exactly "it just says opening the voice". Twelve seconds, then the door
+         opens in words and says why. */
+      new Promise((res) => setTimeout(() => {
+        if (!micWarmError) { const t = new Error('the microphone did not start'); t.micTimeout = true; micWarmError = t; }
+        res(null);
+      }, 12000)),
+    ]);
     /* Build 303: the clock pack is a nicety and may not hold the door. Eight seconds, then the door opens
        without it rather than waiting on it. */
     const nowPack = Promise.race([
@@ -2810,7 +2828,15 @@ async function openDoor() {
 
     stage('opening the voice');
     await micWarm;
-    if (micWarmError) throw micWarmError;
+    /* A microphone that did not start does not close the house. The door opens, and it says plainly that it
+       is taking words rather than a voice, because a door he can use beats a door that apologises. */
+    if (micWarmError) {
+      logLine('mic.fail', (micWarmError && micWarmError.message) || 'the microphone did not start',
+        { level: 'error', target: 'mic' });
+      if (!typed()) { try { setMode('text'); } catch (e) {} }
+      warn('the microphone did not start. the door is open for typing, and a tap on SPEAK tries the microphone again.');
+      hint('type it, then Enter');
+    }
 
     // Between the tap and here there are two network round trips. If he tapped again in
     // that window, the door was cancelled, and opening it now would leave a socket running
