@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T15:54';
-const BUILD_NO = 324;
+const BUILD = '2026-11-18T16:16';
+const BUILD_NO = 325;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6899,9 +6899,20 @@ async function handleShareCall(call) {
         .trim();
     };
     const out = [];
+    /* BUILD 325. A QUESTION IS NEVER AN OFFER.
+       18 Nov 2026, 14:10:30, live on 324: he said "It's a song from Avril Lavigne." and the mouth asked "Which song by
+       Avril Lavigne would you like to share, Boss?" The door read ITS OWN QUESTION as a list and wrote down the song
+       "Which song" by "Avril Lavigne would you like to share". He answered "complicated", that nonsense matched, the
+       stores were asked for it, and the rail's first Avril hit came back as his answer: "I found Sk8er Boi by Avril
+       Lavigne. Is that the one you mean?" A question names nothing, so nothing is read out of one. */
+    if (/\b(?:would you like|do you want|shall i|which one|let me know|is that the one|did you mean|do you mean)\b/i.test(String(text || ''))
+      && !/\bby\b/i.test(String(text || ''))) return out;
+    const QUESTION_WORD = /^(?:which|what|who|whom|whose|where|when|why|how|do|does|did|is|are|was|were|can|could|would|should|shall|will|may|might|am|have|has|had)\b/i;
     const push = (title, artist) => {
       const ti = clean(title);
       if (!ti || ti.length > 60) return;
+      if (QUESTION_WORD.test(ti)) return;                    // "Which song", "What about you"
+      if (/\b(?:would you like|do you want|let me know)\b/i.test(String(artist || ''))) artist = '';
       if (ti.split(/\s+/).length > 9) return;      // build 311: a title is short, a sentence is not
       // BUILD 324: two artists can offer the same title, and dropping the second loses the artist he may name.
       const ar = clean(artist);
@@ -6930,7 +6941,21 @@ async function handleShareCall(call) {
      line. Without the list, his naming of the artist had nothing to match, so the rail was asked blind and he was
      asked which song again. */
   function recordOffers(text) {
-    if (!guessHunt || !text) return 0;
+    if (!text) return 0;
+    /* BUILD 325. A SONG THE MOUTH PUTS IN FRONT OF HIM IS ON THE TABLE, EVEN WHEN NO HUNT IS OPEN.
+       18 Nov 2026, 14:11:25, live on 324: the mouth corrected itself - "My mistake, Boss. I found Complicated by Avril
+       Lavigne. Is that the one you want to share?" - and the door recorded nothing, because the hunt had closed when
+       the wrong song was locked. He answered "Yes." to a question that was never held, the door had nothing to settle,
+       the mouth invented "What should the song say?", the door corrected it, and he ended the run with nothing. A
+       question the mouth asks him is a question the door must be able to answer. */
+    if (!guessHunt) {
+      const asks = /\b(?:is that the one|is that right|is this the one|is that it|shall i share|do you want to share|would you like to share|is that the song)\b/i.test(text);
+      const names = readProposals(text);
+      if (!asks || !names.length) return 0;
+      guessHunt = true; guessAt = Date.now();
+      logLine('share.offered.reopened', 'the mouth put a song in front of him and asked, so the door holds the question',
+        { level: 'info', target: 'songShare' });
+    }
     const offered = readProposals(text);
     if (!offered.length) return 0;
     guessLast = offered;
