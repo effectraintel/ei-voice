@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:51';
-const BUILD_NO = 318;
+const BUILD = '2026-11-18T10:57';
+const BUILD_NO = 319;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1452,14 +1452,23 @@ function glueFragment(who, a, b) {
    (the sitting cleared and a fresh socket replaced it) while the screen printed "YOU Thought fresh" and nothing else,
    so the door looked deaf. When the door settles his words by how they sound, it says what it took them for. */
 let heardAs = '';
+/* What his bubble reads, and what it admits underneath: the understood words lead, the raw hearing follows. */
+function heardLine(understood, raw) {
+  const main = String(understood || '').replace(/^([a-z])/, (m) => m.toUpperCase());
+  return { main: main, tag: 'heard as \u201c' + String(raw || '').trim() + '\u201d' };
+}
 function appendLive(who, text) {
   if (who === 'you' && heardAs) {
     const note = heardAs; heardAs = '';
+    /* Build 319: the line he reads is what the door understood, because that is the record of the turn; the raw
+       hearing sits underneath as the note, so nothing is hidden and nothing is guessed at. Boss, 11:00: "Still the
+       same now printed - Store fresh, but heard Start Fresh" - the mangled words were still leading the line. */
     if (!turns.you) { turns.you = addTurn('you', ''); said.you = ''; streamMode.you = null; }
-    turns.you.querySelector('.said').textContent = String(text || '');
+    const line = heardLine(note, text);
+    turns.you.querySelector('.said').textContent = line.main;
     const tag = document.createElement('div');
     tag.className = 'lat heard';
-    tag.textContent = 'heard as ' + note;
+    tag.textContent = line.tag;
     turns.you.appendChild(tag);
     logEl.scrollTop = logEl.scrollHeight;
     return;
