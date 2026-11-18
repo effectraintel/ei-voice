@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:57';
-const BUILD_NO = 319;
+const BUILD = '2026-11-18T15:00';
+const BUILD_NO = 320;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -7362,7 +7362,122 @@ async function handleShareCall(call) {
     return true;
   }
   
+
+/* ===========================================================================================
+   STAGE 1 OF THE INVERSION — 18 November 2026. Agreed text:
+   notes/effectra-intelligence/door-fsm-inversion-spec.md.
+
+   One turn is one record, and every word the door says is traced to the directive that
+   produced it. Nothing else changes in this build: the record is written beside the door as
+   it stands, so it can be proved without altering one thing he can hear.
+
+   The record carries turn_id, said_raw, said_resolved, state_before, question_id, the
+   thinking object, commit, state_after and directive_id. Three of those are deliberately
+   empty here: said_resolved is Stage 2's, thinking is Stage 3's, commit is Stage 5's. A field
+   empty because its stage has not run is honest; a field filled with a guess is the fault
+   this whole inversion exists to end.
+   =========================================================================================== */
+let turnSeq = 0, dirSeq = 0;
+let curTurn = null, curDirective = null;
+
+function doorStateLabel() {
+  // PROVISIONAL, and named as such. The real labels are the declared roadmaps of Stage 4; until
+  // they exist the record names the closest thing the door actually holds, so a turn can be read
+  // in context and never claims a state the door has not got.
+  try {
+    if (makeArmedSig && makeArmedAt && Date.now() - makeArmedAt < 10 * 60 * 1000) return 'make';
+    if (shareChoices.length) return 'hunt';
+  } catch (e) {}
+  return 'talk';
+}
+
+function openQuestionId() {
+  // PROVISIONAL. Stage 4 gives every question an id; today the only question the door can name is
+  // the list of candidates it is holding.
+  try { if (shareChoices.length) return 'share.which'; } catch (e) {}
+  return '';
+}
+
+function beginTurn(raw) {
+  const said = String(raw || '');
+  // A repeated fragment is not a new turn: the microphone sends a transcript in pieces and the door
+  // already assembles them. The record must not multiply one sentence into three.
+  if (curTurn && said && said === curTurn.said_raw) return curTurn;
+  turnSeq++;
+  curTurn = {
+    id: 'T' + Date.now().toString(36) + '-' + turnSeq,
+    said_raw: said,
+    said_resolved: '',
+    at: Date.now(),
+    state_before: doorStateLabel(),
+    question_id: openQuestionId(),
+    thinking: null,
+    commit: null,
+    directive_id: '',
+  };
+  curDirective = null;
+  try {
+    logLine('turn.open', said.slice(0, 200), {
+      level: 'info', target: 'turn',
+      turn_id: curTurn.id, state_before: curTurn.state_before, question_id: curTurn.question_id,
+    });
+  } catch (e) {}
+  return curTurn;
+}
+
+function mintDirective(text) {
+  dirSeq++;
+  curDirective = {
+    id: 'D' + Date.now().toString(36) + '-' + dirSeq,
+    turn_id: curTurn ? curTurn.id : '',
+    at: Date.now(),
+    text: String(text || '').slice(0, 300),
+  };
+  if (curTurn) curTurn.directive_id = curDirective.id;
+  return curDirective;
+}
+
+function attributeEngine(text) {
+  // The one question this build exists to answer: which directive produced this sentence?
+  const out = {
+    turn_id: curTurn ? curTurn.id : '',
+    directive_id: curDirective ? curDirective.id : '',
+    orphan: !(curDirective && curDirective.id),
+  };
+  if (out.orphan) {
+    // A sentence with no directive behind it is the fault that cost 18 November. It is not
+    // corrected here and not hidden: it is counted, so the record shows it and Stage 6 has a
+    // number to drive to zero.
+    try {
+      logLine('turn.orphan', String(text || '').slice(0, 200),
+        { level: 'warn', target: 'turn', turn_id: out.turn_id });
+    } catch (e) {}
+  }
+  return out;
+}
+
+function endTurn(reason) {
+  if (!curTurn) return null;
+  curTurn.state_after = doorStateLabel();
+  curTurn.closed_at = Date.now();
+  curTurn.why = String(reason || '');
+  try {
+    logLine('turn.close', curTurn.why, {
+      level: 'info', target: 'turn',
+      turn_id: curTurn.id, state_after: curTurn.state_after,
+      directive_id: curTurn.directive_id, commit: curTurn.commit ? '1' : '',
+      ms: curTurn.closed_at - curTurn.at,
+    });
+  } catch (e) {}
+  const done = Object.assign({}, curTurn);
+  curDirective = null;
+  return done;
+}
+
+function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
+
   function doorHears(heard) {
+    try { beginTurn(heard); } catch (e) {}
     const said = String(heard || '').trim();
     if (!said) return;
     // A new thing said is a new chance to be corrected: the mute above belongs to the fault, not to him.
@@ -8344,6 +8459,10 @@ async function handleShareCall(call) {
   }
   
   function sendNoteNow(text, speak) {
+    // STAGE 1: a note the mouth must SPEAK is a directive, and it is minted here, before anything is
+    // sent, so the words that follow can be traced back to it. A context note (speak false) is not a
+    // directive: it licenses nothing and is never the ancestor of a sentence.
+    if (speak) { try { mintDirective(text); } catch (e) {} }
     try {
       if (!ws) return;
       ws.send(JSON.stringify({
@@ -8365,7 +8484,9 @@ async function handleShareCall(call) {
       const railOutcome = /\bthe rail (?:answered|returned|refused|said)\b|\bthe door has put\b|\bwrapped it\b|\bthe wrap (?:returned|refused|answered)\b|\brefused the link\b/i;
       if (railOutcome.test(String(text)) && speak) railToldAt = Date.now();
       logLine('note.sent', (speak ? 'speak: ' : 'context: ') + String(text).slice(0, 80),
-        { level: 'info', target: 'note' });
+        { level: 'info', target: 'note',
+          directive_id: curDirective ? curDirective.id : '',
+          turn_id: curTurn ? curTurn.id : '' });
       // The door's silence was waiting for exactly this: the answer is now the model's to give.
       try { if (hiddenHold && !document.hidden) { hiddenHold = false; hiddenHoldUntil = 0; } } catch (e) {}
     } catch (e) {}
@@ -11718,17 +11839,25 @@ function handleFrame(text) {
     try { armArtWindow(); } catch (e) {}
     if (sessionOpenedAt && Date.now() - sessionOpenedAt > 9 * 60 * 1000 && !renewing) {
       railNote('session · renewing at the pause, nine minutes in');
-      logLine('turn.engine', said.engine || '', { role: 'engine', note: 'then the link renewed' });
+      const attRenew = attributeEngine(said.engine || '');
+      logLine('turn.engine', said.engine || '', {
+        role: 'engine', note: 'then the link renewed',
+        turn_id: attRenew.turn_id, directive_id: attRenew.directive_id });
+      try { endTurn('renewed at the pause'); } catch (e) {}
       logLine('session.rotate', 'nine minutes in: renewing at a pause', { level: 'info' });
       renewLink('age');
       return;
     }
     try { sittingNote('engine', said.engine || ''); } catch (e) {}
+    const attSaid = attributeEngine(said.engine || '');
     logLine('turn.engine', said.engine || '', {
       role: 'engine',
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
       greeting: greeting ? '1' : '',
+      turn_id: attSaid.turn_id,
+      directive_id: attSaid.directive_id,
     });
+    try { endTurn('turnComplete'); } catch (e) {}
     // Build 244: the mouth asked about a picture, so the door's retry must not ask it again.
     try {
       const spoke = String(said.engine || '');
