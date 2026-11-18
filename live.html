@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T16:16';
-const BUILD_NO = 328;
+const BUILD = '2026-11-18T15:35';
+const BUILD_NO = 329;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -3426,7 +3426,10 @@ const songDraft = { who: '', said: '', feel: '', sound: '', asks: 0, at: 0, askB
   /* Build 179: when the subject landed on this chain. The words ring is asked for the draft's own
      time (rule R-003: a yes given to different words cannot carry over) and refuses without it, so
      the door has to know the moment its own words were formed. */
-  subjectAt: 0 };
+  subjectAt: 0,
+  /* BUILD 329. The picture line, scoped to the song it was asked for. A cover question from a song he has since
+     left behind must never hold the next one shut - 18 Nov 2026, 15:14, that is exactly what it did. */
+  pictureAsked: false };
 /* Build 138: the route, one beat at a time. subject -> sound -> feel, three questions at most, and any of
    them is skipped by saying "you choose". askBeat is which one is open, so his answer is taken by the door
    itself before the model is asked anything.
@@ -3597,6 +3600,7 @@ function chainAskNext(r) {
 function afterSoundBeat() {
   if (songDraft.coverAnswered) return;      // he has already answered for this song
   songDraft.coverTries = 0;
+  songDraft.pictureAsked = true;            // build 329: asked for THIS song, so it is never asked twice
   /* BUILD 254. NOT A BEAT. An open beat is what holds the make back, and the picture is not a gate on the song: it
      chooses what happens when the song lands. On 253 it became a beat, so the row appeared and the making carried on
      regardless, which read as the door running ahead of him. Nothing is held now, and nothing runs ahead either:
@@ -3968,11 +3972,16 @@ function journeyAskNext() {
     /* BUILD 262. A closed sound is NOT the end of the script: the picture is the third line. On 261 the make
        armed here, so his question never arrived and the door jumped to "it will be on your shelf soon". */
     if (soundIsReal(songDraft.sound)) {
+      /* BUILD 329. THE PICTURE BELONGS TO THE SONG BEING MADE, AND TO NOTHING ELSE.
+         18 Nov 2026, 15:14-15:15, live on 328: he asked for a song, gave his words, and every turn logged "the
+         picture is still open, so nothing is armed". Two faults in one line: a picture question from an earlier
+         song was holding the new song shut, and the message named the picture when the beat actually open was the
+         sound. So the picture is asked once per song, and only a picture question that is genuinely open and
+         unanswered holds the making. */
+      if (!songDraft.pictureAsked && !pictureAnswered()) { afterSoundBeat(); return; }
       if (!pictureSettled()) {
-        if (songDraft.at && songDraft.askBeat) {
-        logLine('song.make.held', 'the picture is still open, so nothing is armed', { level: 'info', target: 'music' });
-      }
-        afterSoundBeat();
+        logLine('song.make.held', 'the picture question is open and unanswered, so nothing is armed',
+          { level: 'info', target: 'music' });
         return;
       }
       try { armMake(); } catch (e) {}
@@ -4051,16 +4060,22 @@ function routeClosed() {
    stored a second time as "kept for landing", and the two paths took turns asking him. So the answer is
    latched here, in one place, and every path that could ask or re-take it consults this latch. */
 let pictureDone = false;        // he has answered the picture for the song being made
+const pictureAnswered = () => !!(pictureDone || songDraft.coverAnswered);
+/* BUILD 329. SETTLED MEANS THE PICTURE IS NOT THE LINE BEING WAITED ON.
+   18 Nov 2026: this returned false for any song whose picture had never been answered, which is every song he
+   stopped before the cover question - so the next song could never arm. It is settled when he has answered, or
+   when the door is not standing on the cover question. The picture still holds the making for a yes or a no while
+   it IS the open beat, which is his script and stays whole. */
 function pictureSettled() {
-  return !!(pictureDone || songDraft.coverAnswered || songDraft.pictureClosed);
+  if (pictureAnswered()) return true;
+  return String(songDraft.askBeat || '') !== 'cover';
 }
 
 function armMake() {
   try {
     if (!pictureSettled()) {
-      if (songDraft.at && songDraft.askBeat) {
-        logLine('song.make.held', 'the picture is still open, so nothing is armed', { level: 'info', target: 'music' });
-      }
+      logLine('song.make.held', 'the cover question is open and unanswered, so nothing is armed',
+        { level: 'info', target: 'music' });
       return;
     }
     if (!routeClosed()) return;
@@ -4327,6 +4342,12 @@ function openSongBeat() {
   descentAskedAt = 0;
   shareArt = { want: false, brief: '' };
   shareArtTries = 0;
+  /* BUILD 329. A SONG THAT IS DONE IS NOT A JOURNEY IN PROGRESS.
+     18 Nov 2026, 15:15, live on 328: after one song was answered and armed, "I want to create another song" found the
+     old draft still holding his words and its answered picture, so no question was asked and the new song never
+     began - the same shape as the 15:14 hold, seen from the other side. Once the making is armed or the picture is
+     answered, the next ask starts from nothing. */
+  if (songDraft.at && (pictureAnswered() || makeArmedSig)) { try { songDraftReset(); } catch (e) {} }
   const stale = !songDraft.at || Date.now() - songDraft.at > 20 * 60 * 1000;
   if (songDraft.said && !stale) return;      // he has already given the words: nothing is open
   if (stale) { songDraftReset(); songDraft.at = Date.now(); }
@@ -5020,6 +5041,10 @@ function songDraftReset() {
   songDraft.asks = 0; songDraft.at = 0; songDraft.askBeat = ''; songDraft.skipped = [];
   songDraft.cover = null; songDraft.coverAnswered = false; songDraft.coverTries = 0;
   songDraft.subjectAt = 0;
+  /* BUILD 329. A NEW SONG STARTS WITH NO PICTURE FROM THE LAST ONE. The latch and the ask belong to the song. */
+  songDraft.pictureAsked = false;
+  songDraft.pictureClosed = false;
+  pictureDone = false;
 }
 
 /* The draft's own time, in the shape the chain's rules read. Build 179. */
@@ -7603,6 +7628,13 @@ async function handleShareCall(call) {
     awaitSong = 0;
     songRoute = { pick: '', at: Date.now() };
     if (shareStage === 'art' && !shareCard) shareStage = 'closed';
+    /* BUILD 329. A STEP STOPPED IS A STEP CLOSED.
+       18 Nov 2026, 15:15:17: "Never mind." stopped the making's answer and left its sound question open, so the
+       record still said "journey · sound · still open" after he had ended it. Stopping closes the journey: no
+       beat is left waiting on him, and the next song he asks for starts from nothing. */
+    songDraft.askBeat = '';
+    songDraft.pictureAsked = false;
+    songDraft.at = 0;
     logLine('door.stop', 'he stopped the step: ' + String(said).slice(0, 40), { level: 'info', target: 'stop' });
     railNote('stopped');
     doorNote('He has stopped you. Say one short line that you have stopped and that nothing was searched or '
