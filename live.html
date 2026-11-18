@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 350;
+const BUILD_NO = 351;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -9435,7 +9435,13 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
          14:57:27 and was never sent: turnInFlight had stuck true, so this rescheduled every 400ms for ever
          and the last question of the making was never asked. Sound in the air is the only real reason to
          wait; a turn that has been "open" for more than eight seconds is stale, and the note goes. */
-      if (!speaking && (turnInFlight || awaitingFirstAudio) && held > 8000) {
+      /* BUILD 351. THE QUEUE CANNOT WAIT FOR AN ANSWER THAT ONLY IT CAN CAUSE.
+         19 Nov 2026, 00:16 live: he asked for the weather, the door wrote the note, and the note was held because a
+         turn was "in flight". That flag is set when he stops speaking and cleared when the model begins answering -
+         but the model answers only if the note goes. Nothing moved, for forty seconds, twice. The old guard also
+         refused to go stale while the microphone saw any sound at all, so a fan in the room could hold a note for
+         ever. Eight seconds is the line, and sound is no longer an excuse for it. */
+      if ((turnInFlight || awaitingFirstAudio || sentenceInFlight) && held > 8000) {
         logLine('note.stale.turn', 'a turn stayed open ' + Math.round(held / 1000) + 's · the note goes anyway',
           { level: 'warn', target: 'note' });
         turnInFlight = false; awaitingFirstAudio = false; sentenceInFlight = false;
@@ -13444,6 +13450,9 @@ function earFinish(why) {
   earText = ''; earLive = ''; earSpeech = false; earClosed = false;
   if (!text) { logLine('ear.empty', 'nothing came back from the ear', { level: 'warn', target: 'hear' }); return; }
   logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
+  /* BUILD 351. Nothing is owed to a turn the model never heard: this flag is cleared when the model starts
+     answering, which is the other half of the deadlock above. */
+  turnInFlight = false; awaitingFirstAudio = false;
   try { heardBuf = text; heardFlush(why); }
   catch (e) { logLine('ear.turn.fail', String((e && e.message) || e), { level: 'error', target: 'hear' }); }
 }
