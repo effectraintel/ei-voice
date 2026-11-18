@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T18:45';
-const BUILD_NO = 332;
+const BUILD = '2026-11-18T19:40';
+const BUILD_NO = 333;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6484,8 +6484,14 @@ function judgeClaim() {
     // guard below could see that the failure itself had no rail call behind it. One negation fix, and the
     // existing guard does its job.
     const shelfNegative = /\b(?:nothing|none|not|no one|nobody|isn'?t|wasn'?t|never|couldn'?t|could not|can'?t|cannot)\b/i;
+    /* BUILD 333. A LIST OF WHAT THE HOUSE CAN DO IS NOT A CLAIM THAT IT WAS DONE.
+       18 Nov 2026, 19:26, live on 332: the capability list said "or put a payment request on your shelf for you to
+       pay yourself", the guard read it as a claim, and the correction it then sent was spoken to him. Ability is
+       not an act, and a general statement about the shelf is not a card. */
+    const shelfCapability = /\b(?:i|we|you|it|the house|the engine|they)\s+(?:can|could|may|might|am able to|are able to)\b|\b(?:all of it|all of them|everything|anything|whatever)\b|\bfor you to\b/i;
     const shelfClaimSentence = (String(t).match(/[^.!?]+[.!?]*/g) || [String(t)])
-      .find(x => shelfWriteClaim.test(x) && !shelfAsk.test(x) && !shelfNegative.test(x));
+      .find(x => shelfWriteClaim.test(x) && !shelfAsk.test(x) && !shelfNegative.test(x)
+        && !shelfCapability.test(x));
     if (shelfClaimSentence && !(shelfWriteAt && Date.now() - shelfWriteAt < 60000)) {
       if (Date.now() - unbackedWarnedAt >= 15000) {
         unbackedWarnedAt = Date.now();
@@ -6493,10 +6499,11 @@ function judgeClaim() {
         hiddenHoldUntil = Date.now() + 1500;
         logLine('claim.shelfwrite', String(shelfClaimSentence).trim().slice(0, 160), { level: 'warn', target: 'no-shelf-write' });
         correctedThisTurn = true;               // one reply, not a reply plus a nudge
-        doorNote('Nothing was written to his shelf just now, so do not say that anything is on it. If he asked '
-          + 'for a payment request and you know the amount and what it is for, call the payment tool now and '
-          + 'only describe it once it answers. If you do not have the amount or the item yet, ask him for the '
-          + 'missing one in a single short question.', true);
+        /* BUILD 333. A NOTE THE MOUTH MUST SPEAK IS WORDS TO SAY, NEVER AN ORDER TO FOLLOW. He was shown this
+           one verbatim, because a note written in the third person ("Nothing was written to his shelf just now,
+           so do not say...") went out with speak=true and the mouth simply read it. One true line, quotable. */
+        doorNote('Say exactly this, in one line, and nothing else: "Nothing has been put on your shelf, Boss."',
+          true);
       }
       return;
     }
@@ -9170,9 +9177,44 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     heldMouth = [];
     logLine('mouth.held', 'held while the door searched: ' + all.slice(0, 200), { level: 'info', target: 'held' });
   }
+/* BUILD 333. THE DOOR'S INSTRUCTION IS NEVER THE MOUTH'S SPEECH.
+   18 Nov 2026, 19:26, live: he asked "What else can you do for me?" and was answered with the door's own command
+   to the mouth, word for word. A note is written for the engine, not for him, and a sentence that repeats one is
+   not an answer however it was produced. So the note text is remembered when it is sent and compared with what
+   comes back; a match is cut off the speaker, dropped from the transcript and written down as `note.echoed`. */
+let recentNotes = [];
+
+function echoedNote(text) {
+  const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const n = norm(text);
+  if (n.length < 40) return '';
+  const now = Date.now();
+  for (const r of recentNotes) {
+    if (!r || now - r.at > 30000) continue;
+    const m = norm(r.text);
+    if (m.length < 40) continue;
+    // a long shared opening is the clearest sign: the mouth started where the note started
+    if (n.slice(0, 60) === m.slice(0, 60)) return r.text;
+    if (n.startsWith(m.slice(0, 50)) || m.startsWith(n.slice(0, 50))) return r.text;
+    // otherwise the sentence carries nearly all of the note's own words
+    const words = m.split(' ').filter((w) => w.length > 3);
+    if (words.length >= 8) {
+      const hit = words.filter((w) => n.includes(w)).length;
+      if (hit / words.length >= 0.8) return r.text;
+    }
+  }
+  return '';
+}
+
 function doorNote(text, speak) {
   const t = String(text || '').trim();
   if (!t) return;
+  /* BUILD 333. WHAT THE DOOR SAID TO THE MOUTH IS REMEMBERED WHERE IT IS WRITTEN, not only where it is sent, so a
+     note that waits in the queue is still recognised if the mouth repeats it. */
+  try {
+    recentNotes.push({ text: t, at: Date.now() });
+    if (recentNotes.length > 8) recentNotes.shift();
+  } catch (e) {}
   // A turn in flight is not the same as a sound in the air: from the moment he stops talking until the model
   // finishes, a note would cut the reply. Everything waits for the end of the turn, and only the end of a
   // turn releases the queue.
@@ -12494,6 +12536,20 @@ function handleFrame(text) {
     judgeClaim();
     try { armMake(); } catch (e) {}
     try { armArtWindow(); } catch (e) {}
+    /* BUILD 333. A SENTENCE THAT REPEATS A NOTE IS NOT SPEECH. Checked here, at the end of the turn, before the
+       words are recorded as the mouth's own. The sound is cut and the sentence is dropped. */
+    try {
+      const echoed = echoedNote(said.engine);
+      if (echoed) {
+        logLine('note.echoed', 'the mouth repeated the door\u2019s own instruction: '
+          + String(said.engine || '').slice(0, 120), { level: 'warn', target: 'note' });
+        logLine('note.echoed.note', String(echoed).slice(0, 120), { level: 'warn', target: 'note' });
+        try { barge(); } catch (e) {}
+        said.engine = '';
+        try { endTurn('note echoed'); } catch (e) {}
+        return;
+      }
+    } catch (e) {}
     if (sessionOpenedAt && Date.now() - sessionOpenedAt > 9 * 60 * 1000 && !renewing) {
       railNote('session · renewing at the pause, nine minutes in');
       const attRenew = attributeEngine(said.engine || '');
