@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T15:46';
-const BUILD_NO = 323;
+const BUILD = '2026-11-18T15:54';
+const BUILD_NO = 324;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6881,6 +6881,19 @@ async function handleShareCall(call) {
       if (!anchored) {
         x = x.replace(/^.*?\b(?:do you mean|did you mean|you mean|you're after|after|thinking of|talking about)\s+/i, '');
       }
+      /* BUILD 324. THE TITLE IS NEVER THE CHATTER IN FRONT OF IT.
+         18 Nov 2026, 13:52:01: "I have a few options here, Boss. Is it Don't Fear the Reaper by Blue Oyster Cult"
+         was read as the song "Boss. Is it Don't Fear the Reaper" - a title nobody could match, and one that would
+         have been sent to the stores. The song starts after the last sentence break, and after "is it". */
+      /* A chatter sentence in front of the song is dropped; a sentence that CONTAINS the song is kept. Cutting at
+         the first full stop took "Don't Fear the Reaper by Keep Sheltered? I haven't checked them" down to "I
+         haven't checked them" - the same trap as "you mean", from the other side. */
+      for (let guard = 0; guard < 4; guard++) {
+        const m = x.match(/^([^.!?]*)[.!?]\s+(.+)$/);
+        if (!m || /\s(?:by|from)\s/i.test(m[1])) break;
+        x = m[2].trim();
+      }
+      x = x.replace(/^(?:so\s+)?(?:is it|is that|are you thinking of|was it|would it be)\s+/i, '');
       return x
         .replace(/["\u201d')\s.?!,;:]+$/, '')
         .trim();
@@ -6890,8 +6903,11 @@ async function handleShareCall(call) {
       const ti = clean(title);
       if (!ti || ti.length > 60) return;
       if (ti.split(/\s+/).length > 9) return;      // build 311: a title is short, a sentence is not
-      if (out.some((x) => x.title.toLowerCase() === ti.toLowerCase())) return;
-      out.push({ title: ti, artist: clean(artist) });
+      // BUILD 324: two artists can offer the same title, and dropping the second loses the artist he may name.
+      const ar = clean(artist);
+      if (out.some((x) => x.title.toLowerCase() === ti.toLowerCase()
+        && String(x.artist || '').toLowerCase() === String(ar || '').toLowerCase())) return;
+      out.push({ title: ti, artist: ar });
     };
     const pieces = String(text || '').split(/[,;]|\bor\b|\band\b/);
     for (const piece of pieces) {
@@ -6906,6 +6922,23 @@ async function handleShareCall(call) {
     }
     return out.slice(0, 4);
   }
+  /* BUILD 324. THE OFFERS ARE READ ONCE, FROM THE FINISHED SENTENCE.
+     18 Nov 2026, 13:52:01, live on 323: the mouth offered "Don't Fear the Reaper by Blue Oyster Cult, The Reaper by
+     The Chainsmokers, or Don't Fear the Reaper by Keep Sheltered?" and the door recorded nothing, because the reader
+     added in 302 runs in the transcription handler where the sentence arrives in fragments ("I have a few", then
+     "options here"), and a fragment on its own is not a list. The record has never held a single share.offered
+     line. Without the list, his naming of the artist had nothing to match, so the rail was asked blind and he was
+     asked which song again. */
+  function recordOffers(text) {
+    if (!guessHunt || !text) return 0;
+    const offered = readProposals(text);
+    if (!offered.length) return 0;
+    guessLast = offered;
+    logLine('share.offered', offered.map((c) => c.title + (c.artist ? ' by ' + c.artist : '')).join(' · '),
+      { level: 'info', target: 'songShare', from: 'the finished sentence' });
+    return offered.length;
+  }
+
   /* BUILD 302. Has he just named one of the songs the mouth put in front of him? A title said back in full is a
      verdict whether or not he also says "that is the one", because the list is short and he is pointing at it. */
   function matchOffered(said) {
@@ -7018,6 +7051,15 @@ async function handleShareCall(call) {
     artist = clean(artist);
     if (!title) return null;
     if (/^(?:it|this|that|the song|the one)$/i.test(title)) return null;
+    /* BUILD 324. A TITLE OF NOTHING BUT SMALL WORDS IS NOT A TITLE.
+       18 Nov 2026, 13:52:11: "It's the one from or by Blue Oyster Cult." was read as the song "the one from or",
+       and the stores were asked for it - "share.nudge It's the one from or by Blue Oyster Cult." - which came
+       back with four matches and a question he had already answered. Words like these describe a choice; they do
+       not name a song. */
+    const SMALL = /^(?:the|a|an|one|two|of|from|or|and|that|this|it|is|was|by|for|with|in|on|to|at|please|song|track|title|number)$/i;
+    const tw = title.split(/\s+/).filter(Boolean);
+    if (tw.every((w) => SMALL.test(w.replace(/[^a-z]/gi, '')))) return null;
+    if (/^or\b/i.test(artist)) artist = artist.replace(/^or\s+(?:by\s+)?/i, '').trim();
     return { title: title, artist: artist, why: 'he corrected the name' };
   }
   
@@ -7912,6 +7954,21 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
       if (!settle) return guessTurn(said);
       /* He has settled it: the rail is asked once, with the name that is now fixed. */
       let pick = settledName(said);
+      /* BUILD 324. POINTING AT ONE OF THE OFFERS IS A NAME.
+         18 Nov 2026, 13:52:11, live on 323: the mouth offered three Reapers and he answered "It's the one from or by
+         Blue Oyster Cult." The artist picked out exactly one of them, so the door knew he had chosen - and then threw
+         that away because his sentence contained no title it could pull out, and asked him which song he meant. What
+         he pointed at is the name: the song he chose carries its own title and artist. */
+      if (!pick || !pick.title) {
+        try {
+          const pointed = matchOffered(said);
+          if (pointed && pointed.title) {
+            pick = { title: pointed.title, artist: pointed.artist || '' };
+            logLine('share.settled.offered', 'he pointed at one of the offers, so it is the name: '
+              + pick.title + (pick.artist ? ' by ' + pick.artist : ''), { level: 'info', target: 'songShare' });
+          }
+        } catch (e) {}
+      }
       /* BUILD 315. A SONG CARRIES ITS OWN ARTIST. 18 Nov 2026, 08:32:55: the mouth offered "Women by Def Leppard"
          and "Women by Florida Georgia Line", he picked Women and put the wrong name to it ("Dave Lippman"), and the
          rail was asked for Dave Lippman's Women while the card played Def Leppard's. When the title he settles on is
@@ -11952,6 +12009,15 @@ function handleFrame(text) {
       return;
     }
     try { sittingNote('engine', said.engine || ''); } catch (e) {}
+    /* BUILD 324. THE OFFERS ARE READ FROM THE FINISHED SENTENCE, NOT FROM THE FRAGMENTS IT ARRIVES IN.
+       18 Nov 2026, 13:52:01, live on 323: the mouth said "I have a few options here, Boss. Is it Don't Fear the
+       Reaper by Blue Oyster Cult, The Reaper by The Chainsmokers, or Don't Fear the Reaper by Keep Sheltered?"
+       and the door recorded NOTHING. The reader added in 302 sits in the transcription handler, where the text
+       arrives in pieces ("I have a few", then "options here"), so every piece on its own is not a list and
+       readProposals returned nothing - not once, in any run: the record has never held a single share.offered
+       line. He then named the artist, the door had no list to match it against, asked the rail blind, and asked
+       him which song again. A sentence is read once it is finished. */
+    try { recordOffers(said.engine); } catch (e) {}
     const attSaid = attributeEngine(said.engine || '');
     logLine('turn.engine', said.engine || '', {
       role: 'engine',
