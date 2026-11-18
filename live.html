@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T16:16';
-const BUILD_NO = 326;
+const BUILD_NO = 327;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -555,7 +555,15 @@ let turnBeganMuted = false;
 const mouthMaySound = () => !typed() && !turnBeganMuted;
 
 /* ---------------------------------------------------------------------------------------------------------------
-   BUILD 326 - STAGE 2 AND STAGE 3. The door's thinking, and the boundary it thinks at.
+   BUILD 327 - THE TWO LINES HE ACTUALLY HEARD ON 326.
+   14:40:28: the door asked "Which song by Avril Lavigne would you like?", the mouth tried to search anyway, the gate
+   refused it, and the mouth read the refusal out loud - "I can't search for that right now" - in front of the question,
+   which then had to be asked a second time. A refused search is now dropped at the gate: nothing the mouth says about
+   it is heard, and the door speaks its own question once.
+   14:41:01: Sk8er Boi landed and the mouth said it was on the shelf, then invented the making's own question, "What
+   should the song say?", for a song nobody was making - so the guard had to correct it aloud and he heard a question
+   and its withdrawal in one breath. A landing is a fact: the mouth is given one line to say exactly, never room to
+   compose.
 
    Everything below replaces a decision that used to be made by a regex. `doorThink` is a backend function: it reads
    one finished utterance with the state, the open question and the songs already in front of him, and answers with
@@ -6557,11 +6565,17 @@ async function handleShareCall(call) {
       if (!args.choice && (guessHunt || GUESS_FIRST)) {
         const offered = args.query ? matchOffered(query) : null;
         if (!offered) {
-          result = 'Nothing has been searched. Do not search while he is narrowing the song: put at most three songs '
-            + 'in front of him as Title by Artist from your own knowledge, say once that you have not checked them, '
-            + 'and ask which one he means. If you have already offered those, do not repeat the same list - ask him '
-            + 'to say the title as he knows it, or who sings it. Never say the stores did not answer, because the '
-            + 'stores have not been asked.';
+          /* BUILD 326b. A REFUSAL IS NOT A SENTENCE HE EVER HEARS.
+             14:40:28 on this build: the door had asked "Which song by Avril Lavigne would you like?", the mouth tried
+             to search anyway, the gate refused it, and the mouth read the refusal out loud - "I can't search for that
+             right now" - in front of the question. The question was then asked a second time to replace it. So the
+             voice for that turn is dropped at the gate, and the door speaks its own question exactly, once. */
+          try { hiddenHold = true; hiddenHoldUntil = Date.now() + 12000; } catch (e) {}
+          logLine('mouth.held.refusal', 'a search was refused while he is narrowing, so nothing it says is heard',
+            { level: 'info', target: 'think' });
+          result = 'Nothing was searched and nothing is said about searching. The door has already asked him one '
+            + 'question and is asking it now, so say nothing about this at all: no apology, no mention of the '
+            + 'stores, and never the words "I cannot search". If you must speak, ask only which song he means.';
           looked = 'sharing · narrowing';
           railNote('share · narrowing · nothing was searched');
           return;
@@ -8673,10 +8687,13 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
             logLine('share.door.done', (r.title || '') + ' · ' + r.found + ' · ' + (Date.now() - t0) + 'ms',
               { level: 'info', target: 'songShare' });
             shareSongLocked(card);
-            doorNote('the door has searched the rail and put "' + (r.title || 'a song') + '"'
-              + (r.artist ? ' by ' + r.artist : '') + ' on his shelf with its listening link. Say the title once '
-              + 'and that it is on the shelf. Do not read the url, do not offer to send it, and do not ask about '
-              + 'a picture now: it is asked once, at the end, and nothing is drawn before he answers.', true);
+            /* BUILD 326b. A LANDING IS A FACT, SO IT IS SAID, NOT COMPOSED.
+               18 Nov 2026, 14:41:01: the door had put Sk8er Boi on his shelf and told the mouth to say the title and
+               that it was there. The mouth said that, and then invented "What should the song say?" - the making's
+               own question - for a song that was not being made. The guard then had to correct it aloud, so he heard
+               a question and its withdrawal in the same breath. Nothing free-form is asked of the mouth at a landing. */
+            doorNote('Say exactly this, in one line, and nothing else: "'
+              + (r.title || 'That song') + (r.artist ? ' by ' + r.artist : '') + ' is on your shelf, Boss."', true);
             return;
           }
           let picks = collapseChoices(r.candidates);
