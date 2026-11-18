@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:03';
-const BUILD_NO = 311;
+const BUILD = '2026-11-18T10:05';
+const BUILD_NO = 312;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1548,6 +1548,27 @@ function shutDoor() {
   stopClock(); closeMic(); resetTurns();
   setState('the door is shut');
   hint('tap the circle to open it again');
+}
+
+/* BUILD 312. A FRESH SESSION IS A NEW MOUTH, NOT A NEW PARAGRAPH.
+   18 Nov 2026, 10:0x: he chose a fresh start and the mouth answered "Fresh it is. What should the song say, in your
+   own words?" - because clearing the sitting clears the RECORD, and the live socket still held every earlier turn
+   in its own context. So the door now closes the socket and opens a new one, and the new mouth is handed nothing
+   from before. The greeting on the other side is the only thing it knows. */
+let freshGreeting = null;
+async function startFreshSession(note) {
+  try { logLine('sitting.fresh.session', 'a fresh session: the socket is replaced, so nothing said before survives it', { level: 'info', target: 'sitting' }); } catch (e) {}
+  try { if (ws) shutDoor(); } catch (e) {}
+  freshGreeting = note || 'He chose a FRESH session and this socket is new: nothing was said before. Say in one short '
+    + 'line that the door is fresh and ask what he wants.';
+  try {
+    await openDoor();
+  } catch (e) {
+    try { logLine('sitting.fresh.fail', String(e && e.message || e), { level: 'error', target: 'sitting' }); } catch (e2) {}
+    return;
+  }
+  try { doorNote(freshGreeting, true); } catch (e) {}
+  freshGreeting = null;
 }
 
 window.addEventListener('pageshow', (e) => {
@@ -7197,9 +7218,10 @@ async function handleShareCall(call) {
         clearSitting();
         logLine('sitting.cleared', 'he chose a fresh session · "this is a fresh door, and nothing before it"',
           { level: 'info', target: 'sitting' });
-        doorNote('He chose a FRESH session. Everything from earlier in this visit is closed: do not refer to it, do '
-          + 'not use anything you were given about it, and never say what he asked before. Say in one short line that '
-          + 'the door is fresh and ask what he wants.', true);
+        /* 312: and the mouth is made new too, so the song he was making cannot come back as a question. */
+        try { dropMaking('he started fresh'); } catch (e) {}
+        try { guessLast = []; guessHunt = false; awaitSong = 0; shareQuery = ''; } catch (e) {}
+        startFreshSession();
         return;                     // the door's line answers this turn, not the old subject
       }
       /* BUILD 305. THE ANSWER TO "CARRY ON OR START FRESH" IS A CHOICE, NOT A SONG TITLE.
