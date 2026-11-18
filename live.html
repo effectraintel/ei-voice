@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 356;
+const BUILD_NO = 357;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6958,6 +6958,8 @@ async function handleShareCall(call) {
           const r = await withTimeout(gatePost('songShare', { action: 'choose', candidate: picked }), 60000,
             'the sharing rail did not answer in time');
           if (r && r.ok && r.url) {
+            keepLanded({ kind: r.found === 'shelf' ? 'song' : 'store', title: r.title || '', url: r.url,
+              code: r.code || '', sub: [r.artist, r.album].filter(Boolean).join(' \u00b7 ') });
             mergeCard({
               kind: r.found === 'shelf' ? 'song' : 'store',
               title: r.title || picked.title || 'a song',
@@ -9089,6 +9091,14 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
                 if (!wordsCover(said, card2.title)) { hiddenHold = false; askAboutCard(card2, said); return; }
                 commitKnowing('share', [card2.title, r2.artist || ''].filter(Boolean).join(' by '),
                   'the sharing rail, on the second, narrower ask');
+                if (!keepLanded(card2)) {
+                  logLine('share.keep.failed', 'the rail answered on a second ask but gave no address to keep: '
+                    + String(card2.title || '').slice(0, 90), { level: 'warn', target: 'songShare' });
+                  doorNote('Say exactly this, in one line, and nothing else: "I found ' + String(card2.title || 'that song')
+                    + ' but I could not keep it, Boss."', true);
+                  hiddenHold = false;
+                  return;
+                }
                 mergeCard(card2);
                 railAnsweredAt = Date.now();
                 shareSongLocked(card2);
@@ -9130,6 +9140,13 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
             /* BUILD 332. THE RAIL HAS NAMED IT, SO IT IS KNOWN. This is the path he actually walks. */
             commitKnowing('share', [r.title || card.title, r.artist || ''].filter(Boolean).join(' by '),
               'the sharing rail, answering the name he gave');
+            if (!keepLanded(card)) {
+              logLine('share.keep.failed', 'the rail answered but gave no address to keep: ' + String(card.title || '').slice(0, 90),
+                { level: 'warn', target: 'songShare' });
+              doorNote('Say exactly this, in one line, and nothing else: "I found ' + String(card.title || 'that song')
+                + ' but I could not keep it, Boss."', true);
+              return;
+            }
             mergeCard(card);
             railAnsweredAt = Date.now();
             railNote('share · ' + r.found + ' · ' + (r.title || ''));
@@ -12381,6 +12398,20 @@ function worldCard(ask, r) {
       when: new Date().toISOString(),
     };
   } catch (e) { return null; }
+}
+
+/* BUILD 357. A SONG IS ON THE SHELF WHEN THE RECORD SAYS SO, NOT WHEN THE PAGE DRAWS IT.
+   19 Nov 2026, 00:41:55: the rail answered "store" for Home (feat. Michael Bublé), the page drew the card and the door
+   said it was on his shelf - and no row was ever written, so it was gone at the next read. Voulez-Vous survived
+   because "wrapped" writes its own row on the rail. A store landing writes one here, and if it cannot, the door says
+   so instead of claiming it. */
+function keepLanded(card) {
+  try {
+    const url = String((card && card.url) || '');
+    if (!/^https?:\/\//i.test(url)) return false;
+    keepFound(card);
+    return true;
+  } catch (e) { return false; }
 }
 
 function keepFound(it) {
