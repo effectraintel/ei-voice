@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T21:22';
-const BUILD_NO = 341;
+const BUILD = '2026-11-18T21:34';
+const BUILD_NO = 342;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5751,7 +5751,14 @@ async function handleWorldCall(call) {
      underneath it read "share · narrowing · nothing was searched". Two screens, two answers, one of them invented.
      A song never comes from the web while he is settling one: the ask is refused before it is searched, and no
      lookup of his is ever shelved while a hunt is open. */
-  const huntLive = (() => { try { return !!(guessHunt || (awaitSong && Date.now() - awaitSong < 180000)); } catch (e) { return false; } })();
+  /* BUILD 342. THE SETTLE PATH SETS NO FLAG, SO THE WEB WAS NEVER BARRED. 18 Nov 2026, 19:20:56, live: he was
+     settling "Highway to Hell by AC/DC Recovered", the world was asked about it, and a fact card landed on his shelf.
+     The guard now also holds while the rail has just answered or while a list is standing. */
+  const huntLive = (() => { try {
+    return !!(guessHunt || (awaitSong && Date.now() - awaitSong < 180000)
+      || (railAnsweredAt && Date.now() - railAnsweredAt < 180000)
+      || (shareChoices && shareChoices.length));
+  } catch (e) { return false; } })();
   const songShapedAsk = /\b(?:songs?|tracks?|tunes?|albums?|discography|hits|singles|lyrics?|band)\b/i.test(ask)
     || (() => { try { return guessLast.some((c) => c && c.artist && new RegExp('\\b' + String(c.artist).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(ask)); } catch (e) { return false; } })();
   if (huntLive && songShapedAsk) {
@@ -6055,6 +6062,7 @@ function collapseChoices(list) {
 }
 
 let shareChoices = [];
+let lastRailKey = '', lastRailAt = 0;   // build 342: the last name the door searched, so it is not searched twice
 let shareChoicesAt = 0;        // when the list was offered: a menu from an old question is not an answer
 const CHOICE_TTL = 60000;      // a "which one?" list is dead after a minute, because by then he has moved on
 let shareCoverAsked = false;   // the door asks for the picture once, and does not take the model's word for it
@@ -8870,6 +8878,26 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
           + (fix.artist ? ' by ' + fix.artist : ''), { level: 'info', target: 'songShare' });
         railNote('share · he corrected it · ' + fix.title + (fix.artist ? ' by ' + fix.artist : ''));
       }
+      /* BUILD 342. THE SAME NAME IS NOT SEARCHED TWICE. 18 Nov 2026, 21:21:22 and 21:21:30, live: he said the same
+         name three times, the door searched three times, and the same question came back each time. A name searched
+         moments ago that is already on his shelf is answered with the plain fact instead of the stores. */
+      try {
+        const key = String(asked || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+        if (key && key === lastRailKey && Date.now() - lastRailAt < 180000) {
+          const held = (shelf || []).find((c) => c && c.title
+            && key.indexOf(String(c.title).toLowerCase().replace(/[^a-z0-9]+/g, '')) >= 0);
+          if (held) {
+            logLine('share.already', 'the same name was just searched and is already on his shelf: ' + held.title,
+              { level: 'info', target: 'songShare' });
+            railNote('share \u00b7 already on the shelf \u00b7 ' + held.title);
+            doorNote('Say exactly this, in one line, and nothing else: "' + held.title
+              + ' is already on your shelf, Boss."', true);
+            hiddenHold = false;
+            return;
+          }
+        }
+        lastRailKey = key; lastRailAt = Date.now();
+      } catch (e) {}
       logLine('share.door', 'searching the rail itself: ' + asked
         + (shareArtistHint && asked !== said ? ' (with the artist he named: ' + shareArtistHint + ')' : ''),
         { level: 'info', target: 'songShare' });
@@ -8889,7 +8917,12 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
           /* BUILD 328. A NAME THAT IS ALREADY FIXED IS NOT A CHOICE. The rail's top answer is the song: it is put on
              his shelf and named back to him, so a wrong one is visible in the same breath and correctable in his own
              words. This is the end of the candidate list. */
-          if (opts && opts.settled && r && !r.found && Array.isArray(r.candidates) && r.candidates.length) {
+          /* BUILD 342. THIS IS THE PATH EVERY SETTLED NAME TAKES, AND THE FLAG NEVER ARRIVED.
+             18 Nov 2026, 21:21:10, live on 341: he named "Highway to Hell by AC/DC", the door searched, the rail
+             answered two candidates, and the door asked "X, or Y?" - three times over, because 328's top-answer rule
+             was written as `opts && opts.settled` and this call passes no opts. The door searched a name he gave, so
+             the rail's first answer is the song. */
+          if (r && (!r.found || r.found === 'choice') && Array.isArray(r.candidates) && r.candidates.length) {
             const top = (collapseChoices(r.candidates)[0]) || r.candidates[0];
             if (top && top.title) {
               r.found = top.found || 'store';
@@ -9058,7 +9091,10 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
         })
         .catch((e) => {
           logLine('share.door.fail', (e && e.message) || 'no answer', { level: 'warn', target: 'songShare' });
-          doorNote('the rail did not answer. Say you could not reach it, in one line, and do not guess at the song.', true);
+          /* BUILD 342. A FAILURE IS THE DOOR'S LINE. 19:20:56 on 341: the mouth was given "say you could not reach it,
+             in one line", composed "I could not reach it, Boss. Say it once more.", and said it twice. */
+          doorNote('Say exactly this, in one line, and nothing else: "The sharing rail did not answer, Boss, so '
+            + 'nothing was put on your shelf."', true);
         })
         .finally(() => {
           doorSearching = false;
