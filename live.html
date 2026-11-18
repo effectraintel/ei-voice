@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T09:56';
-const BUILD_NO = 310;
+const BUILD = '2026-11-18T10:03';
+const BUILD_NO = 311;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -741,7 +741,7 @@ const DECLS = [{
               // prompt me. For the song name." He names it, and the rail looks in three places in his
               // order before answering: MTShare's own links, then his own songs, then a store.
               name: 'share',
-              description: 'Find a song by name and get the right link for sharing it, then put it on his shelf. Use when he says he wants to share a song, or asks for a link to a song. Call it with the song title he said as the query. If he has not named a song yet, do NOT call it at all: ask him which song, one short line, and nothing else. Never pass a question of your own as the query.',
+              description: 'Find a song by name and get the right link for sharing it, then put it on his shelf. Use when he says he wants to share a song, or asks for a link to a song. Call it with the song title he said as the query. If he has not named a song yet, do NOT call it at all: do not call it at all: one short line of your own words asking him for the title. Never pass a question of your own as the query.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
@@ -5903,7 +5903,7 @@ function judgeClaim() {
           'Nothing is being made: the rail has not been asked, so there is no take and no request. '
           + (beat
             ? 'Ask him this one question, short, and stop: "' + beat + '"'
-            : 'Ask him for the one thing the song still needs, in one short line, and nothing else.'));
+            : 'Ask him for the one thing the song still needs, in one short line of your own words.'));
       }
       return;
     }
@@ -6140,6 +6140,8 @@ function judgeClaim() {
 function looksLikeIntentNotTitle(q) {
   const t = String(q || '').trim().replace(/[.?!,]+$/, '');
   if (!t) return true;
+  /* Build 311: a title with its artist in his own words is a song, whatever else the line contains. */
+  try { if (typeof correctionWords === 'function' && correctionWords(t)) return false; } catch (e) {}
   // "this song", "a song", "that one", "it": a pointer with nothing to point at.
   if (/^(?:(?:this|that|the|a|an|some|any|another|one|it)\s*)?(?:song|track|tune|one|thing)?$/i.test(t)) return true;
   if (/^(?:i|we)\s+(?:want|wanna|would|'?d|need|feel like|am going to|'?m going to)\b/i.test(t)) return true;
@@ -6150,7 +6152,11 @@ function looksLikeIntentNotTitle(q) {
      searched the store, the store answered with a genuine title (Jelly Roll's "I Am Not Okay"), and a store card
      landed on his shelf beside a song being made from the same words. A feeling is material for a making, never a
      lookup - unless he plainly asks to find, play or share one, in which case the ask wins and the search stands. */
-  if (/^(?:i\s*(?:'m|am|feel|felt|have|'ve|was|can'?t|cannot|don'?t|do not|won'?t|will not|need|want to sing|used to)|my\b|we\s*(?:'re|are|feel|were)|he\s*(?:'s|is|was)|she\s*(?:'s|is|was)|they\s*(?:'re|are))/i.test(t)
+  /* BUILD 311. "MY WAY" IS A SONG, NOT A FEELING.
+     18 Nov 2026, 08:01: he said "My Way by Calvin Harris" and the door answered "share · held · that was a wish, not a
+     title", because the person-shape rule matched the bare word "my". A possessive belongs to a feeling only when it
+     carries a feeling (my heart, my head, my life is...), so the guard now needs the noun and not just the pronoun. */
+  if (/^(?:i\s*(?:'m|am|feel|felt|have|'ve|was|can'?t|cannot|don'?t|do not|won'?t|will not|need|want to sing|used to)|my\s+(?:\w+\s+(?:is|are|was|were|feels|felt|hurts|breaks)|(?:heart|head|mind|life|love|soul|day|week|world|eyes|hands|thoughts|feelings|time|body|chest|friend|friends|family|wife|husband|son|daughter|mother|father|kid|kids|dog))\b|we\s*(?:'re|are|feel|were)|he\s*(?:'s|is|was)|she\s*(?:'s|is|was)|they\s*(?:'re|are))/i.test(t)
       && !/\b(?:play|find|search|share|send|look\s*up|put\s+on|get\s+me)\b/i.test(t)) return true;
   return false;
 }
@@ -6308,7 +6314,7 @@ async function handleShareCall(call) {
       }
   
       if (!query) {
-        result = 'He has not named a song yet. Ask him which song, in one short line, and nothing else '
+        result = 'The door has no song yet: he has not named it, and nothing has been searched. One short line of your own words, asking him for the title '
           + 'there: do not guess at a title and do not call this tool again until he answers.';
         looked = 'sharing · which song';
         return;
@@ -6321,7 +6327,7 @@ async function handleShareCall(call) {
         const v = resolveAnswer('title', query);
         result = v.kind === 'meta'
           ? repairLine('title', query, 'the song we are sharing')
-          : 'He has not named a song yet. Ask him which song it is, in one short line, and nothing else. '
+          : 'The door has no song yet: he has asked for one and has not named it, and nothing has been searched. One short line of your own words, asking him for the title. '
             + 'Never put your own question in as the search.';
         looked = v.kind === 'meta' ? 'sharing · was that a name?' : 'sharing · which song';
         railNote('share · held · ' + (v.kind === 'meta' ? 'talked about it, did not name it' : 'no title yet'));
@@ -6337,21 +6343,21 @@ async function handleShareCall(call) {
       // song"), or they arrive in the breath of a correction, nothing is searched and he is asked which song.
       if (isRouteSentence(query) || (Date.now() - routeCorrectedAt < 8000
           && /\b(?:make|create|write|compose)\b/i.test(query))) {
-        result = 'Those words are him saying what he wants to do, not the name of a song. Search nothing, '
-          + 'name no song, and ask him once, in one short sentence, which song he means.';
+        result = 'Those words are him saying what he wants to do, not the name of a song, and nothing has been searched. '
+          + 'Name no song: one short line of your own words, asking him for the title.';
         looked = 'sharing · a route, not a title';
         railNote('share · held · that was a route, not a title');
         logLine('share.hold.route', String(query).slice(0, 120), { level: 'info', target: 'songShare' });
         return;
       }
       if (!query) {
-        result = 'He has not named a song yet. Ask him which song, in one short line, and nothing else.';
+        result = 'The door has no song yet: he has asked to share one and has not named it, and nothing has been searched. One short line of your own words, asking him for the title.';
         looked = 'sharing · which song';
         return;
       }
       if (looksLikeIntentNotTitle(query)) {
-        result = 'Those words are not a song title, they are him saying he wants one. Search nothing. Ask him '
-          + 'once, in one short sentence, which song he means. Do not offer titles and do not name any.';
+        result = 'Those words are not a song title, they are him saying he wants one, and nothing has been searched. '
+          + 'One short line of your own words, asking him for the title. Do not offer titles and do not name any.';
         looked = 'sharing · asked for a song, not a title';
         railNote('share · held · that was a wish, not a title');
         logLine('share.hold.intent', String(query).slice(0, 120), { level: 'info', target: 'songShare' });
@@ -6675,13 +6681,19 @@ async function handleShareCall(call) {
        Each piece is cleaned of the words that introduce it, and only a piece with a "by" or a quote is a song. */
     const clean = (x) => String(x || '')
       .replace(/^[\s"\u201c'(\-\u2013\u2014]+/, '')
-      .replace(/^(?:how about|what about|maybe|perhaps|could it be|i think you mean|i mean|try|or|and|is it|you mean|that would be|it could be)\s+/i, '')
+      .replace(/^(?:how about|what about|maybe|perhaps|could it be|i think you mean|i mean|try|or|and|is it|you mean|that would be|it could be|do you mean|did you mean|are you thinking of|thinking of|talking about|you're after|you are after|the one|one of them|so)\s+/i, '')
+      /* BUILD 311. 18 Nov 2026, 08:01: the mouth said "I haven't checked this, but do you mean My Way by Calvin Harris?
+         Or is it a different one?" and the reader took "I haven't checked this, but do you mean My Way" as the title.
+         A title is short; anything that reads like the sentence around it is not one. */
+      .replace(/^.*?\b(?:do you mean|did you mean|you mean|you're after|after|thinking of|talking about)\s+/i, '')
+      .replace(/^(?:i|we)\s+(?:haven'?t|have not|don'?t)\b.*?\b(?:but|so)\s+/i, '')
       .replace(/["\u201d')\s.?!,;:]+$/, '')
       .trim();
     const out = [];
     const push = (title, artist) => {
       const ti = clean(title);
       if (!ti || ti.length > 60) return;
+      if (ti.split(/\s+/).length > 9) return;      // build 311: a title is short, a sentence is not
       if (out.some((x) => x.title.toLowerCase() === ti.toLowerCase())) return;
       out.push({ title: ti, artist: clean(artist) });
     };
@@ -7556,9 +7568,9 @@ async function handleShareCall(call) {
           doorNote(wasStage === 'art'
             ? 'He has put the picture question aside and wants a different song. Nothing was sent, no picture '
               + 'was drawn, and that song is still on his shelf, so do not mention any of it. Ask which song he '
-              + 'wants instead, one short line, and nothing else.'
+              + 'wants instead, in one short line of your own words.'
             : 'He has put that share aside and wants a different song. Nothing was sent and the sheet is '
-              + 'closed, so do not mention it. Ask which song he wants instead, one short line, and nothing else.', true);
+              + 'closed, so do not mention it. One short line of your own words, asking him which song he wants instead.', true);
           return;
         }
         /* Build 223. The step holds ONLY the answer it is asking for. The sheet is asking for an address or a
@@ -9166,7 +9178,7 @@ async function handleShareToCall(call) {
     }
     if (!shareDraft.channel) {
       result = 'He named a person but not how to reach them. Ask for their email address or their WhatsApp '
-        + 'number, one short line, and nothing else.';
+        + 'number, in one short line of your own words.';
       looked = 'sharing · which way';
       return;
     }
