@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T21:12';
-const BUILD_NO = 338;
+const BUILD = '2026-11-18T21:26';
+const BUILD_NO = 339;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -756,8 +756,32 @@ function obeyThinking(o, said) {
       lastAsked = '';
       logLine('think.talk', String(said).slice(0, 60), { level: 'info', target: 'think' });
       thinkHold = false;
+      /* BUILD 339. IF IT ALREADY ANSWERED, THAT WAS THE ANSWER. The mouth speaks a beat before thinking returns, so
+         its sentence is usually the reply; playing it is what makes a conversation audible. */
+      const held = pendingMouth;
+      pendingMouth = []; pendingMouthAt = 0;
+      if (held.length) {
+        mouthLicenceUntil = Date.now() + 25000;
+        try {
+          for (const f of held) playPcm(f.data, f.mime);
+          replyAudible = true; heardAt = Date.now(); unheardAt = 0;
+          logLine('mouth.released.talk', 'thinking judged this talk, so the answer it gave while deciding is played · '
+            + held.length + ' frame(s)', { level: 'info', target: 'mouth' });
+        } catch (e) {
+          logLine('mouth.release.fail', String(e && e.message || e), { level: 'warn', target: 'mouth' });
+        }
+        return doorNote('He asked something and the answer has already been said. Do not repeat it, do not search, '
+          + 'and do not name a song. If he says something more, answer that in one short line.', false);
+      }
+      mouthLicenceUntil = Date.now() + 25000;
       return doorNote('Answer him in one or two short lines, in your own words. Search nothing, name no song, and say '
         + 'nothing about the shelf.', true);
+    }
+    /* Any other verdict means the door has its own line, so what the mouth said while deciding is not the answer. */
+    if (pendingMouth.length) {
+      logLine('mouth.dropped.scripted', 'the door had its own line, so this is not heard · '
+        + pendingMouth.length + ' frame(s)', { level: 'info', target: 'mouth' });
+      pendingMouth = []; pendingMouthAt = 0;
     }
     if (o.plan === 'refuse') {
       const why = String(o.refusal || 'that is not something the door does from here').slice(0, 160);
@@ -9325,7 +9349,15 @@ function closeDirective(why) {
 }
 
 /* The one question the frame gate asks. A case can prove it without a socket. */
-function mouthScripted() { return !!directiveOpen; }
+/* BUILD 339. A CONVERSATION IS LICENSED TOO. 18 Nov 2026, 20:58:44.8: he asked about the weather in Ballito, the
+   door knew it, the mouth answered, and all three frames were dropped because no exact line had been asked of it.
+   Build 336's rule ("the mouth speaks only what the door scripted") is right for the door's own questions and wrong
+   for a conversation, where the door deliberately delegates the wording. So there are two ways to be allowed to
+   speak: an open directive, or a talk turn the door has judged.
+   And what the mouth says while thinking is still out is HELD, not destroyed: if thinking comes back with talk, that
+   sentence WAS the answer and is played. */
+let mouthLicenceUntil = 0, pendingMouth = [], pendingMouthAt = 0;
+function mouthScripted() { return !!directiveOpen || Date.now() < mouthLicenceUntil; }
 
 function mouthPreempted() {
   try { return !!thinkHold && !!String(said.engine || '').trim(); } catch (e) { return false; }
@@ -12705,6 +12737,19 @@ function handleFrame(text) {
          a question inside the landing window is held, not played, so the invented question is never heard. */
       /* BUILD 336. THE FIRST QUESTION IS WHETHER THE MOUTH WAS ASKED AT ALL. 19:50:00.5 on 335: the tail was
          already in his ears before the words that described it arrived, so every later guard was late by design. */
+      if (!mouthScripted() && thinkHold) {
+        /* The door is still deciding. Keep the sound: if it comes back with talk, this was the answer. */
+        if (pendingMouth.length < 60) pendingMouth.push({ data: data, mime: p.inlineData.mimeType });
+        pendingMouthAt = pendingMouthAt || Date.now();
+        heldFrames++;
+        unheardAt = Date.now();
+        if (unscriptedLogged < 3) {
+          unscriptedLogged++;
+          logLine('mouth.held.think', 'the door is still deciding, so this waits: '
+            + String(said.engine || '').slice(0, 120), { level: 'info', target: 'mouth' });
+        }
+        continue;
+      }
       if (!mouthScripted()) {
         heldFrames++;
         unheardAt = Date.now();
