@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T16:16';
-const BUILD_NO = 327;
+const BUILD_NO = 328;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -555,7 +555,13 @@ let turnBeganMuted = false;
 const mouthMaySound = () => !typed() && !turnBeganMuted;
 
 /* ---------------------------------------------------------------------------------------------------------------
-   BUILD 327 - THE TWO LINES HE ACTUALLY HEARD ON 326.
+   BUILD 328 - THE DOOR DOES NOT HUNT.
+   Edwin, 18 Nov 2026: "the value in my product is not to build a search engine that can already do everything or
+   another Google AI, it is in the verticals and specific use case I have around privacy, control and deeper
+   rails." He is right. Twenty-six builds went into a conversation about WHICH song - candidate lists, narrowing,
+   "is that the one?", settling, corrections - and every one of those faults lived there. Not one lived in the
+   seal, the card or the share. So the hunt is deleted: a name goes to the rail once, the top answer is the song,
+   it lands on his shelf and is named back to him. The mouth may not name a song, ever.
    14:40:28: the door asked "Which song by Avril Lavigne would you like?", the mouth tried to search anyway, the gate
    refused it, and the mouth read the refusal out loud - "I can't search for that right now" - in front of the question,
    which then had to be asked a second time. A refused search is now dropped at the gate: nothing the mouth says about
@@ -595,6 +601,10 @@ function thinkGoverns(said) {
     if (sharePending || shareCard || shareStage === 'art' || shareStage === 'sheet') return false;
     if (guessHunt) return true;
     if (guessLast && guessLast.length) return true;
+    /* BUILD 328. THE DOOR ASKED FOR A NAME, SO THE ANSWER IS A NAME. With the hunt gone there is no guessHunt to keep
+       the next turn on the song path, and "skater boy" said on its own reaches no song word at all: it would fall
+       past thinking into the old machinery. The question the door asked is what makes his answer a name. */
+    if (awaitSong && Date.now() - awaitSong < 300000) return true;
     if (songFork && Date.now() - songFork < 90000) return true;
     if (THINK_ABOUT_SONGS.test(said)) return true;
     /* A title with its artist, said out of nowhere: "My Way by Calvin Harris". Nothing else on the page reads that
@@ -701,18 +711,31 @@ function obeyThinking(o, said) {
       /* The settled name is put in front of the door as the one song on the table, and his own words are the name.
          The hunt's settle machinery then asks the rail exactly once and locks what comes back - the path that is
          already proved, rather than a second copy of it written here. */
-      songFork = 0; guessHunt = true; guessLast = [{ title: t, artist: a }]; guessAt = Date.now(); lastAsked = '';
+      /* BUILD 328. THE DOOR DOES NOT HUNT.
+         Edwin, 18 Nov 2026: "the value in my product is not to build a search engine that can already do everything
+         or another Google AI, it is in the verticals and specific use case I have around privacy, control and deeper
+         rails. So let's freaken solve this problem."
+         He is right, and the record proves it: every fault from build 302 to 327 lived in the conversation about
+         WHICH song - candidate lists, narrowing, "is that the one?", settling, corrections. Not one of them was in
+         the seal, the card or the share, which is the part that is actually ours. So the hunt is gone. A name goes
+         to the rail once; the rail's top answer is the song; it is put on his shelf and named back to him, and if it
+         is the wrong song he says so in his own words and the rail is asked once more. */
+      songFork = 0; guessHunt = false; guessLast = []; guessAt = 0; lastAsked = '';
       logLine('think.settle', name + ' \u00b7 ' + (o.resolved.confidence || 0), { level: 'info', target: 'think' });
       railNote('share \u00b7 he settled it \u00b7 ' + name.slice(0, 60));
       thinkHold = false;
       return noteSongAnswer(name, { settled: true });
     }
     if (o.plan === 'ask') {
-      const q = String(o.question || '').trim() || 'Which song is it, Boss? The title and who sings it.';
-      guessHunt = true; guessLast = []; guessAt = Date.now(); lastAsked = q.slice(0, 200);
-      logLine('think.ask.gate', q, { level: 'info', target: 'think' });
+      /* BUILD 328. ONE QUESTION, AND IT NEVER OFFERS A SONG. Thinking may word it; it may not turn it into a list,
+         and the door does not keep a hunt open behind it. What is missing is the name, so the name is what is asked
+         for: the title, and who sings it. */
+      const q = 'Which song, Boss? The title and who sings it.';
+      guessHunt = false; guessLast = []; guessAt = 0; lastAsked = q; awaitSong = Date.now();
+      logLine('think.ask.gate', q + (o.question ? ' \u00b7 thinking wanted: ' + String(o.question).slice(0, 60) : ''),
+        { level: 'info', target: 'think' });
       thinkHold = false;
-      return doorAsk(q, 'The question he is owed, in your own few words: "' + q + '"');
+      return doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '"');
     }
     if (o.plan === 'talk') {
       lastAsked = '';
@@ -1637,15 +1660,17 @@ function collapseRepeat(t) {
   return t;
 }
 
-/* BUILD 301. What the mouth may do while a song is being narrowed - and what it may never do with a name.
-   A proposal is a claim. The stores and his shelf are the record, and only the rail may put a song there. */
-const GUESS_BRIEF = '\n\nWhile a song is being narrowed (build 301):\n'
-  + '- You may suggest songs from your own knowledge, at most three at a time, each as Title by Artist, in one '
-  + 'short line.\n'
-  + '- Say once, briefly, that you have not checked them. A suggestion is a claim, never a find.\n'
+/* BUILD 328. THE MOUTH IS NOT A SEARCH ENGINE.
+   Edwin, 18 Nov 2026: "the value in my product is not to build a search engine that can already do everything or
+   another Google AI, it is in the verticals and specific use case I have around privacy, control and deeper rails."
+   So the mouth never proposes a song, never offers a list, and never asks which one. It asks for the name, once, and
+   the door asks the rail. A proposal was always a claim wearing a suggestion's clothes. */
+const GUESS_BRIEF = '\n\nAbout songs (build 328):\n'
+  + '- NEVER name a song yourself. Not from memory, not as a suggestion, not as a guess, and never a list.\n'
+  + '- If he has not named one, ask once for the title and who sings it, in one short line.\n'
   + '- Never say a song is on the stores, on his shelf, or that you searched for it. Only the door asks the stores, '
   + 'and only the stores can put a song on his shelf.\n'
-  + '- When he says "that is the one", the door checks it. Say nothing about the outcome until you are told.\n'
+  + '- When he names one, the door asks the stores once. Say nothing about the outcome until you are told.\n'
   + '- If he names a line he remembers, use it: a lyric fragment is the best clue there is.\n';
 
 const MANNERS = '\n\nTwo rules about the working, added 8 November after he heard them break:\n'
@@ -8169,22 +8194,17 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     /* BUILD 302. HIS WORDS ARE NEVER THE LIST. The candidates are what the MOUTH said, read from its own
        line the moment it says them. Reading them out of his sentence made "Back in Black from ACDC"
        look like a list of one and turned his first sentence into an instant verdict. */
-    guessAt = Date.now();
-    railNote('share · narrowing it with the mouth · ' + (clue || words).slice(0, 40));
-    logLine('share.guess', 'his words stay in the conversation, nothing is asked of the rail · ' + words.slice(0, 60),
+    /* BUILD 328. THERE IS NO HUNT, SO THERE IS NOTHING TO NARROW.
+       This was the last door left open into the old loop: anything reaching here used to open a conversation about
+       which song, with the mouth proposing from memory. Now it asks the one question the door ever asks about a song,
+       arms the answer, and stops. His reply is a name, and a name goes to the rail once. */
+    guessHunt = false; guessLast = []; guessAt = 0; shareChoices = []; shareChoicesAt = 0;
+    const q = 'Which song, Boss? The title and who sings it.';
+    lastAsked = q; awaitSong = Date.now();
+    railNote('share · waiting for the name' + (clue ? ' · a rejection carried "' + clue.slice(0, 30) + '"' : ''));
+    logLine('share.ask.name', (clue ? 'a rejection carried "' + clue.slice(0, 40) + '" · ' : '') + 'asking for the name',
       { level: 'info', target: 'songShare' });
-    doorNote((clue ? 'He rejected what you offered and named "' + clue + '" instead. ' : '')
-      + 'He is narrowing the song with you, and NOTHING has been asked of the stores, so there is no answer and no '
-      + 'failure to report: never say the stores could not be reached, that nothing was found, or that anything is '
-      + 'on his shelf. '
-      + (guessLast.length
-        ? 'You have already offered: ' + guessLast.map((c) => c.title + (c.artist ? ' by ' + c.artist : '')).join('; ')
-          + '. Do not repeat that list. Ask him once, in one short line, to say the title as he knows it, or who '
-          + 'sings it. Believe every word he says: a misheard name is his words, not an error of his. '
-        : 'Suggest at most three songs from your own knowledge, each as Title by Artist, in one short line, and say '
-          + 'once that you have not checked them. ')
-      + 'Then let him choose.', true);
-    return true;
+    return doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '"');
   }
   
   function noteSongAnswer(heard, opts) {
@@ -8265,7 +8285,11 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     }
     /* Build 317: he is in the middle of a conversation and has not asked for a song, so no song route opens here.
        This sits before the fork and before the hunt so no other branch can reach them first. */
-    if (!settledHere && !inHand() && threadKind === 'talk' && !explicitSongAsk(said)
+    /* BUILD 328. A DOOR THAT HAS JUST ASKED FOR A NAME TAKES THE ANSWER. With the hunt gone, the only way this door
+       is armed for a song is that it asked for one, so a name arriving after a thank-you or a greeting is still the
+       name it asked for - the thread rule protects a conversation, not a question the door itself put to him. */
+    const askedForName = !!(awaitSong && Date.now() - awaitSong < 300000);
+    if (!settledHere && !inHand() && !askedForName && threadKind === 'talk' && !explicitSongAsk(said)
       && !/^(?:yes|yeah|yep|ok|okay|correct|exactly|right|no|nope)\b[\s.!]*(?:that|it)?[\s.!]*(?:is|was)?[\s.!]*(?:the one|that)?[\s.!]*$/i.test(said.trim())
       && !GUESS_ONE.test(said)) {
       logLine('share.notopened', 'he is mid-conversation and has asked for no song · ' + String(said).slice(0, 50),
@@ -8353,7 +8377,9 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
       // fall through: armed and answered in the same breath
       awaitSong = Date.now();
     }
-    if (!awaitSong || Date.now() - awaitSong > 90000) return;
+    /* BUILD 328. A NAME THAT IS ALREADY FIXED NEEDS NO ARMING. This guard exists to stop stray sentences being
+       searched; it was swallowing the very sentence the door had just been given. */
+    if (!settledHere && (!awaitSong || Date.now() - awaitSong > 90000)) return;
     if (shareStage !== 'idle' || shareQuery) {
       // A stale step is not a reason to go deaf. If the door is holding 'waiting' or an unfinished picture
       // step with no song behind it, it lets go and searches, rather than swallowing the turn. (10 Nov 08:19)
@@ -8616,6 +8642,20 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
           // candidate list, called that "nothing found", and handed the model a false line it repeated at
           // 12:05:21. A guard that misreads a good answer is worse than no guard, because it now lies with
           // my name on it. Shape first, then decide.
+          /* BUILD 328. A NAME THAT IS ALREADY FIXED IS NOT A CHOICE. The rail's top answer is the song: it is put on
+             his shelf and named back to him, so a wrong one is visible in the same breath and correctable in his own
+             words. This is the end of the candidate list. */
+          if (opts && opts.settled && r && !r.found && Array.isArray(r.candidates) && r.candidates.length) {
+            const top = (collapseChoices(r.candidates)[0]) || r.candidates[0];
+            if (top && top.title) {
+              r.found = top.found || 'store';
+              r.title = top.title; r.artist = top.artist || ''; r.url = top.url || r.url;
+              r.code = top.code || ''; r.song_id = top.song_id || ''; r.sha = top.sha || '';
+              r.cover_url = top.cover_url || ''; r.art = top.art || ''; r.platform_text = top.platform_text || '';
+              logLine('share.top', 'the name was already his, so the top answer is the song: ' + top.title
+                + (top.artist ? ' by ' + top.artist : ''), { level: 'info', target: 'songShare' });
+            }
+          }
           const decided = !!(r && r.url && r.found && r.found !== 'choice' && r.found !== 'none');
           if (!r || r.found === 'none' || (!decided && !(r.candidates || []).length)) {
             // one narrower ask, once, before the door says nothing was found
@@ -8660,7 +8700,8 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
               });
               return;
             }
-            doorNote('the rail answered: nothing found for those exact words. Say that plainly in one line.', true);
+            doorNote('Say exactly this, in one line, and nothing else: "The stores have nothing by that name, Boss. '
+              + 'Say the title and who sings it."', true);
             railNote('share · the rail found nothing · ' + said);
             logLine('share.door.none', said, { level: 'warn', target: 'songShare' });
             return;
@@ -8675,7 +8716,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
               url: r.url, code: r.code || '', song_id: r.song_id || '', sha: r.sha || '',
               img: r.art || r.cover_url || '',   // build 217: the picture the rail already had, so the card is born complete
             };
-            if (!wordsCover(said, r.title || '')) {
+            if (!(opts && opts.settled) && !wordsCover(said, r.title || '')) {
               // his words and the found name do not meet: the ear may have got a word wrong
               hiddenHold = false;
               askAboutCard(card, said);
