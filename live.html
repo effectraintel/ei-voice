@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 353;
+const BUILD_NO = 354;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -901,7 +901,9 @@ function heardFlush(why) {
      had always assumed the model heard him through the microphone. It no longer does: the ear hears him, so the
      door must hand his sentence on. If nothing has gone to the mouth a moment after the route decides, his own
      words go, and the model can call the world lookup as it always could. */
-  setTimeout(() => {
+  if (forwardTimer) { try { clearTimeout(forwardTimer); } catch (e) {} }
+  forwardTimer = setTimeout(() => {
+    forwardTimer = 0;
     try {
       if (notesSentThisTurn) return;
       if (!ws || ws.readyState !== 1) return;
@@ -919,7 +921,7 @@ function heardFlush(why) {
       doorNote('He said, in his own words: ' + String(acted).slice(0, 300) + '. Answer him in one short line, in '
         + 'your own words, and nothing else. Do not ask him to repeat it and do not say you did not hear him.', true);
     } catch (e) {}
-  }, 1200);
+  }, 2500);
 }
 
 /* The one entry a finished utterance takes. */
@@ -1679,6 +1681,7 @@ let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency
 let turnInFlight = false;
 /* BUILD 349. WHAT THE DOOR SENT THIS TURN, so a turn where it sent nothing is visible. */
 let notesSentThisTurn = 0;
+let forwardTimer = 0;
 // Echo bookkeeping. A phone speaker feeds its own voice back into its own microphone.
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
 // owner interrupting, so the page used to cut its own sentence off mid-word.
@@ -9359,6 +9362,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   
   function sendNoteNow(text, speak) {
   notesSentThisTurn++;
+  if (forwardTimer) { try { clearTimeout(forwardTimer); } catch (e) {} forwardTimer = 0; }
     // STAGE 1: a note the mouth must SPEAK is a directive, and it is minted here, before anything is
     // sent, so the words that follow can be traced back to it. A context note (speak false) is not a
     // directive: it licenses nothing and is never the ancestor of a sentence.
@@ -10889,6 +10893,27 @@ async function handleShareToCall(call) {
   }
 }
 
+/* BUILD 354. A DUPLICATE PAYMENT REQUEST IS THE WORST KIND OF DOUBLE.
+   19 Nov 2026, 00:24: the record holds PR-72KX and PR-9ZJR, both R100000, minted 849ms apart, and PR-VYGQ and
+   PR-U6GQ, both R100, minted 1.3s apart. Two turns reached the model for one sentence (the forward and the note
+   landed either side of each other), and a model that is asked twice calls the tool twice. Two mechanical guards
+   now stand in front of the mint, because a promise to be careful is not a guard. */
+let payMintedAt = 0, payMintedAmount = 0, payMintedCode = '';
+
+/* What he actually said, as numbers. "R100" and "100" are the same amount; "grand" and "thousand" multiply. */
+function amountsHeSaid() {
+  const said = String(lastHeardText || '').toLowerCase();
+  const out = [];
+  const rx = /\d[\d\s.,]*/g;
+  let m;
+  while ((m = rx.exec(said)) !== null) {
+    const n = Number(String(m[0]).replace(/[^\d.]/g, ''));
+    if (isFinite(n) && n > 0) out.push(n);
+  }
+  if (/\bgrand\b|\bthousand\b/.test(said)) for (const n of out.slice()) out.push(n * 1000);
+  return out;
+}
+
 async function handlePayCall(call) {
   const s = doorSession();
   let result = '';
@@ -10898,6 +10923,29 @@ async function handlePayCall(call) {
     const a = call.args || {};
     const amount = Number(a.amount);
     if (!isFinite(amount) || amount <= 0) throw new Error('no amount was given');
+    /* GUARD ONE: one request per amount, and never two inside a few seconds. The second call is refused with a
+       plain reason so the mouth can say it rather than minting again. */
+    if (payMintedAmount && Math.abs(payMintedAmount - amount) < 0.5 && Date.now() - payMintedAt < 12000) {
+      logLine('pay.duplicate.refused', 'a request for R' + amount + ' was made ' + Math.round((Date.now() - payMintedAt) / 1000)
+        + 's ago (' + payMintedCode + '), so no second one was made', { level: 'warn', target: 'pay' });
+      throw new Error('a request for R' + amount + ' already exists from a moment ago (' + payMintedCode
+        + '). Do not make another one: tell him it is on his shelf.');
+    }
+    /* GUARD TWO: an amount nobody said is not an amount. It has to be in his own words, and anything from ten
+       thousand up has to be said again with a yes, because that is the size of mistake that costs money. */
+    const saidAmounts = amountsHeSaid();
+    if (!saidAmounts.some((n) => Math.abs(n - amount) < 0.5)) {
+      logLine('pay.amount.unheard', 'R' + amount + ' is not in his words (' + String(lastHeardText || '').slice(0, 80)
+        + '), so it was not made', { level: 'warn', target: 'pay' });
+      throw new Error('the amount R' + amount + ' is not what he said, so nothing was made. Ask him to confirm the '
+        + 'exact amount in one short line: R' + amount + '. Is that right?');
+    }
+    if (amount >= 10000 && !/\byes\b|\bcorrect\b|\bconfirm\b|\bthat'?s right\b|\bja\b/i.test(String(lastHeardText || ''))) {
+      logLine('pay.amount.large', 'R' + amount + ' is large and has not been said back with a yes yet, so nothing was made',
+        { level: 'warn', target: 'pay' });
+      throw new Error('that amount is large, so nothing was made. Read it back to him once, in one short line: '
+        + 'R' + amount + ' - is that right, Boss?');
+    }
     /* BUILD 331. A PAYMENT IS AN ACT ON A KNOWING: what it is for, and how much. It is written down before the
        request exists, so the record can always answer "what was this made on" - and an amount nobody said is
        visible in the log beside the turn that did not say it. */
@@ -10914,6 +10962,7 @@ async function handlePayCall(call) {
       'the shelf did not answer in time'
     );
     if (!r || !r.ok) throw new Error((r && r.error) ? r.error : 'the shelf would not make one');
+    payMintedAt = Date.now(); payMintedAmount = Number(r.amount) || amount; payMintedCode = r.code;
     shelfAdd({ title: 'Open and pay R' + r.amount + ' \u00b7 ' + r.code, url: r.checkout_url, kind: 'pay', note: r.item, code: r.code });
     railNote('payment request ' + r.code + ' \u00b7 nothing paid yet');
     watchRequest(r.code);
