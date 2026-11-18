@@ -1,12 +1,12 @@
 {
  "latest": 332,
- "updated": "2026-11-18T19:16",
+ "updated": "2026-11-18T19:17",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
   {
    "n": 332,
    "file": "v332.html",
-   "at": "2026-11-18T19:16"
+   "at": "2026-11-18T19:17"
   },
   {
    "n": 331,
