@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T20:58';
-const BUILD_NO = 337;
+const BUILD = '2026-11-18T21:12';
+const BUILD_NO = 338;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1858,6 +1858,9 @@ function shutDoor() {
    in its own context. So the door now closes the socket and opens a new one, and the new mouth is handed nothing
    from before. The greeting on the other side is the only thing it knows. */
 let freshGreeting = null;
+/* BUILD 338. WHERE A FRESH GREETING GOES: straight to the new socket when it is up, into the queue only when it is
+   not. A case can prove the route without a network. */
+function freshGreetRoute() { return (typeof ws !== 'undefined' && ws && ws.readyState === 1) ? 'socket' : 'queue'; }
 async function startFreshSession(note) {
   try { logLine('sitting.fresh.session', 'a fresh session: the socket is replaced, so nothing said before survives it', { level: 'info', target: 'sitting' }); } catch (e) {}
   try { if (ws) shutDoor(); } catch (e) {}
@@ -1869,7 +1872,21 @@ async function startFreshSession(note) {
     try { logLine('sitting.fresh.fail', String(e && e.message || e), { level: 'error', target: 'sitting' }); } catch (e2) {}
     return;
   }
-  try { doorNote(freshGreeting, true); } catch (e) {}
+  /* BUILD 338. A FRESH DOOR IS GREETED AT ONCE. 18 Nov 2026, 20:50:29.5: the greeting was written while the turn
+     from the OLD socket was still open, so it went into the queue, and by the time the queue could flush it was more
+     than eight seconds old and was demoted to context. He heard nothing at all after choosing fresh. A socket that
+     has just opened has nothing on it to cut, so the line goes straight to it. */
+  try {
+    if (freshGreetRoute() === 'socket') {
+      sendNoteNow(freshGreeting, true);
+      logLine('sitting.fresh.greeted', 'the fresh door is greeted on its own socket, not queued behind the old one',
+        { level: 'info', target: 'sitting' });
+    } else {
+      doorNote(freshGreeting, true);
+      logLine('sitting.fresh.greetheld', 'the new socket is not up yet, so the greeting waits for it',
+        { level: 'warn', target: 'sitting' });
+    }
+  } catch (e) {}
   freshGreeting = null;
 }
 
@@ -9195,6 +9212,12 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     // Anything that wanted to speak but waited too long arrives as context instead: late is better than
     // cutting a sentence in half.
     const speak = kept.some((n) => n.speak && Date.now() - n.at < 8000);
+    /* BUILD 338. A LINE THAT MISSED ITS MOMENT IS NOT A LINE THAT WAS SAID. It goes as context so the mouth still
+       knows it, but the record says plainly that the door wanted it spoken and could not. */
+    if (!speak && kept.some((n) => n.speak)) {
+      logLine('note.speak.dropped', 'the door wanted this spoken and it waited too long, so it goes as context: '
+        + kept.map((n) => n.text).join(' ').slice(0, 120), { level: 'warn', target: 'note' });
+    }
     sendNoteNow(kept.map((n) => n.text).join(' '), speak);
   }
   
@@ -9271,6 +9294,13 @@ let mouthQuietUntil = 0, quietLogged = 0;
    is no longer about what it said. The door gives the mouth an exact line to say, and only while that line is owed
    may any sound leave the door. Everything else is dropped before it plays. */
 let directiveOpen = false, directiveCap = null, unscriptedLogged = 0;
+
+/* BUILD 338. WHAT WAS DROPPED IS NOT WHAT WAS SAID. 18 Nov 2026, 20:50:33: build 336 dropped all three frames of
+   "I am here, Boss." as unscripted, and the screen still drew it as the door's own line. These two stamps decide,
+   at the end of a sentence, whether any of it was actually heard. */
+let unheardAt = 0, heardAt = 0;
+/* The one question asked at the end of a sentence: did any of it reach him? */
+function sentenceWasHeard() { return !(unheardAt && unheardAt > heardAt); }
 
 function openDirective() {
   directiveOpen = true;
@@ -12677,6 +12707,7 @@ function handleFrame(text) {
          already in his ears before the words that described it arrived, so every later guard was late by design. */
       if (!mouthScripted()) {
         heldFrames++;
+        unheardAt = Date.now();
         if (unscriptedLogged < 3) {
           unscriptedLogged++;
           logLine('mouth.unscripted', 'nothing was asked of the mouth, so this is never heard: '
@@ -12700,7 +12731,7 @@ function handleFrame(text) {
             + String(said.engine || '').slice(0, 120), { level: 'info', target: 'mouth' });
         }
       } else if (doorSearching || thinkHold || (hiddenHold && !replyAudible)) { heldFrames++; }
-      else { replyAudible = true; playPcm(data, p.inlineData.mimeType); }
+      else { replyAudible = true; heardAt = Date.now(); playPcm(data, p.inlineData.mimeType); }
     }
   }
   // Barge-in: the model stopped mid-reply, so its remaining words are a new bubble rather
@@ -12778,6 +12809,15 @@ function handleFrame(text) {
        line. He then named the artist, the door had no list to match it against, asked the rail blind, and asked
        him which song again. A sentence is read once it is finished. */
     try { recordOffers(said.engine); } catch (e) {}
+    /* BUILD 338. A SENTENCE NOBODY HEARD IS NOT THE DOOR'S LINE. */
+    if (!sentenceWasHeard() && String(said.engine || '').trim()) {
+      logLine('mouth.unheard', 'dropped before it was played, so the door never said this: '
+        + String(said.engine || '').slice(0, 120), { level: 'warn', target: 'mouth' });
+      unheardAt = 0; heardAt = 0;
+      try { endTurn('nothing was heard'); } catch (e) {}
+      return;
+    }
+    unheardAt = 0; heardAt = 0;
     const attSaid = attributeEngine(said.engine || '');
     logLine('turn.engine', said.engine || '', {
       role: 'engine',
