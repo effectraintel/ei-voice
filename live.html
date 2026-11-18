@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T22:34';
-const BUILD_NO = 345;
+const BUILD = '2026-11-18T22:44';
+const BUILD_NO = 346;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -815,6 +815,29 @@ function heardFragment(text) {
   heardQuiet = setTimeout(() => { try { heardFlush('he stopped speaking'); } catch (e) {} }, 1400);
 }
 
+/* BUILD 346. A WORD THE RECOGNISER COULD NOT SPELL IN ENGLISH IS NOT A NAME.
+   18 Nov 2026, 20:16:32, live: he said "da capo from Ace of Base" and the transcript came back "カップ from Ace of
+   Base" - katakana, because the recogniser decided that word was Japanese. The session pins en-US and still did it, so
+   the door has to defend its own side of the line: a token that has letters but no Latin letter is not a word of his.
+   The hearing is logged exactly as it arrived, and what is left of the sentence is still read. */
+function hearScriptLost(heard) {
+  const s = String(heard || '');
+  const tokens = s.split(/\s+/).filter(Boolean);
+  const lost = [];
+  for (const t of tokens) {
+    if (!/\p{L}/u.test(t)) continue;            // punctuation, digits, emoji: not a word at all
+    if (/[A-Za-z]/.test(t)) continue;            // it carries Latin letters, so it is readable
+    lost.push(t);
+  }
+  return lost;
+}
+
+function hearLatinRest(heard, lost) {
+  let s = String(heard || '');
+  for (const t of lost) s = s.split(t).join(' ');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
 function heardFlush(why) {
   if (heardQuiet) { try { clearTimeout(heardQuiet); } catch (e) {} heardQuiet = 0; }
   const heard = String(heardBuf || '').trim();
@@ -824,6 +847,39 @@ function heardFlush(why) {
     appendLive('noise', heard);
     logLine('turn.noise', heard + ' \u00b7 ' + why, { role: 'noise' });
     return;
+  }
+  /* BUILD 346. A TOKEN WITH NO LATIN LETTER IS NOT HIS WORD. One plain question, nothing searched, nothing shelved,
+     and whatever else he said in the same sentence is still read. */
+  const scriptLost = hearScriptLost(heard);
+  let acted = heard;
+  if (scriptLost.length) {
+    const rest = hearLatinRest(heard, scriptLost);
+    logLine('hear.script', 'the recogniser could not spell this in English: ' + scriptLost.join(' ') + ' \u00b7 full line: ' + heard,
+      { level: 'warn', target: 'hear' });
+    /* The row is drawn, so what was heard is on the screen and never hidden. */
+    userTurns++;
+    silenceNudges = 0;
+    correctedThisTurn = false;
+    lastHeardText = heard;
+    heardThisSession = true;
+    appendLive('you', heard);
+    logLine('turn.you', heard, { role: 'you' });
+    logLine('turn.heard', 'finished utterance \u00b7 ' + why + ' \u00b7 a word came back unreadable', { level: 'info', target: 'hear' });
+    try { sittingNote('you', heard); } catch (e) {}
+    armSilenceWatch(heard);
+    replyAudible = false;
+    turnBeganMuted = typed();
+    /* A name with no readable title is not a name, so the title is what is asked for - once. */
+    const hasTitleShape = /\S\s+(?:by|from)\s+\S/.test(rest) && rest.split(/\s+/).filter((w) => /[A-Za-z]{2,}/.test(w)).length >= 3;
+    if (!hasTitleShape) {
+      const q = 'I did not catch the title, Boss. Say it once more.';
+      lastAsked = q;
+      try { doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '" Nothing was searched and nothing '
+        + 'is on his shelf: one word of what he said came back in another script and could not be read.'); } catch (e) {}
+      return;
+    }
+    acted = rest;
+    logLine('hear.script.kept', 'the rest of his sentence is still read: ' + rest, { level: 'info', target: 'hear' });
   }
   userTurns++;
   silenceNudges = 0;
@@ -837,7 +893,7 @@ function heardFlush(why) {
   armSilenceWatch(heard);
   replyAudible = false;
   turnBeganMuted = typed();
-  try { doorTurn(heard); } catch (e) { try { doorHears(heard); } catch (e2) {} }
+  try { doorTurn(acted); } catch (e) { try { doorHears(acted); } catch (e2) {} }
 }
 
 /* The one entry a finished utterance takes. */
