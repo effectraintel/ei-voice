@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 360;
+const BUILD_NO = 361;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1718,6 +1718,8 @@ let dbgFrames = 0, dbgSent = 0, dbgPeak = 0, dbgOpens = 0, dbgReplies = 0, dbgHe
 const ECHO_RMS = 0.055;      // louder than speaker bleed, quieter than real speech
 const OPEN_RMS = 0.020;      // what counts as him talking when we are silent
 const BARGE_FRAMES = 3;      // sustained, not a click
+/* BUILD 361. WHAT THE DOOR LAST SAID, kept past the end of its turn, so a hearing can be compared with it. */
+let lastEngineLine = '', lastEngineAt = 0, lastEngineRing = [];
 let clockT = null, clockStart = 0;
 // Build 35: the wait says where it is, so "a while" is a stage and a number on screen
 // rather than a blank circle that might be stuck. (Edwin, 7 Nov: "it still took a while")
@@ -1916,6 +1918,11 @@ function appendLive(who, text) {
   // the whole turn so far. Appending a cumulative repeat is what glued a reply to itself.
   said[who] = (said[who] && add.startsWith(said[who])) ? add : glueFragment(who, said[who], add);
   if (who === 'engine') said[who] = collapseRepeat(said[who]);
+  if (who === 'engine' && said[who]) {
+    lastEngineLine = said[who]; lastEngineAt = Date.now();
+    lastEngineRing.push(said[who]);
+    if (lastEngineRing.length > 3) lastEngineRing.shift();
+  }
   turns[who].querySelector('.said').textContent = said[who];
   logEl.scrollTop = logEl.scrollHeight;
   if (who === 'engine' && pendingLatency !== null) attachLatency(turns[who]);
@@ -13371,7 +13378,10 @@ async function openMic() {
 
     if (voiced) {
       loudFrames++;
-      if (!speaking && (!ours || (loudFrames >= BARGE_FRAMES && Date.now() - playRunStart > 400))) {
+      /* BUILD 361. NO BARGE-IN ON OUR OWN SOUND. The speaker's own voice was loud enough to count as a voice and cut
+         the door's sentence to a fragment - the "shhh" heard at 01:24. While our audio is playing, only a voice well
+         above the bleed may stop it. */
+      if (!speaking && (!ours || (loudFrames >= BARGE_FRAMES * 3 && rms > ECHO_RMS * 2 && Date.now() - playRunStart > 400))) {
         speaking = true;
         if (ours) barge();
       }
@@ -13588,6 +13598,36 @@ function earFeed(data, rms, ours) {
   }
 }
 
+/* BUILD 361. THE DOOR DOES NOT ANSWER ITS OWN VOICE.
+   19 Nov 2026, 01:19: the door said a line, its own sound came back through the speaker, and the ear took "And had."
+   at 0.835 as his words - so it answered itself and he never got a turn. The guard goes at the far side of the problem,
+   on the words, never on the frames: if what came back is a fragment of the line the door has just said, it is the
+   door. Nothing here can touch the mouth's own audio, which is why it cannot silence the door the way build 359 did. */
+function normWords(t) {
+  return String(t || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function looksLikeOurOwnWords(text) {
+  const t = normWords(text);
+  if (!t) return false;
+  /* While the door's own sound is in the air, anything it hears is suspect: the speaker is closer to the microphone
+     than he is. That is the timing half, and it catches a garbled fragment like "And had." that no word match would. */
+  try {
+    if (playing()) return true;
+    if (ourSoundEndsAt && performance.now() < ourSoundEndsAt + 500) return true;
+  } catch (e) {}
+  if (Date.now() - lastEngineAt > 4000) return false;          // its line is no longer in the air
+  const lines = lastEngineRing.length ? lastEngineRing : [lastEngineLine];
+  for (const line of lines) {
+    const said_ = normWords(line);
+    if (!said_) continue;
+    if (said_.indexOf(t) >= 0) return true;                     // a piece of it, word for word
+    const words = t.split(' ').filter((w) => w.length > 2);
+    if (words.length >= 2 && words.every((w) => said_.indexOf(w) >= 0)) return true;
+  }
+  return false;
+}
+
 function earFinish(why) {
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
   const text = String(earText || earLive || '').trim();
@@ -13609,6 +13649,11 @@ function earFinish(why) {
     return;
   }
   logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
+  if (looksLikeOurOwnWords(text)) {
+    logLine('ear.self', 'that is the door\u2019s own line coming back, not his words: ' + text.slice(0, 80)
+      + ' \u00b7 after "' + String(lastEngineLine).slice(0, 60) + '"', { level: 'warn', target: 'hear' });
+    return;
+  }
   /* BUILD 353. A HEARING THE EAR IS NOT SURE OF IS NOT HIS WORDS.
      19 Nov 2026, 00:22:11: he said "start fresh" and the ear gave back "Goldfish." at confidence 0.157, and the door
      acted on it. At 00:24:01 "R100" came back as "100 grand" at 0.543. A word the recogniser is not sure of is a word
