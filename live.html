@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 364;
+const BUILD_NO = 365;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -902,6 +902,7 @@ function heardFlush(why) {
   replyAudible = false;
   turnBeganMuted = typed();
   notesSentThisTurn = 0;
+  newTurn();
   try { doorTurn(acted); } catch (e) { try { doorHears(acted); } catch (e2) {} }
   /* BUILD 358. THE LINE HE READS IS WHAT THE DOOR UNDERSTOOD, EVEN WHEN IT UNDERSTANDS IT A MOMENT LATE.
      19 Nov 2026, 01:06: he said "start fresh", the ear wrote "Stored fresh." at 0.669, and the door took it as a fresh
@@ -4667,6 +4668,7 @@ function openSongBeat() {
   if (songDraft.said && !stale) return;      // he has already given the words: nothing is open
   if (stale) { songDraftReset(); songDraft.at = Date.now(); }
   if (!songDraft.askBeat) songDraft.askBeat = 'subject';
+  claimTurn('the making');
   logLine('journey.open', 'open at ' + songDraft.askBeat, { level: 'info', target: 'music' });
 }
 
@@ -8550,6 +8552,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   function guessTurn(said) {
     /* BUILD 364. ONE SENTENCE GETS ONE ANSWER. If the song route already opened a making on this very turn, the
        sharing branch does not ask for a title on the back of it. */
+    if (!claimTurn('the sharing branch')) return false;
     if (routeAnsweredAt && Date.now() - routeAnsweredAt < 1500) {
       logLine('share.ask.suppressed', 'the song route already answered this turn, so no title is asked on top of it',
         { level: 'info', target: 'songShare' });
@@ -9722,9 +9725,35 @@ function echoedNote(text) {
   return '';
 }
 
+/* BUILD 365. ONE OWNER PER TURN.
+   19 Nov 2026, 01:48: "I want to create a song." was answered twice - the making opened and the sharing branch asked for
+   a title on top of it. That was not one bug, it was the shape of the page: several deciders in a row, each able to
+   speak, and nothing saying who owns the turn. The token is claimed by whichever decider asks the door to say something
+   first. Every later one in the same turn is recorded and silent, so a collision is visible in the log instead of
+   arriving in his ear as two questions. */
+let turnNo = 0, turnOwner = '';
+
+function newTurn() {
+  turnNo++; turnOwner = '';
+  return turnNo;
+}
+
+function claimTurn(what) {
+  if (turnOwner) {
+    logLine('turn.second.decider', what + ' wanted to answer, but ' + turnOwner + ' already owns turn ' + turnNo,
+      { level: 'warn', target: 'turn' });
+    return false;
+  }
+  turnOwner = what;
+  logLine('turn.claimed', what + ' owns turn ' + turnNo, { level: 'info', target: 'turn' });
+  return true;
+}
+
 function doorNote(text, speak) {
   const t = String(text || '').trim();
   if (!t) return;
+  /* the token belongs to a DECIDER, not to a note: one decider may say two things in a turn, and often must (the
+     route it took, then the question it asks). Claiming happens where the decision is made. */
   /* BUILD 333. WHAT THE DOOR SAID TO THE MOUTH IS REMEMBERED WHERE IT IS WRITTEN, not only where it is sent, so a
      note that waits in the queue is still recognised if the mouth repeats it. */
   try {
