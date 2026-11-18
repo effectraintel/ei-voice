@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T21:34';
-const BUILD_NO = 342;
+const BUILD = '2026-11-18T21:48';
+const BUILD_NO = 343;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1674,13 +1674,31 @@ function hint(text) { hintEl.textContent = text; hintEl.style.color = ''; }
 let turns = { you: null, engine: null };
 let said = { you: '', engine: '' };
 
+/* BUILD 343. A ROW SITS WHERE ITS TURN IS. Edwin, 18 Nov 2026, 21:40, with his screenshot: "the conversation text is
+   not flowing normal. The sequencing is wrong... my words are all group together and the engines as well." A row was
+   appended when it arrived, so an answer that took 25 seconds landed under his next two lines. The answer belongs to
+   the turn the door ASKED for it in, so the row is drawn under that line - and under its own earlier rows for the same
+   turn - however long the answer took. */
+let rowAnchor = null;    // his row for the turn now being answered
+let answerRow = null;    // his row for the turn the door has already asked about
 function addTurn(who, text) {
   const d = document.createElement('div');
   d.className = 'turn ' + (who === 'you' ? 'you' : 'engine');
   const w = document.createElement('div'); w.className = 'who';
   w.textContent = who === 'you' ? 'you' : 'engine';
   const s = document.createElement('div'); s.className = 'said'; s.textContent = text;
-  d.append(w, s); logEl.appendChild(d);
+  d.append(w, s);
+  const anchor = who === 'engine' ? (answerRow || rowAnchor) : rowAnchor;
+  if (who === 'you' || !anchor || anchor.parentNode !== logEl) {
+    logEl.appendChild(d);
+    d.__last = d;                       // the chain of rows for this turn starts here
+    if (who === 'you') { rowAnchor = d; }
+  } else {
+    /* The chain lives on the turn's own row, so an answer to his FIRST line is never drawn after his second. */
+    const after = (anchor.__last && anchor.__last.parentNode === logEl) ? anchor.__last : anchor;
+    logEl.insertBefore(d, after.nextSibling || null);
+    anchor.__last = d;
+  }
   logEl.scrollTop = logEl.scrollHeight;
   return d;
 }
@@ -5905,6 +5923,10 @@ async function handleWorldCall(call) {
   }
   closeHuntForTalk('a question about the world');
   logLine('tool.world', result.slice(0, 160), { ms: Date.now() - t0, args: JSON.stringify(args), level: result.indexOf('could not') === 0 ? 'warn' : 'info' });
+  /* BUILD 343. HANDING IT THE FACT IS ASKING IT TO SPEAK. 18 Nov 2026, 19:34:01, live: the door knew the Cape Town
+     weather, handed the fact to the mouth, and never licensed it - so the answer was dropped at 19:34:16 and only
+     surfaced at 19:35:40 under a different question, which is the grouping he saw on screen. */
+  try { answerRow = rowAnchor; mouthLicence('the world answer was handed over'); } catch (e) {}
   try {
     ws.send(JSON.stringify({
       toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { result } }] },
@@ -5934,6 +5956,8 @@ async function handleHouseCall(call) {
     result = 'the house could not be read: ' + ((e && e.message) ? e.message : String(e));
   }
   closeHuntForTalk('a question about the house');
+  /* BUILD 343. The same rule for his own rooms: a house answer is asked for the moment it is handed over. */
+  try { answerRow = rowAnchor; mouthLicence('the house answer was handed over'); } catch (e) {}
   logLine('tool.house', result, { ms: Date.now() - t0, args: JSON.stringify(call.args || {}), level: result.indexOf('could not') === 0 ? 'warn' : 'info' });
   try {
     ws.send(JSON.stringify({
@@ -9425,6 +9449,8 @@ function mouthScripted() { return !!directiveOpen || Date.now() < mouthLicenceUn
    directly). So the door now opens the mouth wherever it asks for words of its own, and anything the mouth said while
    the door was still deciding is played instead of destroyed. */
 function mouthLicence(why) {
+  /* The licence is granted for the turn that is open when it is granted, and the answer is drawn under that line. */
+  try { answerRow = rowAnchor; } catch (e) {}
   mouthLicenceUntil = Date.now() + 25000;
   const held = pendingMouth;
   pendingMouth = []; pendingMouthAt = 0;
