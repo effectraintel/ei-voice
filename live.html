@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T17:55';
-const BUILD_NO = 330;
+const BUILD = '2026-11-18T18:20';
+const BUILD_NO = 331;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5710,7 +5710,9 @@ async function handleWorldCall(call) {
             .slice(0, 5).map((s) => ({ title: String(s.title || s.url).slice(0, 180), url: String(s.url) })),
         },
       };
-      if (!quietShelf) {
+      /* BUILD 331. A MAP IS A KNOWING BEFORE IT IS A CARD: the place, and the rail that resolved it. */
+      commitKnowing('world', 'a map of ' + place, 'the world \u00b7 ' + String(r.engine || 'the map rail'));
+      if (!quietShelf && mayAct('world', 'keeping the map')) {
         shelfAdd(mapCard);
         keepFound(mapCard);
         shelfWriteAt = Date.now();
@@ -5755,7 +5757,12 @@ async function handleWorldCall(call) {
       /* Build 220. A lookup is a finding, so it lands like one. shelfWriteAt is set because a row really was
          written: the shelf-write guard must not correct a true sentence, which is exactly what it did at 16:13
          today, out loud, as a second reply. */
-      const foundCard = quietShelf ? null : worldCard(ask, r);
+      /* BUILD 331. THE FACT AND ITS SOURCE ARE THE KNOWING. He corrected this himself at 17:38: a web lookup and a
+         house lookup can both be required to know, so the world is a source and it is written down as one. */
+      commitKnowing('world', String(facts).slice(0, 240), 'the world \u00b7 ' + String(r.engine || 'a lookup'));
+      /* ONLY IF WE KNOW CAN WE KEEP IT. A card is an act: it puts a thing in his world and it stays there. */
+      const mayKeep = mayAct('world', 'keeping the looked-up fact');
+      const foundCard = (quietShelf || !mayKeep) ? null : worldCard(ask, r);
       if (foundCard) {
         if (!shelfReplace(foundCard.code, foundCard)) shelfAdd(foundCard);
         keepFound(foundCard);
@@ -10332,6 +10339,12 @@ async function handlePayCall(call) {
     const a = call.args || {};
     const amount = Number(a.amount);
     if (!isFinite(amount) || amount <= 0) throw new Error('no amount was given');
+    /* BUILD 331. A PAYMENT IS AN ACT ON A KNOWING: what it is for, and how much. It is written down before the
+       request exists, so the record can always answer "what was this made on" - and an amount nobody said is
+       visible in the log beside the turn that did not say it. */
+    commitKnowing('pay', 'R' + amount + ' for ' + String(a.item || 'a payment').slice(0, 140),
+      'his words in this turn');
+    if (!mayAct('pay', 'the payment request')) throw new Error('the record holds no knowing for this payment');
     const r = await withTimeout(
       gatePost('payRequestFromDoor', {
         session_token: s.token,
