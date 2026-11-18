@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 355;
+const BUILD_NO = 356;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -13423,7 +13423,7 @@ const EAR = true;
 const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
 const EAR_END_MS = 1100;
 let earWs = null, earReady = false, earText = '', earLive = '', earConf = null, earSpeech = false, earLastVoiced = 0, earClosed = false;
-let earFails = 0, earWatch = 0, earOpenedAt = 0;
+let earFails = 0, earWatch = 0, earOpenedAt = 0, earPend = [], earEndPending = false, earBeat = 0;
 
 function earOn() { return !!(earWs && earWs.readyState === 1); }
 
@@ -13436,7 +13436,16 @@ function earOpen() {
     s.onopen = () => {
       if (s !== earWs) { try { s.close(); } catch (e) {} return; }
       earReady = true; earOpenedAt = Date.now();
+      try {
+        const held = earPend.splice(0, earPend.length);
+        if (held.length) logLine('ear.flush', held.length + ' frame(s) held while the ear was opening were sent', { level: 'warn', target: 'hear' });
+        for (const b of held) { try { s.send(b); } catch (e) {} }
+        if (earEndPending) { earEndPending = false; s.send(JSON.stringify({ t: 'end' })); }
+      } catch (e) {}
       logLine('ear.open', 'the ear is Google\u2019s: en-US, streaming, our own boundary', { level: 'info', target: 'hear' });
+      if (!earBeat) earBeat = setInterval(() => {
+        try { if (earOn()) earWs.send(JSON.stringify({ t: 'ping' })); } catch (e) {}
+      }, 30000);
     };
     s.onmessage = (ev) => {
       if (s !== earWs) return;
@@ -13464,10 +13473,13 @@ function earOpen() {
       }
     };
     s.onerror = () => { if (s === earWs) logLine('ear.error', 'the ear connection failed', { level: 'error', target: 'hear' }); };
-    s.onclose = () => {
+    s.onclose = (ev) => {
       if (s !== earWs) return;
       earReady = false;
-      if (Date.now() - earOpenedAt > 500) logLine('ear.closed', 'the ear closed', { level: 'warn', target: 'hear' });
+      logLine('ear.closed', 'the ear closed after ' + Math.round((Date.now() - earOpenedAt) / 1000) + 's'
+        + (ev && ev.code ? ' \u00b7 code ' + ev.code : '') + (ev && ev.reason ? ' \u00b7 ' + ev.reason : ''),
+        { level: 'warn', target: 'hear' });
+      /* it is not the end of the sitting: the next frame reopens it, and what was held goes with it */
     };
   } catch (e) {
     logLine('ear.open.fail', String((e && e.message) || e), { level: 'error', target: 'hear' });
@@ -13475,6 +13487,7 @@ function earOpen() {
 }
 
 function earClose() {
+  if (earBeat) { try { clearInterval(earBeat); } catch (e) {} earBeat = 0; }
   earReady = false; earText = ''; earLive = ''; earSpeech = false; earClosed = false;
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
   const s = earWs; earWs = null;
@@ -13482,13 +13495,23 @@ function earClose() {
 }
 
 function earPcm(float32) {
-  if (!earOn()) return;
   const i16 = new Int16Array(float32.length);
   for (let i = 0; i < float32.length; i++) {
     const v = Math.max(-1, Math.min(1, float32[i]));
     i16[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
   }
-  try { earWs.send(i16.buffer); } catch (e) {}
+  /* BUILD 356. A FRAME WITH NOWHERE TO GO IS KEPT, NOT DROPPED.
+     19 Nov 2026, 00:43-00:47: he answered five times and the relay answered "end" 209ms later having heard nothing,
+     which means not one frame of his voice reached it: the ear socket was not open and the page threw the audio
+     away in silence. Three seconds are held while the socket opens, so the first words of a turn are never the ones
+     lost. */
+  if (!earOn()) {
+    earPend.push(i16.buffer);
+    if (earPend.length > 240) earPend.shift();       // three seconds at 80ms a frame
+    earOpen();
+    return;
+  }
+  try { earWs.send(i16.buffer); } catch (e) { earPend.push(i16.buffer); }
 }
 
 function earFeed(data, rms, ours) {
@@ -13503,7 +13526,10 @@ function earFeed(data, rms, ours) {
   if (earSpeech && !voiced && !earClosed && now - earLastVoiced > EAR_END_MS) {
     earClosed = true;
     logLine('ear.turn.end', 'he stopped speaking; the ear is finishing the turn', { level: 'info', target: 'hear' });
-    try { if (earOn()) earWs.send(JSON.stringify({ t: 'end' })); } catch (e) {}
+    try {
+      if (earOn()) earWs.send(JSON.stringify({ t: 'end' }));
+      else { earEndPending = true; earOpen(); }
+    } catch (e) { earEndPending = true; }
     /* The door does not hang on the ear: if it never says it has finished, what it did hear is still used. */
     earWatch = setTimeout(() => { if (earClosed) earFinish('the ear did not answer in time'); }, 2500);
   }
