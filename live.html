@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 354;
+const BUILD_NO = 355;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -11375,7 +11375,7 @@ async function refreshCards(force) {
   cardsAt = Date.now();
   try {
     const t0 = Date.now();
-    const r = await fetch(FNBASE + 'shelfCards?limit=6', { cache: 'no-store' });
+    const r = await fetch(FNBASE + 'shelfCards?limit=40', { cache: 'no-store' });
     const d = await r.json();
     if (rateRefused(d)) {
       cardsPausedUntil = Date.now() + 60000;
@@ -13514,7 +13514,21 @@ function earFinish(why) {
   const text = String(earText || earLive || '').trim();
   const conf = earConf;
   earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false;
-  if (!text) { logLine('ear.empty', 'nothing came back from the ear', { level: 'warn', target: 'hear' }); return; }
+  if (!text) {
+    /* BUILD 355. A TURN THE EAR DID NOT HEAR IS STILL A TURN HE TOOK.
+       19 Nov 2026, 00:43-00:47: the door asked "Do you want a cover picture?", he answered five times, the ear came
+       back empty every time, and the door said nothing at all. Five answers into silence is a door that looks dead,
+       and it is the same class as every other fault tonight: a turn with no reply. One plain line, and the question
+       he was answering stays open. */
+    logLine('ear.empty', 'nothing came back from the ear, so the door asks once', { level: 'warn', target: 'hear' });
+    try {
+      const q = 'I did not catch that, Boss. Say it once more.';
+      lastAsked = q;
+      doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '" Nothing was searched, nothing was '
+        + 'made and nothing is on his shelf: the ear came back with no words at all.');
+    } catch (e) {}
+    return;
+  }
   logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
   /* BUILD 353. A HEARING THE EAR IS NOT SURE OF IS NOT HIS WORDS.
      19 Nov 2026, 00:22:11: he said "start fresh" and the ear gave back "Goldfish." at confidence 0.157, and the door
