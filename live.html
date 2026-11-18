@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T15:35';
-const BUILD_NO = 329;
+const BUILD = '2026-11-18T17:55';
+const BUILD_NO = 330;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4071,6 +4071,47 @@ function pictureSettled() {
   return String(songDraft.askBeat || '') !== 'cover';
 }
 
+/* ---------------------------------------------------------------------------------------------------------------
+   BUILD 330 - ONLY IF WE KNOW CAN WE ACT.
+
+   Doctrine, 18 November 2026, 17:42: THINKING, KNOWING, ACTING is a process flow, and "only if we know can we
+   act". Thinking is the search for knowing; knowing is the fact the act will stand on, with where it came from;
+   acting is what is done on that knowing and nothing else. The door has always had steps and never had a knowing,
+   so an act could be reached by walking far enough - a wrong song wrapped, a song rendered for words nobody gave.
+
+   The knowing is one object: which journey, the fact, its source, and when. A handler that acts asks `mayAct`
+   first. No knowing in the record, no act: it writes `act.no.knowing` and does nothing, and the only moves left
+   are one more question or a plain refusal.
+   --------------------------------------------------------------------------------------------------------------- */
+const knowing = { journey: '', fact: '', source: '', at: 0 };
+
+function commitKnowing(journey, fact, source) {
+  try {
+    knowing.journey = String(journey || '');
+    knowing.fact = String(fact || '').slice(0, 400);
+    knowing.source = String(source || '');
+    knowing.at = Date.now();
+    logLine('knowing.held', knowing.journey + ' \u00b7 ' + knowing.fact.slice(0, 140)
+      + ' \u00b7 from ' + knowing.source, { level: 'info', target: 'music' });
+  } catch (e) {}
+}
+
+function knowingFor(journey) {
+  return (knowing.at && knowing.journey === String(journey || '')) ? knowing : null;
+}
+
+function mayAct(journey, what) {
+  const k = knowingFor(journey);
+  if (k) {
+    logLine('act.allowed', String(what || 'the act') + ' \u00b7 on the knowing held for ' + k.journey,
+      { level: 'info', target: 'music' });
+    return true;
+  }
+  logLine('act.no.knowing', String(what || 'an act') + ' was asked for with no knowing in the record, so nothing '
+    + 'was done', { level: 'warn', target: 'music' });
+  return false;
+}
+
 function armMake() {
   try {
     if (!pictureSettled()) {
@@ -4081,6 +4122,9 @@ function armMake() {
     if (!routeClosed()) return;
     const sig = makeSig();
     if (sig === makeArmedSig) return;
+    /* BUILD 330. THE BRIEF IS THE KNOWING FOR A MAKING. His words, the sound he gave and his picture answer are
+       the fact the render stands on, and they are written down here, at the moment they are whole. */
+    commitKnowing('make', sig, 'his words, the sound he gave and his picture answer');
     makeArmedSig = sig; makeArmedAt = Date.now();
     logLine('song.make.armed', sig.slice(0, 140), { level: 'info', target: 'music' });
     setTimeout(() => { makeIfStillWaiting(sig); }, 4500);
@@ -4089,6 +4133,8 @@ function armMake() {
 
 async function makeIfStillWaiting(sig) {
   if (makeArmedSig !== sig) return;          // the brief moved on
+  /* BUILD 330. THE LAST GATE BEFORE THE MONEY IS THE DOCTRINE'S OWN GATE. */
+  if (!mayAct('make', 'the render of the song')) return;
   /* BUILD 262. The last gate before the money is also the gate on the script: a song is never made while the
      picture line is still open, because that line is part of the making he asked for. */
   if (!pictureSettled()) {
@@ -8788,6 +8834,15 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
             return;
           }
           const only = picks[0];
+          /* BUILD 330. THE SONG IS KNOWN WHEN THE RAIL HAS NAMED IT. That is the knowing the wrap stands on: the
+             title and the artist the rail answered, from the name he gave. Nothing is wrapped before it is held. */
+          commitKnowing('share', [only.title, only.artist].filter(Boolean).join(' by '),
+            'the sharing rail, answering the name he gave');
+          if (!mayAct('share', 'the wrap of the song')) {
+            doorNote('Say plainly, in one short line, that the song was found but nothing was wrapped, and that you '
+              + 'will not wrap it without the record holding what it is.', true);
+            return;
+          }
           const c = await gatePost('songShare', { action: 'choose', candidate: only });
           if (!c || !c.url) {
             doorNote('the rail could not wrap that song: ' + ((c && (c.error || c.note)) || 'no answer')
