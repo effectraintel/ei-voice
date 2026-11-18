@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T21:26';
-const BUILD_NO = 339;
+const BUILD = '2026-11-18T21:44';
+const BUILD_NO = 340;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5633,12 +5633,22 @@ function railNote(text) {
       strip.className = 'lat railstrip';
       strip.style.cssText = 'font-size:11px;letter-spacing:.02em;color:#c9a86a;text-align:right;'
         + 'padding:2px 8px;opacity:0;transition:opacity .6s;pointer-events:none;';
-      logEl.appendChild(strip);
+      /* BUILD 340. A RAIL NOTE IS NOT PART OF THE CONVERSATION. It used to be appended inside the talk lane, so
+         "share - waiting for the name" read as the end of his own sentence (18 Nov 2026, 21:05). It now sits under
+         the state line, outside the lane, where the door's bookkeeping belongs. */
+      try {
+        if (stateEl && stateEl.parentNode) stateEl.parentNode.insertBefore(strip, stateEl.nextSibling);
+        else logEl.appendChild(strip);
+      } catch (e) { logEl.appendChild(strip); }
     }
-    // Re-appending moves it under the newest turn, the way a status line should sit.
+    // Re-appending keeps it where it lives: a status line under the state, never a turn.
     strip.textContent = text;
     strip.style.opacity = '.5';
-    logEl.appendChild(strip);
+    try {
+      if (stateEl && stateEl.parentNode && strip.parentNode !== stateEl.parentNode) {
+        stateEl.parentNode.insertBefore(strip, stateEl.nextSibling);
+      }
+    } catch (e) {}
     logEl.scrollTop = logEl.scrollHeight;
     clearTimeout(railStripTimer);
     railStripTimer = setTimeout(() => { try { strip.style.opacity = '0'; } catch (e) {} }, 4000);
@@ -7305,6 +7315,16 @@ async function handleShareCall(call) {
   }
   let settledAt = 0;
   const GUESS_FIRST = true;          // the experiment: nothing goes to the rail until he says that is the one
+  /* BUILD 340. A SENTENCE IS NOT A SONG UNLESS THE CONVERSATION IS ABOUT A SONG.
+     18 Nov 2026, 21:05:24: he said "You're not speaking to me." and the door answered "Which song, Boss? The title and
+     who sings it." GUESS_FIRST is a constant that is always true, so EVERY sentence passed the narrowing door; the
+     hunt it was written for was retired in build 328 and this is what was left of it. The question is now whether
+     there is a song thread at all. */
+  function shareThreadOpen() {
+    if (guessHunt || sharePending || awaitSong) return true;
+    try { if (songDraft && songDraft.at) return true; } catch (e) {}   // a making in hand is a song thread
+    try { return threadKind === 'share'; } catch (e) { return false; }
+  }
   let guessHunt = false;             // his narrowing is with the mouth, not the rail
   let guessLast = [];                // [{title, artist}] - what the mouth last put in front of him
   let guessAt = 0;
@@ -7950,6 +7970,11 @@ function openQuestionId() {
 
 function beginTurn(raw) {
   const said = String(raw || '');
+  /* BUILD 340. ONE UTTERANCE, ONE ROW. 18 Nov 2026, 21:05: his two sentences were drawn as one block with no break
+     between them - "What is the weather? currently in Palitu You're not speaking to me." - because his bubble is only
+     released when an ENGINE bubble starts, and in that run the engine never spoke at all. His turn opening is the
+     honest boundary: whatever he said next is a new line. */
+  try { turns.you = null; said.you = ''; streamMode.you = null; } catch (e) {}
   // A repeated fragment is not a new turn: the microphone sends a transcript in pieces and the door
   // already assembles them. The record must not multiply one sentence into three.
   if (curTurn && said && said === curTurn.said_raw) return curTurn;
@@ -8524,7 +8549,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     /* Build 301: his words belong to the conversation until he settles them. One switch, so the experiment can be
        turned off in a line if he does not like it. A COURTESY IS NOT A CLUE, though: a thank-you, a greeting or an
        address is somebody else's turn, and the guards below know what to do with each. */
-    if (!settledHere && (guessHunt || GUESS_FIRST)) {
+    if (!settledHere && shareThreadOpen()) {
       const courtesy = /^(?:thank(?:s| you)?(?:\s+(?:very|so)\s+much|\s+a\s+lot)?|cheers|ta|ok(?:ay)?|great|perfect|lovely|brilliant|awesome|amazing|beautiful|nice|cool|sure|got it|all right|alright|good|fine|wow|yep|nope|bye|goodbye|see you(?: soon)?|hello|hi|hey|hmm+|oh|ah)[\s.!,]*$/i;
       const addrShaped = /@|\b(?:email|e-mail|mail|whatsapp|phone|number|cell)\b|(?:\+?\d[\d\s]{6,})/i.test(said);
       const hearingCheck = /^(?:are you there|you still there|hello|anyone there|can you hear me)/i.test(said.trim());
@@ -8762,7 +8787,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     }
     /* BUILD 301. Once a stale step has been put down, the title he said belongs to the conversation too - this is the
        second door into the same room, and it exists because a sheet can be standing in the way of the first. */
-    if (!settledHere && (guessHunt || GUESS_FIRST)) {
+    if (!settledHere && shareThreadOpen()) {
       if (huntClosedBy(said)) return;        // build 307: he left the song, so nothing is narrowed or searched
       guessHunt = true;
       return guessTurn(said);
