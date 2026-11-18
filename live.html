@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T19:40';
-const BUILD_NO = 333;
+const BUILD = '2026-11-18T19:52';
+const BUILD_NO = 334;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -9184,6 +9184,45 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
    comes back; a match is cut off the speaker, dropped from the transcript and written down as `note.echoed`. */
 let recentNotes = [];
 
+/* BUILD 334. THE TWO SHAPES OF "NOT THE ANSWER".
+
+   The first is the mouth speaking while thinking is still out: the answer is not his yet, so nothing it says can be
+   the reply. The second is the mouth saying something other than the one line the door asked for - the fragments
+   ("The title and who sings", "it.", "Boss?") that he heard as an echo. Both are decided here, as plain questions,
+   so a case can prove them without a socket. */
+let sentenceInFlight = false;
+let owedLine = '', owedAt = 0, lineSaid = '', lineSaidAt = 0;
+
+function mouthPreempted() {
+  try { return !!thinkHold && !!String(said.engine || '').trim(); } catch (e) { return false; }
+}
+
+function mouthNotOwed(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const n = norm(t);
+  if (!n) return false;
+  /* The line, once said, is never said again. This is the echo itself: the door's question delivered a second time
+     around his answer (19:33:06, after 19:33:00.9) sounded to him like the voice repeating. */
+  if (lineSaid && Date.now() - lineSaidAt < 30000) {
+    const s = norm(lineSaid);
+    if (n === s || (n.length >= 12 && s.includes(n)) || (s.length >= 12 && n.includes(s))) return true;
+  }
+  if (!owedLine || Date.now() - owedAt > 15000) return false;
+  const o = norm(owedLine);
+  if (!o) return false;
+  /* A piece of the line is the line being said, and the full line marks it delivered. */
+  if (n.includes(o)) { lineSaid = owedLine; lineSaidAt = Date.now(); owedLine = ''; return false; }
+  if (n.length >= 12 && o.includes(n)) return false;   // a piece has to be a piece, not one word of it
+  const ow = o.split(' ').filter((w) => w.length > 2);
+  if (ow.length >= 3 && ow.filter((w) => n.includes(w)).length / ow.length >= 0.6) {
+    lineSaid = owedLine; lineSaidAt = Date.now(); owedLine = '';
+    return false;
+  }
+  return true;                                                // one line was asked for, and this is not it
+}
+
 function echoedNote(text) {
   const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
   const n = norm(text);
@@ -9215,10 +9254,18 @@ function doorNote(text, speak) {
     recentNotes.push({ text: t, at: Date.now() });
     if (recentNotes.length > 8) recentNotes.shift();
   } catch (e) {}
+  /* BUILD 334. WHEN THE DOOR GIVES THE MOUTH ITS EXACT WORDS, THOSE WORDS ARE OWED, and anything else it says
+       before them is the mouth talking over the door. Read out of the note itself, so no caller has to remember. */
+  try {
+    const q = (String(t).match(/"([^"]{6,})"/) || [])[1];
+    if (speak && q) { owedLine = q.trim(); owedAt = Date.now(); }
+  } catch (e) {}
   // A turn in flight is not the same as a sound in the air: from the moment he stops talking until the model
   // finishes, a note would cut the reply. Everything waits for the end of the turn, and only the end of a
   // turn releases the queue.
-  if ((turnInFlight || speaking || awaitingFirstAudio) && !hiddenHold) {
+  /* BUILD 334. A SENTENCE STILL BEING SAID IS A TURN IN FLIGHT. 18 Nov 2026, 19:33:16.2: the landing note went out
+     while the mouth was mid-utterance, and it answered "Boss?" instead of the line the door gave it. */
+  if ((turnInFlight || speaking || awaitingFirstAudio || sentenceInFlight) && !hiddenHold) {
     noteQueue.push({ text: t, speak: !!speak, at: Date.now() });
     noteQueuedAt = noteQueuedAt || Date.now();
     if (noteQueue.length > 6) noteQueue.shift();
@@ -9250,6 +9297,15 @@ function armAskWatch(askedAt, line) {
   askWatch = setTimeout(() => {
     askWatch = null;
     if (mouthSpokeAt > askWatchAt) return;                        // it answered: nothing to do
+    /* BUILD 334. THE DOOR NEVER ASKS TWICE. 18 Nov 2026, 19:33:00.9: thinking had already put its question up at
+       19:32:51.9 and the note was held behind it, and this watch read the hold as silence and sent a second copy -
+       the first half of the echo he heard. While the door is thinking or searching, the watch re-arms. */
+    if (thinkHold || doorSearching || hiddenHold) {
+      logLine('mouth.silent.waived', 'the door is still working, so the question is not asked again',
+        { level: 'info', target: 'mouth' });
+      try { armAskWatch(Date.now(), q); } catch (e) {}
+      return;
+    }
     if (typeof ws === 'undefined' || !ws || ws.readyState !== 1) return;
     logLine('mouth.silent', 'nothing was said for ' + Math.round((Date.now() - askWatchAt) / 1000)
       + 's · the door puts its own question up: ' + q.slice(0, 100), { level: 'warn', target: 'mouth' });
@@ -10704,10 +10760,15 @@ function pruneShelfGone(offeredKeys, offeredCount) {
    lands one is covered by the same rule. */
 let actLandedAt = 0;
 
-function mergeCard(c) {
+function mergeCard(c, opts) {
   if (!c || !c.title) return;
+  /* BUILD 334. A CARD THE RECORD ALREADY HOLDS IS NOT A NEW ACT. 18 Nov 2026, 19:32: the door opened, read its own
+     eleven cards, and refused every song on the shelf with `act.no.knowing` - because the gate was asked on a
+     redraw it had not performed. The knowing is for making a card now; drawing what the record holds is the record
+     speaking, and refusing it hides his own shelf from him. */
+  const fromRecord = !!(opts && opts.fromRecord);
   try {
-    if (c.kind === 'song' || c.kind === 'store') {
+    if (!fromRecord && (c.kind === 'song' || c.kind === 'store')) {
       const held = knowingFor('share') || knowingFor('make');
       if (!held) {
         mayAct('share', 'the card for "' + String(c.title).slice(0, 60) + '"');   // writes the refusal
@@ -10885,13 +10946,15 @@ async function refreshCards(force) {
       logLine('call.back', 'shelfCards \u2192 ' + digest(d), { target: 'shelfCards', ms: Date.now() - t0, shelf: '1', changed: '1' });
     }
     if (!d || !d.ok || !Array.isArray(d.cards)) return;
+    logLine('act.record', 'the record holds ' + d.cards.length + ' card(s): drawn as the record, not asked of the gate',
+      { level: 'info', target: 'shelfKeep' });
     // Oldest first, because shelfAdd puts each one at the front: the newest song ends up on top.
     for (const c of d.cards.slice().reverse()) {
       /* Build 235: a picture is not a shelf item of its own. A row written by an older build is skipped
          here rather than deleted, so the rule holds for what is already stored and the record is left
          intact - the song's card carries the same picture. */
       if (/^cover$/i.test(String((c && c.kind) || ''))) continue;
-      mergeCard(c);
+      mergeCard(c, { fromRecord: true });
     }
     /* Build 241 (Edwin, 15 Nov 2026, 21:25: "still there i did refresh it"). Two cards had been deleted from
        the record and stayed on his shelf for ever, across a refresh, because this poll merged what the record
@@ -12457,6 +12520,7 @@ function handleFrame(text) {
         logLine('turn.engine.held', outText.slice(0, 120), { level: 'info', target: 'held' });
       }
     } else if (outText) {
+      sentenceInFlight = true;              // build 334: a note waits for the end of this sentence
       try { if (ASKED_FOR_TITLE.test(outText) && !shareLockedAt) engineAskAt = Date.now(); } catch (e) {}
       /* BUILD 302. THE DOOR MUST KNOW WHAT THE MOUTH OFFERED.
          18 Nov 2026, 01:57: while a hunt was being narrowed the mouth offered "Back in Black by AC/DC, Hells Bells
@@ -12532,6 +12596,24 @@ function handleFrame(text) {
     awaitingFirstAudio = false;
     turnInFlight = false;
     lastTurnEndAt = Date.now();
+    sentenceInFlight = false;
+    /* BUILD 334. THE MOUTH MAY NOT ANSWER BEFORE THINKING RULES. 18 Nov 2026, 19:32:48.5 to 19:32:50.3, live: he
+       said "I want to share a song", thinking was called, and the mouth answered on its own before thinking came
+       back - so he heard the mouth's question and then the door's own, and called it an echo. A sentence finished
+       while thinking is out is not the answer: it is cut and dropped, and the gate's question is the only one. */
+    if (mouthPreempted()) {
+      logLine('mouth.preempted', 'thinking was still out, so this is not the answer: '
+        + String(said.engine || '').slice(0, 140), { level: 'warn', target: 'mouth' });
+      try { barge(); } catch (e) {}
+      said.engine = '';
+      if (turns.engine) { try { turns.engine.remove(); } catch (e) {} turns.engine = null; }
+    } else if (mouthNotOwed(said.engine)) {
+      logLine('mouth.not.owed', 'the door asked for one line and this is not it: '
+        + String(said.engine || '').slice(0, 140), { level: 'warn', target: 'mouth' });
+      try { barge(); } catch (e) {}
+      said.engine = '';
+      if (turns.engine) { try { turns.engine.remove(); } catch (e) {} turns.engine = null; }
+    }
     flushNotes();
     judgeClaim();
     try { armMake(); } catch (e) {}
