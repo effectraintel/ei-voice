@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T09:16';
-const BUILD_NO = 306;
+const BUILD = '2026-11-18T09:22';
+const BUILD_NO = 307;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4322,6 +4322,15 @@ function forkAnswer(heard) {
   }
   if (makeWord || fresh) {
     songFork = 0; songForkAsks = 0;
+    /* BUILD 307. A MAKING IS NOT A HUNT. 18 Nov 2026, 09:18:30: "It's a little Let me make a song." opened the share
+       hunt AND the making at the same time, so every later line in a perfectly good run - his words, his kind of
+       music, "yes" to the picture, the news question - was also fed to the hunt as a candidate, and at the end a store
+       search fired on the title of the song he had just made. One route at a time. */
+    if (guessHunt || guessLast.length) {
+      guessHunt = false; guessLast = []; guessAt = 0;
+      logLine('share.guess.dropped', 'the making takes the turn, so the hunt is put down',
+        { level: 'info', target: 'songShare' });
+    }
     songRoute = { pick: 'make', at: Date.now() };
     openSongBeat();
     logLine('song.fork.answer', 'make · a new song', { level: 'info', target: 'music' });
@@ -7237,7 +7246,37 @@ async function handleShareCall(call) {
   }
   
   /* One narrowing turn: his words go to the mouth, never to the stores. */
+  /* BUILD 307. LEAVING A HUNT IS AN ANSWER, AND IT CLOSES IT.
+     18 Nov 2026, 09:21:23, live on build 306: he said "I want to do something else now" after a song had landed, and
+     the door fed the sentence into the hunt as a candidate ("share · narrowing it with the mouth · I want to do
+     something else now."), then asked the stores for a song with the title of the one he already had. When he says he
+     wants something else, the hunt is over: nothing is searched and the door asks what he wants instead. */
+  const LEAVE_HUNT = /\b(?:something else|something different|never ?mind|forget (?:it|that|the song)|not now|another time|no more|stop (?:it|this|looking)|leave (?:it|that)|that'?s enough|move on|drop (?:it|that))\b/i;
+
+  function huntClosedBy(said) {
+    if (!guessHunt && !GUESS_FIRST) return false;
+    if (!LEAVE_HUNT.test(String(said))) return false;
+    guessHunt = false; guessLast = []; guessAt = 0;
+    try { sharePending = null; } catch (e) {}
+    logLine('share.guess.closed', 'he wants something else, so the hunt is over \u00b7 ' + String(said).slice(0, 60),
+      { level: 'info', target: 'songShare' });
+    doorNote('He has left the song and wants something else: the hunt is over and nothing is being searched. Say in '
+      + 'one short line that you have put the song down, then ask what he would like to do. Do not mention a title, '
+      + 'do not offer candidates, and do not say anything about the stores.', true);
+    return true;
+  }
+
   function guessTurn(said) {
+    /* The close is checked here, at the one place every narrowing turn passes through, so no second door into the
+       hunt can skip it. */
+    if (huntClosedBy(said)) return;
+    /* And a turn that has already opened the making is not narrowed: the hunt cannot start in the same breath as the
+       song, which is how one sentence ended up with two routes on it. */
+    if (songDraft.at && Date.now() - songDraft.at < 2000 && songRoute && songRoute.pick && songRoute.pick !== 'share') {
+      logLine('share.guess.skipped', 'the making was opened by this turn, so there is nothing to narrow',
+        { level: 'info', target: 'songShare' });
+      return;
+    }
     awaitSong = 0;                       // the door does not take over with a rail search behind his back
     clearTimeout(awaitSongNudge);
     let words = String(said);
@@ -7543,6 +7582,7 @@ async function handleShareCall(call) {
     /* BUILD 301. Once a stale step has been put down, the title he said belongs to the conversation too - this is the
        second door into the same room, and it exists because a sheet can be standing in the way of the first. */
     if (!settledHere && (guessHunt || GUESS_FIRST)) {
+      if (huntClosedBy(said)) return;        // build 307: he left the song, so nothing is narrowed or searched
       guessHunt = true;
       return guessTurn(said);
     }
