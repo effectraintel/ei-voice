@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 362;
+const BUILD_NO = 363;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -656,10 +656,18 @@ function thinkFast(said) {
    failure is not a licence to guess. So the door says one plain line, asks no journey question, searches
    nothing and shelves nothing. */
 function thinkLost(said) {
+  /* BUILD 363. WHEN THINKING DOES NOT ANSWER, THE DOOR ROUTES IT ITSELF.
+     19 Nov 2026, 01:44: thinking took longer than six seconds, and the door answered "Nothing was decided on that, Boss.
+     Say it once more." to "I want to create a song." - a sentence it understands perfectly well, and which the door's
+     own reader had already routed correctly for weeks before thinking existed. A slow model is not a reason to tell
+     him he was not understood. The fallback is the door's own gate, and the record says it took that path. */
+  logLine('think.fallback', 'thinking did not answer, so the door routes it itself: ' + String(said).slice(0, 90),
+    { level: 'warn', target: 'think' });
+  try { return doorHears(said); } catch (e) {}
   logLine('phase.think', 'failed · nothing was decided, so nothing was asked and nothing was searched',
     { level: 'warn', target: 'think' });
-  doorAsk('Nothing was decided on that, Boss. Say it once more.',
-    'Say exactly this, in one line, and nothing else: "Nothing was decided on that, Boss. Say it once more." '
+  doorAsk('Sorry, Boss, I did not follow that. Say it once more.',
+    'Say exactly this, in one line, and nothing else: "Sorry, Boss, I did not follow that. Say it once more." '
     + 'Nothing was searched, nothing was put on his shelf, and no question about a song is asked.');
 }
 
@@ -681,12 +689,12 @@ function thinkAndAct(said) {
       thinkHold = false;
       logLine('think.hold.cleared', 'the thinking call never came back, so the mouth is released', { level: 'warn', target: 'think' });
     }
-  }, 8000);
+  }, 15000);
   return fetchT(FNBASE + 'doorThink', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  }, 6000).then((r) => r.json()).then((o) => {
+  }, 12000).then((r) => r.json()).then((o) => {
     if (id !== thinkSeq) {
       logLine('think.stale', 'he said something newer, so this answer is dropped', { level: 'info', target: 'think' });
       return;
