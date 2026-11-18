@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 352;
+const BUILD_NO = 353;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -912,8 +912,12 @@ function heardFlush(why) {
          "mouth.unheard ... I hear you, Boss. What were you saying?" - because build 341 says the mouth speaks only
          when the door has licensed it, and a raw turn licenses nothing. That is why the door went quiet after one
          exchange. The forward now carries its licence: his sentence, and one instruction to answer it in one line. */
-      doorNote('He said: "' + String(acted).slice(0, 300) + '". Answer him in one short line, in your own words, '
-        + 'and nothing else. Do not ask him to repeat it and do not say you did not hear him.', true);
+      /* BUILD 353. NO QUOTES AROUND HIS WORDS. Build 350 wrote his sentence in double quotes, and the door reads a
+         quoted line as the line the mouth OWES - so it demanded he say his own sentence back, and every correct
+         answer was thrown away: 00:22:53 "the door asked for one line and this is not it: The weather in Ballito is
+         on your shelf", and at 00:23:32 the mouth recited its own capabilities instead. His words go in bare. */
+      doorNote('He said, in his own words: ' + String(acted).slice(0, 300) + '. Answer him in one short line, in '
+        + 'your own words, and nothing else. Do not ask him to repeat it and do not say you did not hear him.', true);
     } catch (e) {}
   }, 1200);
 }
@@ -13369,7 +13373,7 @@ function downsample(float32, from, to) {
 const EAR = true;
 const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
 const EAR_END_MS = 1100;
-let earWs = null, earReady = false, earText = '', earLive = '', earSpeech = false, earLastVoiced = 0, earClosed = false;
+let earWs = null, earReady = false, earText = '', earLive = '', earConf = null, earSpeech = false, earLastVoiced = 0, earClosed = false;
 let earFails = 0, earWatch = 0, earOpenedAt = 0;
 
 function earOn() { return !!(earWs && earWs.readyState === 1); }
@@ -13395,6 +13399,7 @@ function earOpen() {
       if (f.t === 'final') {
         const t = String(f.text || '').trim();
         if (t) earText = earText ? earText + ' ' + t : t;
+        earConf = (typeof f.conf === 'number' ? f.conf : null);
         logLine('ear.final', t + ' \u00b7 conf ' + (f.conf == null ? '?' : f.conf) + ' \u00b7 ' + (f.lang || ''),
           { level: 'info', target: 'hear' });
         return;
@@ -13458,9 +13463,22 @@ function earFeed(data, rms, ours) {
 function earFinish(why) {
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
   const text = String(earText || earLive || '').trim();
-  earText = ''; earLive = ''; earSpeech = false; earClosed = false;
+  const conf = earConf;
+  earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false;
   if (!text) { logLine('ear.empty', 'nothing came back from the ear', { level: 'warn', target: 'hear' }); return; }
   logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
+  /* BUILD 353. A HEARING THE EAR IS NOT SURE OF IS NOT HIS WORDS.
+     19 Nov 2026, 00:22:11: he said "start fresh" and the ear gave back "Goldfish." at confidence 0.157, and the door
+     acted on it. At 00:24:01 "R100" came back as "100 grand" at 0.543. A word the recogniser is not sure of is a word
+     the door does not own: it asks once, plainly, and acts on nothing. Anything above the line is his. */
+  if (conf !== null && conf < 0.55) {
+    logLine('ear.lowconf', 'not sure enough to act on: ' + text.slice(0, 120) + ' \u00b7 conf ' + conf,
+      { level: 'warn', target: 'hear' });
+    try { lastAsked = 'Sorry, Boss, I did not catch that. Say it once more.'; doorAsk(lastAsked,
+      'Say exactly this, in one line, and nothing else: "Sorry, Boss, I did not catch that. Say it once more." '
+      + 'Nothing was searched and nothing is on his shelf: the ear was not sure of the words.'); } catch (e) {}
+    return;
+  }
   /* BUILD 351. Nothing is owed to a turn the model never heard: this flag is cleared when the model starts
      answering, which is the other half of the deadlock above. */
   turnInFlight = false; awaitingFirstAudio = false;
