@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T09:40';
-const BUILD_NO = 302;
+const BUILD_NO = 301;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1277,6 +1277,7 @@ let ws = null, voice = VOICES.includes(stored) ? stored : 'Kore';
 // tested before it is offered, never a side effect of a sentence.
 const LANG = 'en-US';
 let connecting = false;   // a door is being opened and has not answered yet
+let openStartedAt = 0;     // build 303: when this open began, so a hung one can be forgotten
 let doorGen = 0;          // bumped by anything that cancels an opening in flight
 if (stored !== voice) localStorage.setItem('ei-live-voice', voice);
 let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
@@ -2234,6 +2235,32 @@ async function railPost(fn, body) {
   }
 }
 
+/* BUILD 303. A FETCH WITHOUT A DEADLINE IS A DOOR THAT CAN GO DEAF.
+   18 Nov 2026, 02:06: he made a song, left the house, came back and said "the voice door doesn't want to open".
+   The log stops dead at 00:08:11 UTC and holds no line after it: no tap, no ask, no refusal. That is what a
+   hung fetch looks like from the inside - openDoor sets connecting, awaits a request that never answers, and
+   every later tap returns at its first line. The door said nothing because it was still waiting.
+   Every request the door makes now carries a deadline and says when it has passed it. */
+async function fetchT(url, opts, ms) {
+  const limit = ms || 25000;
+  let timer = null;
+  try {
+    const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    if (ctl) timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, limit);
+    const r = await fetch(url, Object.assign({}, opts || {}, ctl ? { signal: ctl.signal } : {}));
+    return r;
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || /abort/i.test(String(e.message || '')))) {
+      const t = new Error('the door did not answer within ' + Math.round(limit / 1000) + ' seconds');
+      t.timedOut = true;
+      throw t;
+    }
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function gatePost(fn, body) {
   const t0 = Date.now();
   logLine('call.ask', fn + ' ' + askOf(body), { target: fn, ask: askOf(body), gate: '1' });
@@ -2244,11 +2271,11 @@ async function gatePost(fn, body) {
     shelfWriteKind = fn === 'payRequestFromDoor' ? 'pay' : 'song';
   }
   try {
-    const r = await fetch(FNBASE + fn, {
+    const r = await fetchT(FNBASE + fn, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, 25000);
     let d = {};
     try { d = await r.json(); } catch {}
     if (!d || d.ok !== true) {
@@ -2324,9 +2351,22 @@ async function unlockFingerprint(mode, enrolCode) {
 
   let cred;
   try {
-    cred = mode === 'register'
-      ? await navigator.credentials.create({ publicKey })
-      : await navigator.credentials.get({ publicKey });
+    /* BUILD 303. A PASSKEY SHEET THAT NEVER ANSWERS IS A DOOR THAT NEVER OPENS.
+       The browser's promise can stay pending when the sheet is dismissed behind the page or the tab is
+       restored mid-prompt, and the door sat on "asking this device for your fingerprint" forever with no tap
+       able to help it, because connecting was still true. Ninety seconds is longer than any real
+       fingerprint, so after that the door says it plainly and stays tappable. */
+    const ask = mode === 'register'
+      ? navigator.credentials.create({ publicKey })
+      : navigator.credentials.get({ publicKey });
+    cred = await Promise.race([
+      ask,
+      new Promise((_, rej) => setTimeout(() => {
+        const t = new Error('no fingerprint was given, so the door stayed shut.');
+        t.name = 'NotAllowedError';
+        rej(t);
+      }, 90000)),
+    ]);
   } catch (e) {
     const why = (e && e.name) || 'error';
     if (why === 'NotAllowedError') {
@@ -2635,9 +2675,28 @@ let sawGesture = false;
 ['pointerdown', 'keydown'].forEach(ev =>
   window.addEventListener(ev, () => { sawGesture = true; }, { capture: true, passive: true }));
 async function openDoor() {
-  if (busy || connecting) return;
+  /* BUILD 303. A TAP IS NEVER A SILENT NO-OP.
+     The guard below is right (a second door beside an opening one is two voices), but it used to return with
+     nothing said and nothing written, so a hung open turned the circle into a dead button that never explained
+     itself. Now every ignored tap leaves a line, and an open that has hung longer than a door should take is
+     forgotten rather than waited on: the tap is the authority, and it always gets an answer. */
+  if (busy || connecting) {
+    const age = openStartedAt ? Date.now() - openStartedAt : 0;
+    const stuck = age > 20000;
+    logLine('circle.tap', 'a door is already opening · ' + (age ? Math.round(age / 1000) + 's' : 'just now')
+      + (stuck ? ' · forgetting it' : ''), { level: stuck ? 'warn' : 'info' });
+    if (!stuck) return;
+    logLine('door.stuck', 'an open hung for ' + Math.round(age / 1000) + 's with no answer: opening again',
+      { level: 'warn' });
+    try { if (ws) shutDoor(); } catch (e) {}
+    busy = false; connecting = false;
+    try { closeMic(); } catch (e) {}
+    try { stopClock(); } catch (e) {}
+    try { micBtn.classList.remove('arming'); } catch (e) {}
+  }
   if (Date.now() - lastOpenAt < 2000) return;   // a double tap is one door
   lastOpenAt = Date.now();
+  openStartedAt = Date.now();
   // One door, one socket. Anything already open is closed here rather than left to run
   // beside the new one: two sockets sharing one token is what made a reopened door give
   // nothing back, because the replaced socket's handlers kept acting on the live one.
@@ -2690,14 +2749,19 @@ async function openDoor() {
     // In text mode there is no microphone to warm, and asking for one would raise a permission
     // prompt for a door that is not listening.
     const micWarm = typed() ? Promise.resolve() : openMic().catch((e) => { micWarmError = e; });
-    const nowPack = gatePost('doorNowPack', { session_token: session.token }).catch(() => null);
+    /* Build 303: the clock pack is a nicety and may not hold the door. Eight seconds, then the door opens
+       without it rather than waiting on it. */
+    const nowPack = Promise.race([
+      gatePost('doorNowPack', { session_token: session.token }).catch(() => null),
+      new Promise((res) => setTimeout(() => res(null), 8000)),
+    ]);
 
     stage('checking the door');
-    const r = await fetch(FN, {
+    const r = await fetchT(FN, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ doc: DOC_TAG, session_token: session.token }),
-    });
+    }, 20000);
     const d = await r.json();
     // Somebody else already has the room. Say whose it is and how to take it, rather than
     // starting a second voice that nobody asked for. (11 Nov 2026, two phones.)
@@ -2886,7 +2950,10 @@ async function openDoor() {
     micBtn.classList.remove('arming');
     setState('the door is shut');
     const msg = (e && e.message) ? e.message : 'the door did not open';
-    warn(/permission|denied|NotAllowed/i.test(msg)
+    logLine('door.open.fail', msg, { level: 'error', target: 'open' });
+    warn(e && e.timedOut
+      ? 'the door did not answer. tap the circle again.'
+      : /permission|denied|NotAllowed/i.test(msg)
       ? 'the browser refused the microphone. allow it for this page, then tap the circle again.'
       : msg);
     closeMic();
