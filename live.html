@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 351;
+const BUILD_NO = 352;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -9331,7 +9331,18 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
      So the envelope is one function. It never offers silence as an option, and its tail is chosen by whether
      the note asks him anything: a note that asks a question may not forbid a question. */
   function noteEnvelope(text, speak) {
-    const body = String(text || '').replace(/\s+/g, ' ').trim();
+    /* BUILD 352. THE MOUTH NO LONGER HEARS HIM, SO EVERY NOTE CARRIES HIS WORDS.
+       Until 347 the model heard the microphone itself, and a note was an aside on top of what it had just heard.
+       The ear hears him now, so a note that says "he has changed subject, answer his question" is a note about a
+       sentence the model has never seen - which is why it answered "I am here, Boss." at 00:16 instead of the
+       weather. His own sentence travels with the note, unquoted so it can never be mistaken for the door's line. */
+    let body = String(text || '').replace(/\s+/g, ' ').trim();
+    try {
+      const words = String(lastHeardText || '').replace(/\s+/g, ' ').trim();
+      if (words && body.indexOf(words.slice(0, 20)) < 0) {
+        body = 'He said, in his own words: ' + words.slice(0, 300) + '. ' + body;
+      }
+    } catch (e) {}
     const head = '(Door note, not from Edwin. Do not read this note aloud and do not answer it as a question: '
       + 'it is what the door has already decided for your next turn. Say only what it tells you to say, in your '
       + 'own voice, in one short line.) ';
