@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T18:20';
-const BUILD_NO = 331;
+const BUILD = '2026-11-18T18:45';
+const BUILD_NO = 332;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -641,6 +641,19 @@ function thinkFast(said) {
   return null;
 }
 
+/* BUILD 332. A TIMEOUT IS A THINKING FAILURE, AND NOTHING MAY BE ASKED ON THE BACK OF IT.
+   18 Nov 2026, 17:51:06, live: thinking did not answer within six seconds, and the door asked him the
+   stores-or-new fork anyway, off its own flat readers. The doctrine says thinking runs until it is done; a
+   failure is not a licence to guess. So the door says one plain line, asks no journey question, searches
+   nothing and shelves nothing. */
+function thinkLost(said) {
+  logLine('phase.think', 'failed · nothing was decided, so nothing was asked and nothing was searched',
+    { level: 'warn', target: 'think' });
+  doorAsk('Nothing was decided on that, Boss. Say it once more.',
+    'Say exactly this, in one line, and nothing else: "Nothing was decided on that, Boss. Say it once more." '
+    + 'Nothing was searched, nothing was put on his shelf, and no question about a song is asked.');
+}
+
 function thinkAndAct(said) {
   const id = ++thinkSeq;
   thinkHold = true;
@@ -672,15 +685,17 @@ function thinkAndAct(said) {
     if (!o || !o.ok) {
       thinkHold = false;
       logLine('think.failed', (o && o.why) || 'no answer from thinking', { level: 'warn', target: 'think' });
-      return doorHears(said);
+      return thinkLost(said);
     }
     logLine('think.back', o.journey + ' \u00b7 ' + o.plan + ' \u00b7 ' + (o.why || '') + ' \u00b7 ' + (o.ms || 0) + 'ms',
       { level: 'info', target: 'think' });
+    logLine('phase.think', o.journey + ' \u00b7 ' + o.plan + ' \u00b7 ' + (o.ms || 0) + 'ms \u00b7 '
+      + (o.question ? 'asks: ' + String(o.question).slice(0, 90) : 'no question'), { level: 'info', target: 'think' });
     return obeyThinking(o, said);
   }).catch((e) => {
     thinkHold = false;
     logLine('think.failed', (e && e.message) || 'the thinking call failed', { level: 'warn', target: 'think' });
-    return doorHears(said);
+    return thinkLost(said);
   });
 }
 
@@ -4093,6 +4108,8 @@ function commitKnowing(journey, fact, source) {
     knowing.at = Date.now();
     logLine('knowing.held', knowing.journey + ' \u00b7 ' + knowing.fact.slice(0, 140)
       + ' \u00b7 from ' + knowing.source, { level: 'info', target: 'music' });
+    logLine('phase.know', knowing.journey + ' \u00b7 ' + knowing.fact.slice(0, 120) + ' \u00b7 from '
+      + knowing.source, { level: 'info', target: 'music' });
   } catch (e) {}
 }
 
@@ -4105,10 +4122,14 @@ function mayAct(journey, what) {
   if (k) {
     logLine('act.allowed', String(what || 'the act') + ' \u00b7 on the knowing held for ' + k.journey,
       { level: 'info', target: 'music' });
+    logLine('phase.act', 'allowed \u00b7 ' + String(what || 'the act') + ' \u00b7 on ' + k.journey,
+      { level: 'info', target: 'music' });
     return true;
   }
   logLine('act.no.knowing', String(what || 'an act') + ' was asked for with no knowing in the record, so nothing '
     + 'was done', { level: 'warn', target: 'music' });
+  logLine('phase.act', 'refused \u00b7 ' + String(what || 'an act') + ' \u00b7 no knowing held for '
+    + String(journey || ''), { level: 'warn', target: 'music' });
   return false;
 }
 
@@ -7616,14 +7637,18 @@ async function handleShareCall(call) {
     const card = sharePending.card;
     if (yes && !no) {
       sharePending = null;
+      /* BUILD 332. HIS YES IS THE KNOWING CLOSED, not an acknowledgement. */
+      commitKnowing('share', [card.title, (card.sub || '').split(' · ')[0]].filter(Boolean).join(' by '),
+        'the rail’s answer, confirmed by him');
       mergeCard(card);
       railAnsweredAt = Date.now();
       shareSongLocked(card);
       railNote('share · ' + (card.title || '') + ' confirmed');
       logLine('share.confirm.yes', card.title || '', { level: 'info', target: 'songShare' });
+      /* BUILD 332. A SHARE IS NOT A MAKING. The picture belongs to a song being made, and asking for one here is
+         the same invented step that produced "What should the song say?" after a landing. */
       doorNote('He confirmed it: "' + (card.title || 'a song') + '" is on his shelf now with its listening link. '
-        + 'Say the title once and that it is on the shelf, then ask once, in your own words, whether a picture '
-        + 'should go with it and what it should show.', true);
+        + 'Say the title once and that it is on the shelf, in one line, and ask him nothing else.', true);
       return true;
     }
     if (no) {
@@ -7989,7 +8014,20 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     /* BUILD 309: nothing is asked of him, and the whole line is acknowledgement, so nothing is searched. */
     try {
       const asking = songFork || guessHunt || sharePending || shareCard || madeShare
+        || (shareChoices && shareChoices.length)
         || (shareStage && shareStage !== 'idle' && shareStage !== 'closed' && shareStage !== 'sent');
+      /* BUILD 332. A YES TO A LIST IS NOT AN ANSWER TO A LIST. If more than one song is on the table and he says
+         yes, the door asks which one instead of filing his yes as an acknowledgement and going quiet. */
+      if (shareChoices && shareChoices.length && affirmative(said) && !pickChoice(said)) {
+        const list = shareChoices.slice(0, 3).map((c, i) => (i + 1) + ') ' + c.title
+          + (c.artist ? ' by ' + c.artist : '')).join('; ');
+        logLine('share.list.yes', 'he said yes to a list of ' + shareChoices.length + ', so the door asks which',
+          { level: 'info', target: 'songShare' });
+        doorAsk('Which one, Boss? ' + list,
+          'Say exactly this, in one line, and nothing else: "Which one, Boss? ' + list + '" Nothing was searched '
+          + 'and nothing was put on his shelf.');
+        return;
+      }
       if (!asking && acknowledgement(said)) {
         awaitSong = 0; shareQuery = '';
         logLine('share.ack', 'an acknowledgement, not a search · ' + said.slice(0, 50), { level: 'info', target: 'songShare' });
@@ -8769,6 +8807,8 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
                 logLine('share.door.done', (r2.title || '') + ' · ' + r2.found + ' · retry · '
                   + (Date.now() - t1) + 'ms', { level: 'info', target: 'songShare' });
                 if (!wordsCover(said, card2.title)) { hiddenHold = false; askAboutCard(card2, said); return; }
+                commitKnowing('share', [card2.title, r2.artist || ''].filter(Boolean).join(' by '),
+                  'the sharing rail, on the second, narrower ask');
                 mergeCard(card2);
                 railAnsweredAt = Date.now();
                 shareSongLocked(card2);
@@ -8807,6 +8847,9 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
               askAboutCard(card, said);
               return;
             }
+            /* BUILD 332. THE RAIL HAS NAMED IT, SO IT IS KNOWN. This is the path he actually walks. */
+            commitKnowing('share', [r.title || card.title, r.artist || ''].filter(Boolean).join(' by '),
+              'the sharing rail, answering the name he gave');
             mergeCard(card);
             railAnsweredAt = Date.now();
             railNote('share · ' + r.found + ' · ' + (r.title || ''));
@@ -8823,12 +8866,18 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
             return;
           }
           let picks = collapseChoices(r.candidates);
+          /* BUILD 332. A LIST THAT COMES DOWN TO ONE SONG IS NOT A LIST. 18 Nov 2026, 17:51:24, live: the rail
+             answered two candidates, the tribute filter cut it to one, and the door still asked "which one" with a
+             single name on the list. His "Yes." then matched nothing, was filed as an acknowledgement, and the song
+             was never wrapped. The filtering happens first, and the question is only asked if more than one is left. */
           if (picks.length > 1) {
             picks = dropTributes(picks);
             /* BUILD 291. 21:21:12: he had already named Michael Bolton, and the rail answered his title with other
                artists' covers of it. His artist is the strongest thing he has told the door, so a list that can
                honour it does: when some of what came back is his artist, those are what he is offered. */
             try { picks = preferArtist(picks, shareArtistHint); } catch (e) {}
+          }
+          if (picks.length > 1) {
             shareChoices = picks;          // the door asked the question, so the door must remember the options
             shareChoicesAt = Date.now();
             logLine('share.choice', picks.map((c) => (c.title || '') + ' · ' + (c.artist || '')).join(' | '),
@@ -8839,6 +8888,10 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
               + '. Ask which one, in one short question.', true);
             railNote('share · ' + picks.length + ' songs to choose from');
             return;
+          }
+          if (picks.length === 1) {
+            logLine('share.one', 'the list came down to one, so it is the song: ' + (picks[0].title || ''),
+              { level: 'info', target: 'songShare' });
           }
           const only = picks[0];
           /* BUILD 330. THE SONG IS KNOWN WHEN THE RAIL HAS NAMED IT. That is the knowing the wrap stands on: the
@@ -9316,6 +9369,9 @@ function resolveChoice(heard) {
       url: c.url, code: c.code || '', song_id: c.song_id || '', sha: c.sha || '',
       img: c.art || c.cover_url || '',   // build 217: the picture the rail already had, so the card is born complete
     };
+    /* BUILD 332. HE CHOSE IT OFF THE LIST, SO IT IS KNOWN. */
+    commitKnowing('share', [card.title, (card.sub || '').split(' · ')[0]].filter(Boolean).join(' by '),
+      'the rail’s list, chosen by him');
     mergeCard(card);
     /* Build 217. A store card always has art and a made song's picture is drawn later, at the landing. So a
        missing picture on a store card means the rail answered with less than it knows: ask the record once,
@@ -9839,6 +9895,10 @@ async function madeReady(r) {
   // and the licence to say it was handed out whether or not a card had been written. So the vault is read
   // straight after a take lands, twice if it has to, and the sentence is only licensed once the card is
   // actually in the row. If it still cannot be confirmed, the door says what is true instead.
+  /* BUILD 332. A MADE SONG IS THE ACT OF ITS MAKING, so its knowing is the brief that was committed when it
+     armed. It is named again here, against the take that actually came back, so the card stands on the record. */
+  try { commitKnowing('make', String(title || (card && card.title) || 'the song') + ' · take read from the vault',
+    'the making, finished'); } catch (e) {}
   const sid = String((madeShare && madeShare.song_id) || (r && r.song_id) || '');
   const onShelfNow = () => !!shelf.some((c) => (sid && String(c.song_id || '') === sid)
     || (title && String(c.title || '').trim().toLowerCase() === String(title).trim().toLowerCase()));
@@ -10592,8 +10652,28 @@ function pruneShelfGone(offeredKeys, offeredCount) {
   return gone;
 }
 
+/* BUILD 332. THE GATE WHERE THE CARD ACTUALLY LANDS. Build 330 put it on the branch where the rail returns a
+   choice; his live path wraps straight from the rail's own answer and walked past it, so the card of 17:53 landed
+   with no knowing in the record. A song or store card is an act, so it asks the gate here, and every path that
+   lands one is covered by the same rule. */
+let actLandedAt = 0;
+
 function mergeCard(c) {
   if (!c || !c.title) return;
+  try {
+    if (c.kind === 'song' || c.kind === 'store') {
+      const held = knowingFor('share') || knowingFor('make');
+      if (!held) {
+        mayAct('share', 'the card for "' + String(c.title).slice(0, 60) + '"');   // writes the refusal
+        logLine('act.no.knowing.card', 'a song card was refused: the record holds no knowing for it',
+          { level: 'warn', target: 'shelfKeep' });
+        return;
+      }
+      logLine('phase.act', 'allowed · the card for "' + String(c.title).slice(0, 60) + '" · on '
+        + held.journey, { level: 'info', target: 'shelfKeep' });
+      actLandedAt = Date.now();
+    }
+  } catch (e) {}
   const k = cardKey(c);
   if (shelfHidden.has(k) || isPutAway(k)) return;   // he put it away; only something new lands on a cleared shelf
   const i = shelf.findIndex(x => cardKey(x) === k);
@@ -12368,7 +12448,19 @@ function handleFrame(text) {
       engineSpokeNow();          // build 233: a sound is an answer, even while the door is holding it
       /* BUILD 326: while thinking decides, the mouth is silent. He must never hear it guess and then
          correct itself - that is the fault this stage exists to end. */
-      if (doorSearching || thinkHold || (hiddenHold && !replyAudible)) { heldFrames++; }
+      /* BUILD 332. AFTER AN ACT, NOTHING IS ASKED. 18 Nov 2026, 17:53:42 and 17:51:50, live: the card landed,
+         the door said so, and the mouth then invented the making's own question - "What should the song say?" - and
+         the guard corrected it aloud, so he heard a question and its withdrawal in one breath. A sentence carrying
+         a question inside the landing window is held, not played, so the invented question is never heard. */
+      const askedAfterAct = actLandedAt && (Date.now() - actLandedAt < 15000) && /\?/.test(String(said.engine || ''));
+      if (askedAfterAct) {
+        heldFrames++;
+        if (heldEngineLogged < 3) {
+          heldEngineLogged++;
+          logLine('mouth.asked.after.act', String(said.engine || '').slice(0, 140),
+            { level: 'warn', target: 'music' });
+        }
+      } else if (doorSearching || thinkHold || (hiddenHold && !replyAudible)) { heldFrames++; }
       else { replyAudible = true; playPcm(data, p.inlineData.mimeType); }
     }
   }
