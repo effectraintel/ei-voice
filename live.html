@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:47';
-const BUILD_NO = 317;
+const BUILD = '2026-11-18T10:51';
+const BUILD_NO = 318;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1447,7 +1447,23 @@ function glueFragment(who, a, b) {
   return a + ' ' + b;
 }
 
+/* BUILD 318. WHAT HE SAID AND WHAT THE DOOR HEARD ARE BOTH TRUE, AND BOTH SHOWN.
+   18 Nov 2026, 10:50: he said "start fresh", the microphone heard "Thought fresh", and the door did the right thing
+   (the sitting cleared and a fresh socket replaced it) while the screen printed "YOU Thought fresh" and nothing else,
+   so the door looked deaf. When the door settles his words by how they sound, it says what it took them for. */
+let heardAs = '';
 function appendLive(who, text) {
+  if (who === 'you' && heardAs) {
+    const note = heardAs; heardAs = '';
+    if (!turns.you) { turns.you = addTurn('you', ''); said.you = ''; streamMode.you = null; }
+    turns.you.querySelector('.said').textContent = String(text || '');
+    const tag = document.createElement('div');
+    tag.className = 'lat heard';
+    tag.textContent = 'heard as ' + note;
+    turns.you.appendChild(tag);
+    logEl.scrollTop = logEl.scrollHeight;
+    return;
+  }
   // A new engine bubble means his turn is over, so the next thing he says starts its own
   // block instead of extending the old one.
   if (who === 'engine' && !turns.engine) { turns.you = null; said.you = ''; streamMode.you = null; }
@@ -7370,6 +7386,9 @@ async function handleShareCall(call) {
       resumePending = false;
       const low = said.toLowerCase();
       if (/\b(?:fresh|start over|start again|start fresh|start something (?:new|else)|something new|start new|new session|new door|new one|begin again|forget (?:it|that|everything|all of it)|clear (?:it|that)|wipe)\b/.test(low)) {
+        /* Build 318: "Thought fresh" is start fresh as the microphone delivered it, so the screen says what the door
+           took it for instead of leaving his mangled line standing on its own. */
+        if (!/start fresh|start over|start again|new session/i.test(low) && said.split(/\s+/).filter(Boolean).length <= 5) heardAs = 'start fresh';
         clearSitting();
         logLine('sitting.cleared', 'he chose a fresh session · "this is a fresh door, and nothing before it"',
           { level: 'info', target: 'sitting' });
@@ -7391,6 +7410,7 @@ async function handleShareCall(call) {
       if (isChoice && !/\b(?:song|music|track|tune)\b/i.test(low) && FRESH_SOUNDS.some((o) => nearSound(said, o))) {
         logLine('sitting.heard', 'he was heard as "' + said.slice(0, 30) + '", which is a fresh start',
           { level: 'info', target: 'sitting' });
+        heardAs = 'start fresh';
         clearSitting();
         try { dropMaking('he started fresh'); } catch (e) {}
         try { guessLast = []; guessHunt = false; awaitSong = 0; shareQuery = ''; } catch (e) {}
@@ -7400,12 +7420,14 @@ async function handleShareCall(call) {
       if (isChoice && !/\b(?:song|music|track|tune)\b/i.test(low) && CARRY_SOUNDS.some((o) => nearSound(said, o))) {
         logLine('sitting.heard', 'he was heard as "' + said.slice(0, 30) + '", which is carrying on',
           { level: 'info', target: 'sitting' });
+        heardAs = 'carry on';
         doorNote('He chose to CARRY ON where you both were. Pick it up in one short line and ask the next thing about '
           + 'it. Do not start a song hunt.', true);
         return;
       }
       if (/\b(?:carry on|carrying on|continue|where we left|pick up|resume|go on|yes|yeah|sure|ok|okay|please)\b/.test(low)
           && isChoice && !/\b(?:song|music|track|tune)\b/i.test(low)) {
+        if (!/carry on|carrying on|continue|where we left/i.test(low) && said.split(/\s+/).filter(Boolean).length <= 5) heardAs = 'carry on';
         logLine('sitting.continued', 'he chose to carry on · ' + said.slice(0, 40), { level: 'info', target: 'sitting' });
         doorNote('He chose to CARRY ON where you both were. Pick it up in one short line: name what you were doing '
           + 'with him and ask the next thing about it. Do not start a song hunt, do not ask for a song title, and do '
