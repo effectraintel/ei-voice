@@ -503,8 +503,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T10:20';
-const BUILD_NO = 314;
+const BUILD = '2026-11-18T10:34';
+const BUILD_NO = 315;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6319,6 +6319,7 @@ async function handleShareCall(call) {
         query = (offered.title + (offered.artist ? ' ' + offered.artist : '')).trim();
         guessHunt = false;
         if (offered.artist) { shareArtistHint = offered.artist; shareArtistFrom = 'said'; }
+        settledAt = Date.now();      // build 315, the same guard on the other settle path
         logLine('share.settled', 'he named one of the songs offered · asking the rail once for "' + offered.title + '"',
           { level: 'info', target: 'songShare' });
       }
@@ -6712,6 +6713,12 @@ async function handleShareCall(call) {
      settled, and only the rail's answer can put a card on his shelf. The rule that keeps this honest is the one he
      already holds us to: a proposal is a claim, never a find, so the mouth may offer a name and may never say it is on
      the stores, on his shelf, or that it searched. */
+  /* BUILD 315. THE SCREEN SHOWED HIS WRONG ARTIST WHILE THE RIGHT SONG PLAYED.
+     18 Nov 2026, 08:32:55, live: he said "Women by Dave Lippman" (the artist is Def Leppard); the door settled on
+     the song it had offered and asked the rail once for "Women by Def Leppard", and the SAME turn also wrote
+     "share · narrowing it with the mouth · Women by Dave Lippman" and told the mouth nothing had been asked of the
+     stores. So the card played Def Leppard while the line above it said Dave Lippman. One turn, two descriptions. */
+  let settledAt = 0;
   const GUESS_FIRST = true;          // the experiment: nothing goes to the rail until he says that is the one
   let guessHunt = false;             // his narrowing is with the mouth, not the rail
   let guessLast = [];                // [{title, artist}] - what the mouth last put in front of him
@@ -7409,6 +7416,13 @@ async function handleShareCall(call) {
     /* The close is checked here, at the one place every narrowing turn passes through, so no second door into the
        hunt can skip it. */
     if (huntClosedBy(said)) return;
+    /* Build 315: this turn already settled and the rail is being asked, so a narrowing note here would overwrite the
+       settled name on screen with his own words - exactly how "Dave Lippman" appeared under a Def Leppard song. */
+    if (settledAt && Date.now() - settledAt < 20000) {
+      logLine('share.guess.skipped', 'this turn already settled, so nothing is narrowed on top of it',
+        { level: 'info', target: 'songShare' });
+      return;
+    }
     /* BUILD 308. A NAME IN HIS OWN WORDS ENDS THE HUNT. He says "Falling by Alesso", and that is the answer, whether
        the mouth ever offered it or not. Placed here because this is the one place every narrowing turn passes, so no
        other branch can reach the mouth first. */
@@ -7480,7 +7494,21 @@ async function handleShareCall(call) {
         || (/^(?:yes|yeah|yep|ok|okay|correct|exactly|right)\b/i.test(said) && guessLast.length <= 3);
       if (!settle) return guessTurn(said);
       /* He has settled it: the rail is asked once, with the name that is now fixed. */
-      const pick = settledName(said);
+      let pick = settledName(said);
+      /* BUILD 315. A SONG CARRIES ITS OWN ARTIST. 18 Nov 2026, 08:32:55: the mouth offered "Women by Def Leppard"
+         and "Women by Florida Georgia Line", he picked Women and put the wrong name to it ("Dave Lippman"), and the
+         rail was asked for Dave Lippman's Women while the card played Def Leppard's. When the title he settles on is
+         one he was offered and the artist he names is on none of them, the song he picked keeps its own artist. */
+      try {
+        const off = matchOffered(said);
+        const flat = (x) => String(x || '').toLowerCase().replace(/[^a-z]/g, '');
+        if (off && pick && pick.artist && flat(pick.artist) !== flat(off.artist)
+          && !guessLast.some((c) => flat(c.artist) === flat(pick.artist))) {
+          logLine('share.settled.artist', 'his artist is on none of the songs offered, so the song keeps its own: '
+            + off.title + ' by ' + off.artist, { level: 'info', target: 'songShare' });
+          pick = { title: off.title, artist: off.artist || '' };
+        }
+      } catch (e) {}
       guessHunt = false;
       if (!pick || !pick.title) {
         awaitSong = Date.now();
@@ -7489,6 +7517,7 @@ async function handleShareCall(call) {
           + 'line, to say the title and who sings it. Nothing has been checked.', true);
         return;
       }
+      settledAt = Date.now();          // build 315: this turn has settled; no second path may describe it
       logLine('share.settled', 'he said that is the one · asking the rail once for "' + pick.title + '"'
         + (pick.artist ? ' by ' + pick.artist : ''), { level: 'info', target: 'songShare' });
       railNote('share · settled · ' + pick.title + (pick.artist ? ' by ' + pick.artist : ''));
