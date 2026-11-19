@@ -154,6 +154,14 @@
   #shelf.on { border-top:1px solid #26221d; padding-top:10px; }
   /* A permanent row must be quiet at rest: gold is what an arrival uses, not what a label
      wears all day. (Build 40) */
+  /* BUILD 387. The day the row is reading, and the pill that opens the days before it. Same gold hairline as
+     everything else on the shelf, so a day is a divider and not a second kind of card. */
+  #shelf .daylab { flex:0 0 auto; align-self:center; font-size:9px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--dim); writing-mode:vertical-rl; transform:rotate(180deg); padding:0 2px; }
+  #shelf .older { flex:0 0 auto; align-self:center; background:none; border:1px solid #2e2823; border-radius:999px;
+    color:var(--dim); font:inherit; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+    padding:7px 11px; cursor:pointer; white-space:nowrap; }
+  #shelf .older:hover { border-color:var(--gold); color:var(--gold); }
   #shelfline { flex:0 0 auto; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
                color:#7a7164; padding:6px 2px 0; }
   #shelfline { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
@@ -515,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 386;
+const BUILD_NO = 387;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -12684,7 +12692,14 @@ function renderShelf() {
   // explained again - the wording stays until he has actually opened a card. (7 Nov 2026)
   let told = '';
   try { told = localStorage.getItem(SHELF_TOLD) || ''; } catch (e) {}
-  if (count) count.textContent = 'the shelf · ' + shelf.length + (told ? '' : ' · tap a card to open it');
+  if (count) {
+    /* BUILD 387: the count says how many are behind the days before today, so he knows the row is not all of it. */
+    let olderN = 0;
+    try { olderN = shelfByDay(shelf).filter((g) => g.key !== 'today' && g.key !== 'undated').reduce((a, g) => a + g.cards.length, 0); } catch (e) {}
+    count.textContent = 'the shelf · ' + shelf.length
+      + (olderN ? ' · ' + olderN + ' before today' : '')
+      + (told ? '' : ' · tap a card to open it');
+  }
   if (clearBtn) clearBtn.hidden = false;
   try { drawCards(el); } catch (e) {
     el.innerHTML = '';
@@ -12822,9 +12837,92 @@ function cardShell(it, label) {
   return { card, body };
 }
 
+/* BUILD 387. THE SHELF READS BY DAY.
+   19 Nov 2026, his ruling: "people can share 30 songs a day and later receive another 30 and the shelf will soon
+   becomes a haystack and I've experienced it multiple times." Thirty in and thirty out is sixty cards, and a flat
+   row that grows is not a shelf. Today's landings stay where his eye is; everything before today sits behind one
+   tap, grouped under the day it landed. Nothing is thrown away and nothing is capped - the day is what makes the
+   row readable, not a smaller number. */
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+let shelfOlderOpen = false;
+
+function dayOfCard(it) {
+  const w = String((it && (it.when || it.at || it.kept_at)) || '');
+  const t = w ? Date.parse(w) : NaN;
+  if (!isFinite(t)) return 'undated';
+  const d = new Date(t); d.setHours(0, 0, 0, 0);
+  const n = new Date(); n.setHours(0, 0, 0, 0);
+  return d.getTime() === n.getTime() ? 'today' : ('d' + d.getTime());
+}
+
+/* Newest day first, today always first, and anything with no date last - it is not "today" by accident. */
+function shelfByDay(cards) {
+  const groups = [], byKey = new Map();
+  (Array.isArray(cards) ? cards : []).forEach((it) => {
+    const k = dayOfCard(it);
+    let g = byKey.get(k);
+    if (!g) { g = { key: k, label: '', cards: [] }; byKey.set(k, g); groups.push(g); }
+    g.cards.push(it);
+  });
+  groups.sort((a, b) => {
+    if (a.key === 'today') return -1;
+    if (b.key === 'today') return 1;
+    if (a.key === 'undated') return 1;
+    if (b.key === 'undated') return -1;
+    return Number(b.key.slice(1)) - Number(a.key.slice(1));
+  });
+  groups.forEach((g) => {
+    if (g.key === 'today') g.label = 'today';
+    else if (g.key === 'undated') g.label = 'no date';
+    else {
+      const d = new Date(Number(g.key.slice(1)));
+      g.label = d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()];
+    }
+  });
+  return groups;
+}
+
+/* What the row draws, in order: today, then anything the record gave back with no date on it (a card with no
+   date is not hidden behind a tap - it might be the newest thing he has), then the pill that opens the days
+   before, then each earlier day under its own label once he opens them. The card builder below is untouched:
+   it is handed a different list. */
+function shelfDrawList(cards, olderOpen) {
+  const groups = shelfByDay(cards);
+  const shown = groups.filter((g) => g.key === 'today' || g.key === 'undated');
+  const older = groups.filter((g) => g.key !== 'today' && g.key !== 'undated');
+  const out = [];
+  shown.forEach((g) => g.cards.forEach((c) => out.push({ card: c })));
+  if (older.length) {
+    const n = older.reduce((a, g) => a + g.cards.length, 0);
+    out.push({ pill: olderOpen ? 'hide the days before' : 'before today \u00b7 ' + n });
+    if (olderOpen) {
+      older.forEach((g) => {
+        out.push({ label: g.label });
+        g.cards.forEach((c) => out.push({ card: c }));
+      });
+    }
+  }
+  return out;
+}
+
 function drawCards(el) {
   el.innerHTML = '';
-  shelf.forEach((it) => {
+  shelfDrawList(shelf, shelfOlderOpen).forEach((entry) => {
+    if (entry.pill) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'older';
+      b.textContent = entry.pill;
+      b.onclick = () => { shelfOlderOpen = !shelfOlderOpen; renderShelf(); };
+      el.appendChild(b);
+      return;
+    }
+    if (entry.label) {
+      const lab = document.createElement('div');
+      lab.className = 'daylab'; lab.textContent = entry.label;
+      el.appendChild(lab);
+      return;
+    }
+    const it = entry.card;
     const k = it.kind === 'thought' ? 'thinking about'
       : (it.kind === 'fact' ? 'looked up'
         : (it.kind === 'map' ? 'a map you can open' : (it.kind || 'link')));
