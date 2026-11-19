@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 394;
+const BUILD_NO = 395;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -834,6 +834,25 @@ function turnClaim(what) {
      empty.held - nothing was heard while the door was answering, so it says nothing at all
      ask        - nothing was heard and nothing is in flight, so it asks once
    The test is a-tail-fragment-extends-the-turn-it-belongs-to, written before this. */
+/* BUILD 395. THE EAR SPELLS AN ACRONYM AS NUMBERS, SO THE DOOR PUTS IT BACK.
+   19 Nov 2026, 23:4x, live: he asked about the ATP Finals and his own line on the screen read "80 EP". The search
+   then answered correctly, which is what made it worth fixing rather than shrugging at: the door had understood him
+   and the world had answered him, and the only thing wrong was the words the ear handed over, sitting in his own
+   line where he reads them back.
+   The repair is deliberately narrow. Only a pattern that cannot mean anything else is touched, and every repair is
+   written to the record as ear.repaired, so a change to his words is never silent. This is a floor under the ear, not
+   a substitute for it: the phrase set in the relay is where the same fix belongs properly, and "ATP" now goes in it. */
+const ACRONYM_REPAIRS = [
+  [/\b80\s*[-.]?\s*e\.?\s*p\.?\b/gi, 'ATP'],      // "80 EP", "80EP", "80 e.p."
+  [/\ba\.?\s+t\.?\s+p\.?\b/gi, 'ATP'],           // "A T P", "A.T.P"
+];
+
+function repairAcronyms(text) {
+  let t = String(text == null ? '' : text);
+  for (const [rx, to] of ACRONYM_REPAIRS) t = t.replace(rx, to);
+  return t;
+}
+
 function earFinalVerdict(v) {
   const text = String((v && v.text) || '').trim();
   const turnOpen = !!(v && v.turnOpen);
@@ -14685,10 +14704,15 @@ function earOpen() {
       try { f = JSON.parse(ev.data); } catch (e) { return; }
       if (!f) return;
       /* A partial is what the ear thinks so far, and it is never the turn. The finals are the turn. */
-      if (f.t === 'partial') { if (f.text) earLive = String(f.text); return; }
+      if (f.t === 'partial') { if (f.text) earLive = repairAcronyms(String(f.text)); return; }
       if (f.t === 'final') {
         if (Array.isArray(f.vpv) && f.vpv.length) earVp = f.vpv.map(Number);
-        const t = String(f.text || '').trim();
+        const raw = String(f.text || '').trim();
+        const t = repairAcronyms(raw);
+        if (t !== raw) {
+          logLine('ear.repaired', '"' + raw.slice(0, 80) + '" -> "' + t.slice(0, 80) + '"',
+            { level: 'info', target: 'hear' });
+        }
         if (t) earText = earText ? earText + ' ' + t : t;
         earConf = (typeof f.conf === 'number' ? f.conf : null);
         logLine('ear.final', t + ' \u00b7 conf ' + (f.conf == null ? '?' : f.conf) + ' \u00b7 ' + (f.lang || ''),
