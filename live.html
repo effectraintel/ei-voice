@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 395;
+const BUILD_NO = 396;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4167,6 +4167,45 @@ function afterSoundBeat() {
       + 'to go with it?" Say nothing about the sound, offer no versions, describe no pictures, and make nothing yet.', true);
   } catch (e) {}
   try { railNote('journey \u00b7 sound locked \u00b7 picture asked, in words'); } catch (e) {}
+}
+
+/* BUILD 396. A QUESTION THE DOOR OWES IS NEVER LEFT UNSAID. The cover question is the last thing the making needs,
+   and on 395 it was minted, dropped as never heard, and never asked again, so he sat waiting on a silent door. */
+function beatStillOwed() {
+  try {
+    const b = String(songDraft.askBeat || '');
+    if (!b) return false;
+    if (b === 'subject') return !songDraft.said;
+    if (b === 'sound') return !soundIsReal(songDraft.sound);
+    if (b === 'cover') return !pictureAnswered();
+    return true;
+  } catch (e) { return false; }
+}
+
+function reAskOpenBeat() {
+  try {
+    if (!beatStillOwed()) return false;
+    const b = String(songDraft.askBeat || '');
+    logLine('journey.reask', 'the question was never said, so the door asks it again \u00b7 ' + b,
+      { level: 'warn', target: 'music' });
+    if (b === 'cover') {
+      doorNote('Ask him exactly this, one short line and nothing before or after it: "Do you want a cover picture '
+        + 'to go with it?" Say nothing about the sound, offer no versions, describe no pictures, and make nothing yet.',
+        true);
+      railNote('journey \u00b7 sound locked \u00b7 picture asked again');
+      return true;
+    }
+    if (b === 'sound') {
+      doorNote('Ask him exactly this, one short line: "What kind of music should it be?" Add nothing to it.',
+        true);
+      return true;
+    }
+    if (b === 'subject') {
+      doorNote('Ask him exactly this, one short line: "What should the song be about?" Add nothing to it.', true);
+      return true;
+    }
+    return false;
+  } catch (e) { return false; }
 }
 
 function chainBeat(beat) {
@@ -8730,7 +8769,26 @@ function openQuestionId() {
   return '';
 }
 
+/* BUILD 396. ONE SENTENCE OPENS ONE TURN, AND HIS WORDS DO NOT CLOSE THE QUESTION THEY EARNED.
+   19 Nov 2026, 21:41:12, live on 395. He was making a song about the big waves in California: the subject went in,
+   then "sixties rock and roll" for the sound. The door minted its cover question at 21:41:12.406. Then the SAME
+   utterance went through beginTurn a second time at 21:41:12.502, and that second pass ran closeDirective with "he
+   spoke, so the door decides again" - shutting the mouth on the question his own answer had just earned. The note
+   was dropped at 21:41:14.469 as never heard, song.make.held recorded that nothing was armed, and the door went
+   silent. His report: "I am now trying to make a song about waves but nothing is confirmed after I said the genre."
+   Two rules now, both mechanical:
+     - the same words arriving again reuse the turn already open instead of beginning a new one;
+     - a directive minted at or after his words arrived is the door's answer to those words, so those words cannot
+       close it. Only an older line is cancelled by him speaking. */
 function beginTurn(raw) {
+  const saidSame = String(raw || '').trim();
+  try {
+    if (curTurn && saidSame && curTurn.said_raw === saidSame && Date.now() - curTurn.at < 3000) {
+      logLine('turn.reused', 'the same words arrived again, so this is the turn already open \u00b7 '
+        + saidSame.slice(0, 80), { level: 'info', target: 'turn' });
+      return curTurn;
+    }
+  } catch (e) {}
   const said = String(raw || '');
   /* BUILD 340. ONE UTTERANCE, ONE ROW. 18 Nov 2026, 21:05: his two sentences were drawn as one block with no break
      between them - "What is the weather? currently in Palitu You're not speaking to me." - because his bubble is only
@@ -8756,7 +8814,15 @@ function beginTurn(raw) {
   fillerCut = 0;
   mouthQuietUntil = 0; quietLogged = 0;      // build 335: he spoke, so the mouth is free again
   unscriptedLogged = 0;
-  closeDirective('he spoke, so the door decides again before anything is said');   // build 336
+  /* build 336, narrowed by 396: a line the door minted in answer to these very words is not cancelled by them. */
+  try {
+    if (directiveOpen && directiveAt && heardAt && directiveAt >= heardAt) {
+      logLine('mouth.directive.kept', 'the door asked this in answer to his words, so his own words do not close it',
+        { level: 'info', target: 'mouth' });
+    } else {
+      closeDirective('he spoke, so the door decides again before anything is said');   // build 336
+    }
+  } catch (e) { closeDirective('he spoke, so the door decides again before anything is said'); }
   try {
     logLine('turn.open', said.slice(0, 200), {
       level: 'info', target: 'turn',
@@ -14112,6 +14178,8 @@ function handleFrame(text) {
         { level: 'warn', target: 'mouth' });
       pendingMouth = []; pendingMouthAt = 0;
       unheardAt = 0; heardAt = 0;
+      /* BUILD 396: if that dropped line was the door's own question, it is asked again rather than lost. */
+      try { setTimeout(() => { try { reAskOpenBeat(); } catch (e) {} }, 1200); } catch (e) {}
       /* BUILD 383. AND IT IS NOT A BUBBLE EITHER.
          19 Nov 2026, 14:05, live on 382: he silenced the voice and opened it again. The mouth began a greeting before
          anything had asked for words ("nothing has asked for words yet, so this waits: I am"), the door dropped it as
