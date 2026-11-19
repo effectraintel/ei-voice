@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 382;
+const BUILD_NO = 383;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2407,6 +2407,16 @@ function stampSession() {
   const mm = String(now.getMinutes()).padStart(2, '0');
   d.textContent = 'session opened · ' + hh + ':' + mm + ' · ' + voice;
   logEl.appendChild(d);
+  /* BUILD 383. A NEW SESSION MAY NOT ANCHOR ITS LINES INTO THE OLD ONE.
+     An engine line is inserted after the row of the turn the door last asked about. On a reopened session that row is
+     in the previous session, above the divider, so the first line of the new sitting was drawn up there and his own
+     line went below it. The divider is a hard edge: nothing after it belongs above it. */
+  try {
+    rowAnchor = null;
+    turns.you = null; turns.engine = null;
+    said.you = ''; said.engine = '';
+    streamMode.you = null; streamMode.engine = null;
+  } catch (e) {}
   logEl.scrollTop = logEl.scrollHeight;
 }
 
@@ -9970,12 +9980,21 @@ let owedLine = '', owedAt = 0, lineSaid = '', lineSaidAt = 0;
    the preempted sentence left `awaitingFirstAudio` standing, so the door believed a reply was still coming, held its
    own question for eight seconds and then forced it out - which is how the silence watch came to send a second copy
    first. One place does the cutting now, so a case can prove it without a socket. */
+/* BUILD 383. A NODE LEAVES THE LANE WHATEVER THE BROWSER OFFERS. */
+function removeNode(n) {
+  try {
+    if (!n) return;
+    if (typeof n.remove === 'function') { n.remove(); return; }
+    if (n.parentNode) n.parentNode.removeChild(n);
+  } catch (e) {}
+}
+
 function dropSentence() {
   try { barge(); } catch (e) {}
   speaking = false;
   awaitingFirstAudio = false;
   said.engine = '';
-  if (turns.engine) { try { turns.engine.remove(); } catch (e) {} turns.engine = null; }
+  if (turns.engine) { removeNode(turns.engine); turns.engine = null; }
 }
 
 /* BUILD 335. ONCE THE DOOR HAS ASKED, THE MOUTH HAS NOTHING TO ADD. 19:43:15.6, live on 334: while he named the
@@ -13694,6 +13713,13 @@ function handleFrame(text) {
         { level: 'warn', target: 'mouth' });
       pendingMouth = []; pendingMouthAt = 0;
       unheardAt = 0; heardAt = 0;
+      /* BUILD 383. AND IT IS NOT A BUBBLE EITHER.
+         19 Nov 2026, 14:05, live on 382: he silenced the voice and opened it again. The mouth began a greeting before
+         anything had asked for words ("nothing has asked for words yet, so this waits: I am"), the door dropped it as
+         unheard - and LEFT THE BUBBLE WHERE IT WAS, above the session divider. When he then spoke, the answer was
+         written into that same bubble, so the transcript read engine answer, divider, his question. He described it
+         exactly: "my speech to text continued under while the engine continued above". */
+      try { dropSentence(); } catch (e) {}
       try { endTurn('nothing was heard'); } catch (e) {}
       return;
     }
