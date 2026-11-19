@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 381;
+const BUILD_NO = 382;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -588,6 +588,8 @@ const mouthMaySound = () => !typed() && !turnBeganMuted;
    ------------------------------------------------------------------------------------------------------------- */
 let thinkHold = false;         // output audio is held while a thinking call is outstanding
 let worldBusyUntil = 0;
+let lastNoteSentAt = 0;        // build 382: when a note last left, so the silence watch cannot talk over its answer
+let forwardingNote = false;    // build 382: this note carries his own words, so it is the reply and keeps its licence
 /* BUILD 381. SIX SECONDS WAS NEVER A THINKING DEADLINE. 19 Nov 2026, 13:34:14, live: the model was still deciding and
    calling a tool when the door declared the turn a failure and closed it, so the flight prices it fetched two seconds
    later had nowhere to go. Thinking runs until it is done; the deadline exists only so a hung socket cannot deafen
@@ -1132,8 +1134,11 @@ function heardFlush(why) {
          quoted line as the line the mouth OWES - so it demanded he say his own sentence back, and every correct
          answer was thrown away: 00:22:53 "the door asked for one line and this is not it: The weather in Ballito is
          on your shelf", and at 00:23:32 the mouth recited its own capabilities instead. His words go in bare. */
-      doorNote('He said, in his own words: ' + String(acted).slice(0, 300) + '. Answer him in one short line, in '
-        + 'your own words, and nothing else. Do not ask him to repeat it and do not say you did not hear him.', true);
+      forwardingNote = true;
+      try {
+        doorNote('He said, in his own words: ' + String(acted).slice(0, 300) + '. Answer him in one short line, in '
+          + 'your own words, and nothing else. Do not ask him to repeat it and do not say you did not hear him.', true);
+      } finally { forwardingNote = false; }
     } catch (e) {}
   }, 2500);
 }
@@ -9813,6 +9818,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   
   function sendNoteNow(text, speak) {
   notesSentThisTurn++;
+  lastNoteSentAt = Date.now();
   if (forwardTimer) { try { clearTimeout(forwardTimer); } catch (e) {} forwardTimer = 0; }
     // STAGE 1: a note the mouth must SPEAK is a directive, and it is minted here, before anything is
     // sent, so the words that follow can be traced back to it. A context note (speak false) is not a
@@ -9856,6 +9862,16 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     } catch (e) {}
   }
   
+  /* BUILD 382. A FORWARDED NOTE IS THE ANSWER TO HIS TURN, SO IT KEEPS ITS LICENCE.
+     The eight-second rule exists so a door-scripted line never cuts a sentence in half. It must not apply to the note
+     that carries his own words to the mouth: that note IS the reply, and downgrading it to context is how a sentence
+     of his went unanswered at 14:03:02. */
+  function flushSpeaks(kept) {
+    try {
+      return kept.some((n) => n.speak && (n.forward || Date.now() - n.at < 8000));
+    } catch (e) { return false; }
+  }
+
   function flushNotes() {
     if (!noteQueue.length) return;
     const kept = [];
@@ -9886,7 +9902,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     if (!kept.length) return;
     // Anything that wanted to speak but waited too long arrives as context instead: late is better than
     // cutting a sentence in half.
-    const speak = kept.some((n) => n.speak && Date.now() - n.at < 8000);
+    const speak = flushSpeaks(kept);
     /* BUILD 338. A LINE THAT MISSED ITS MOMENT IS NOT A LINE THAT WAS SAID. It goes as context so the mouth still
        knows it, but the record says plainly that the door wanted it spoken and could not. */
     if (!speak && kept.some((n) => n.speak)) {
@@ -10126,7 +10142,7 @@ function doorNote(text, speak) {
   /* BUILD 334. A SENTENCE STILL BEING SAID IS A TURN IN FLIGHT. 18 Nov 2026, 19:33:16.2: the landing note went out
      while the mouth was mid-utterance, and it answered "Boss?" instead of the line the door gave it. */
   if ((turnInFlight || speaking || awaitingFirstAudio || sentenceInFlight) && !hiddenHold) {
-    noteQueue.push({ text: t, speak: !!speak, at: Date.now() });
+    noteQueue.push({ text: t, speak: !!speak, at: Date.now(), forward: !!forwardingNote });
     noteQueuedAt = noteQueuedAt || Date.now();
     if (noteQueue.length > 6) noteQueue.shift();
     logLine('note.held', (speak ? 'speak: ' : 'context: ') + t.slice(0, 80), { level: 'info', target: 'note' });
@@ -11621,7 +11637,16 @@ function doorPatience(v) {
 }
 
 /* May the door nudge the mouth with a second note? Only when nobody is already answering and nothing is in flight. */
+/* BUILD 382. A NOTE THAT HAS JUST GONE OUT IS THE DOOR WAITING, NOT THE DOOR SILENT.
+   19 Nov 2026, 14:02:55-14:03:15, live on 381: he said "Yeah, it's quite hot." at 14:02:59. The note carrying his own
+   words was held behind a turn that was still open and only went to the mouth at 14:03:10.7. One point three seconds
+   later the silence watch - armed when his turn began, twelve seconds earlier - decided "no words came back", sent a
+   competing note, and the mouth answered THAT one: "I'm still here, Boss, what's on your mind?". His sentence was
+   never answered. The clue he gave is exact: the break sits with the "Go on, Boss" line, because that line is this
+   same watch firing, and it fired again over his answer. */
 function silenceNudgeAllowed(v) {
+  if (directiveOpen) return false;                                          // the door asked for words and has not had them
+  if (lastNoteSentAt && Date.now() - lastNoteSentAt < 6000) return false;    // a note is still being answered
   const owner = String((v && v.owner) || '');
   const answered = !!(v && v.answered);
   const searching = !!(v && v.searching);
