@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 371;
+const BUILD_NO = 372;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5987,10 +5987,21 @@ function houseIntent(args) {
    published") that the door then put on his shelf as a looked-up fact. A question about the door, its rail,
    its shelf, its voice or its last turn is answered from what the door did this session, or not at all.
    Nothing is searched and no card is written. */
-const ABOUT_THE_DOOR = /\b(?:sharing rail|the rail|your rail|the door|your door|the shelf|my shelf|your shelf|your voice|your ears|your mouth|why did you|why didn'?t you|why (?:is|was|are|were) (?:it|that|this|the (?:door|rail|shelf))|what (?:did|have) you (?:do|done|just)|what went wrong|what happened|why (?:can'?t|couldn'?t|won'?t|did(?:n'?t)?) (?:it|that|the))\b/i;
+/* BUILD 372. "WHAT HAPPENED" IS NOT A QUESTION ABOUT THE DOOR.
+   19 Nov 2026, 11:31:23, live on 371: he asked "Can you tell me what happened with the Paris Masters final?" and the
+   door refused to search it - world.refused, "about the door, not the world" - then said "I don't know". He explained
+   "It's a tennis tournament" and it refused again. The guard that keeps the door from searching about itself was
+   firing on the words "what happened" alone, and "what happened" is how a person asks about the world.
+
+   So the two kinds of phrase are now separate. Naming a part of the door (the door, the rail, the shelf, the voice,
+   the ears, the mouth, the making, the cover, the song), or asking what the door itself did, is about the door.
+   "What happened" and "why was it" only count when the sentence also names one of those things. */
+const DOOR_ITSELF = /\b(?:sharing rail|the rail|your rail|the door|your door|the shelf|my shelf|your shelf|your voice|your ears|your mouth|the making|the cover|why did you|why didn'?t you|what (?:did|have) you (?:do|done|just)|what went wrong|why (?:can'?t|couldn'?t|won'?t|did(?:n'?t)?) (?:it|that|the))\b/i;
+const DOOR_NOUNS = /\b(?:the door|your door|the rail|your rail|sharing rail|the shelf|my shelf|your shelf|your voice|your ears|your mouth|the making|the cover|the song|this door|that door)\b/i;
 function askIsAboutTheDoor(ask) {
   const a = String(ask || '');
-  if (!ABOUT_THE_DOOR.test(a)) return false;
+  const ambiguous = /\bwhat happened\b|\bwhy (?:is|was|are|were) (?:it|that|this)\b/i.test(a);
+  if (!DOOR_ITSELF.test(a) && !(ambiguous && (DOOR_NOUNS.test(a) || /\b(?:with|to|about) you\b/i.test(a)))) return false;
   // a real world question that merely mentions a door or a shelf ("how do I build a shelf") is not about this door
   if (/\b(?:build|make|buy|fit|install|paint|hang|measure)\b[^.?!]{0,30}\b(?:shelf|door)\b/i.test(a)) return false;
   return true;
