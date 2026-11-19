@@ -1,8 +1,14 @@
 {
- "latest": 397,
- "updated": "2026-11-20T00:12",
+ "latest": 398,
+ "updated": "2026-11-20T00:28",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 398,
+   "file": "v398.html",
+   "at": "2026-11-20T00:28",
+   "note": "thinking names the journey, and the reader may not veto it into silence"
+  },
   {
    "n": 397,
    "file": "v397.html",

@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 397;
+const BUILD_NO = 398;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -954,6 +954,23 @@ function obeyThinking(o, said) {
       if (TURN.owner) {
         logLine('think.refused', 'the door already answered turn ' + TURN.id + ', so thinking does not route it again',
           { level: 'warn', target: 'turn' });
+        return;
+      }
+      /* BUILD 398. THINKING NAMED THE JOURNEY, SO THE READER MAY NOT VETO IT INTO SILENCE.
+         19 Nov 2026, 22:06:31, live on 397. He said "Let's create a quickly create another song." Thinking read
+         it correctly - MAKE, 2415ms, with its own question - and handed it to the door's path. The door's own
+         reader found no route in those words (song.read never ran, and song.route.shadow recorded the
+         disagreement: gate "", solver "make", agree false), so the gate returned without a word. Thinking's
+         question was thrown away with it, the turn closed empty at 22:06:34.249, and the door said NOTHING for
+         the next seventy seconds while he waited. His words: "never answered my request."
+         Thinking has already decided what this is. The reader is a second opinion on the same sentence, and a
+         second opinion may not overrule a decision into an empty turn. */
+      let readNone = false;
+      try { readNone = readRoute(String(said || ''), { fork: false }).route === 'none'; } catch (e) {}
+      if (readNone && o.journey === 'MAKE') {
+        logLine('think.opens', 'thinking named MAKE and the door\'s own reader found nothing in the same words, '
+          + 'so the making opens anyway \u00b7 ' + String(said).slice(0, 60), { level: 'warn', target: 'think' });
+        try { openMakingNow(said); } catch (e) {}
         return;
       }
       return doorHears(said);
@@ -5460,6 +5477,28 @@ function forkAnswer(heard) {
   return true;
 }
 
+/* BUILD 398. ONE WAY TO OPEN A MAKING, SO TWO CALLERS CANNOT OPEN IT DIFFERENTLY.
+   The route gate has always opened the making from here; thinking's handoff needs the same door when its own
+   reader cannot find the ask, and a second copy of these lines would drift from this one. */
+function openMakingNow(raw) {
+  songRoute = { pick: 'make', at: Date.now() };
+  openSongBeat();
+  /* Build 233 · THE FIRST QUESTION OF THE JOURNEY IS THE DOOR'S, AND IT IS ASKED WHATEVER THE MOUTH DOES.
+     15 Nov 2026, 00:02: this note went out and nothing came back - no words, no sound, no end of turn -
+     and the note's own instruction was conditional ("ask what it should say if you do not already have his
+     words"). The door now names the question and watches that it is asked. */
+  const beatLine = openJourneyBeat();
+  if (beatLine) {
+    doorAsk('A new one, then. ' + beatLine,
+      'The route is a NEW song, made here. Say in one short line that this is a new one, then ask him: "'
+      + beatLine + '" Nothing has been made yet. Do not search for an existing song and do not describe '
+      + 'the song.');
+  } else {
+    doorNote('The route is a NEW song. Say so in one short line. Do not search for an existing song.', true);
+  }
+  if (songRoute.pick) logLine('song.route', songRoute.pick, { level: 'info', target: 'music' });
+}
+
 function songRouteGate(heard) {
   const raw = String(heard || '');
   const cue = correctionCue(raw);
@@ -5501,21 +5540,7 @@ function songRouteGate(heard) {
         dropMaking('a new ask replaces the words held from before');
       }
     } catch (e) {}
-    songRoute = { pick: 'make', at: Date.now() };
-    openSongBeat();
-    /* Build 233 · THE FIRST QUESTION OF THE JOURNEY IS THE DOOR'S, AND IT IS ASKED WHATEVER THE MOUTH DOES.
-       15 Nov 2026, 00:02: this note went out and nothing came back - no words, no sound, no end of turn -
-       and the note's own instruction was conditional ("ask what it should say if you do not already have his
-       words"). The door now names the question and watches that it is asked. */
-    const beatLine = openJourneyBeat();
-    if (beatLine) {
-      doorAsk('A new one, then. ' + beatLine,
-        'The route is a NEW song, made here. Say in one short line that this is a new one, then ask him: "'
-        + beatLine + '" Nothing has been made yet. Do not search for an existing song and do not describe '
-        + 'the song.');
-    } else {
-      doorNote('The route is a NEW song. Say so in one short line. Do not search for an existing song.', true);
-    }
+    openMakingNow(raw);
   } else if (wantShare) {
     // 12 Nov 2026: "I want to share a song" names no origin, so the door asks the fork rather than deciding
     // that sharing means the stores. A title, a quoted name, or "the music stores" settles it without asking.
