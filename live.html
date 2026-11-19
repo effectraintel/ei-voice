@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 379;
+const BUILD_NO = 380;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -13794,7 +13794,7 @@ async function vpEnrolThenGreet() {
     logLine('vp.ask', 'no voice on record: he is asked once, and never again', { level: 'notice', target: 'voice' });
     doorAsk(line, 'Say exactly this, in one line, and nothing else: "' + line + '" Then stop and say nothing more.');
     await vpWaitQuiet(14000);
-    const got = await vpRecord(7.0);
+    const got = await vpRecord(11.0);
     if (got === null) {
       /* No answer at all: this relay does not measure voices. He is not asked again this session and nothing is said,
          because a door that apologises for a capability it never had is worse than one that simply carries on. */
@@ -13847,7 +13847,7 @@ function vpRecord(seconds) {
       settled = true;
       vpRecording = false;
       try { if (vpWs && vpWs.readyState === 1) vpWs.send(JSON.stringify({ t: 'end' })); } catch (e) {}
-      logLine('vp.sample', 'recording stopped: ' + why + ' \u00b7 ' + vpFrames.length + ' frame(s) \u00b7 '
+      logLine('vp.sample', 'recording stopped: ' + why + ' \u00b7 ' + vpHeard + ' voiced frame(s) \u00b7 '
         + Math.round((Date.now() - vpStartedAt) / 100) / 10 + 's', { level: 'info', target: 'voice' });
       setTimeout(() => {
         try { if (vpWs) vpWs.close(); } catch (e) {}
@@ -13878,7 +13878,11 @@ function vpRecord(seconds) {
         }
         if (f.t === 'end' && !settledAnswer) finish('the relay closed the turn');
       };
-      w.onerror = () => { logLine('vp.sample.error', 'the sample socket failed', { level: 'error', target: 'voice' }); finish('the socket failed'); };
+      w.onerror = () => {
+        if (settledAnswer) return;   // it answered and then closed; that is a closed socket, not a failure
+        logLine('vp.sample.error', 'the sample socket failed', { level: 'error', target: 'voice' });
+        finish('the socket failed');
+      };
       w.onclose = () => { if (vpRecording) finish('the socket closed'); };
     } catch (e) {
       logLine('vp.sample.fail', String((e && e.message) || e), { level: 'error', target: 'voice' });
@@ -14020,6 +14024,10 @@ function closeMic() {
    his sample, and the sample ends shortly after he stops rather than running to the cap. */
 function vpFeedFrame(data) {
   if (!vpRecording || !vpWs || vpWs.readyState !== 1) return;
+  /* BUILD 380. The sample is HIS voice, never the door's. While the mouth is speaking, its own sound is in the room
+     and the microphone hears it; feeding that in makes the reference a mixture and the man then fails to match
+     himself. */
+  try { if (playing()) return; } catch (e) {}
   let sum = 0;
   for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
   const rms = Math.sqrt(sum / data.length);
@@ -14078,6 +14086,15 @@ const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
    It is a courtesy gate, not a lock. No enrolment, no numbers, a short turn, or a sentence that says "it's me" all
    mean the turn is answered exactly as before. A mismatch never closes the typed lane. */
 const VP_FLOOR_DEFAULT = 0.90;
+/* BUILD 380. THE GATE MAY NEVER SILENCE HIM, AND ON 19 NOVEMBER IT DID.
+   His own voice measured 0.823, 0.845, 0.857, 0.864, 0.892 and 0.913 across six turns of one sitting, so a 0.90 floor
+   refused the man it was built for six times in two minutes, including "Tell me what's the weather in Ballito" — which
+   is why the door "took a while to hear" him. A measure that cannot separate him from himself cannot be a wall.
+   So there are two bands: below VP_OTHER the voice is clearly not his and the door stays quiet; between VP_OTHER and
+   the floor it answers him and records the number, because the cost of answering a television is one sentence and the
+   cost of ignoring him is the door. The band is provisional until it is calibrated on his real voice, and every score
+   is written down so that calibration can happen from the record rather than from a guess. */
+const VP_OTHER = 0.72;
 const VP_FORCE = /\b(it'?s me|it is me|that'?s me|this is me)\b/i;
 let vpKnown = false, vpEnrolled = false, vpVector = null, vpFloor = VP_FLOOR_DEFAULT;
 let vpStatusP = null, vpTried = false, vpSupported = null;
@@ -14315,12 +14332,14 @@ function vpBlocks(text) {
     const score = vpCos(earVp, vpVector);
     earVp = null;
     if (score == null) return false;
-    logLine('vp.score', String(score.toFixed(3)) + ' \u00b7 floor ' + vpFloor + ' \u00b7 ' + words.slice(0, 60),
-      { level: score >= vpFloor ? 'info' : 'warn', target: 'voice' });
-    if (score >= vpFloor) { vpSuppressed = 0; return false; }
+    const band = score >= vpFloor ? 'his' : (score >= VP_OTHER ? 'uncertain' : 'not-his');
+    logLine('vp.score', String(score.toFixed(3)) + ' \u00b7 band ' + band + ' \u00b7 floor ' + vpFloor
+      + ' \u00b7 other ' + VP_OTHER + ' \u00b7 ' + words.slice(0, 60),
+      { level: band === 'his' ? 'info' : 'warn', target: 'voice' });
+    if (score >= VP_OTHER) { vpSuppressed = 0; return false; }
     vpSuppressed++;
-    logLine('ear.other', 'that voice is not his (' + score.toFixed(3) + '), so the door stays quiet: '
-      + words.slice(0, 80), { level: 'warn', target: 'voice' });
+    logLine('ear.other', 'that voice is clearly not his (' + score.toFixed(3) + ' below ' + VP_OTHER
+      + '), so the door stays quiet: ' + words.slice(0, 80), { level: 'warn', target: 'voice' });
     /* Three in a row is not a television; it is either a room full of people or him with a cold. One short line, once
        a session, so nobody is left talking to a door that has gone deaf without saying so. */
     if (vpSuppressed >= 3 && !vpWarned) {
