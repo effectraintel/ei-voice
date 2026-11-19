@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 388;
+const BUILD_NO = 389;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -10085,17 +10085,24 @@ let unheardAt = 0, heardAt = 0;
 /* The one question asked at the end of a sentence: did any of it reach him? */
 function sentenceWasHeard() { return !(unheardAt && unheardAt > heardAt); }
 
+let directiveAt = 0;
 function openDirective() {
   directiveOpen = true;
+  directiveAt = Date.now();
   try { if (directiveCap) clearTimeout(directiveCap); } catch (e) {}
   try {
     const capOnce = (extended) => {
       directiveCap = setTimeout(() => {
         if (!directiveOpen) return;
-        if (!directiveShouldClose({ searching: !!doorSearching, extended: extended })) {
-          logLine('mouth.directive.extended', 'the door is still looking, so the mouth is not shut yet',
+        const ageMs = Date.now() - directiveAt;
+        const spoke = mouthSpokeAt > directiveAt;
+        if (!directiveShouldClose({ searching: !!doorSearching, extended: extended, spoke: spoke, ageMs: ageMs })) {
+          const stillLooking = !!doorSearching && !extended;
+          logLine(stillLooking ? 'mouth.directive.extended' : 'mouth.directive.speaking',
+            stillLooking ? 'the door is still looking, so the mouth is not shut yet'
+              : 'the mouth has begun saying it, so it is not shut at the patience',
             { level: 'info', target: 'mouth' });
-          capOnce(true);
+          capOnce(extended || stillLooking);
           return;
         }
         directiveOpen = false;
@@ -11744,9 +11751,20 @@ function silenceNudgeAllowed(v) {
 }
 
 /* May the mouth be shut at the cap? Not while the door is still looking, and only once. */
+/* BUILD 389. A MOUTH THAT IS SPEAKING IS NOT A MOUTH THAT IS SILENT.
+   19 Nov 2026, 13:18:42 and 13:19:41, live on 388: the door shut its own mouth with "the line was never said inside
+   the door's patience" at 12.2 seconds and at 11.5 seconds, and the two answers landed 2.7 and 6.5 seconds after
+   that. Both had started speaking within three seconds of the note. The patience was counting to the END of the
+   sentence, and a sentence that is being said is not a failure to say it: the record then said two lines were
+   never said, and he heard both. So the rule is the start, not the end - once words have come back for this
+   directive it is being answered and is left alone, up to a ceiling, so nothing can hold the mouth open for ever. */
+const MOUTH_SPEAKING_CEILING_MS = 45000;
 function directiveShouldClose(v) {
   const searching = !!(v && v.searching);
   const extended = !!(v && v.extended);
+  const spoke = !!(v && v.spoke);
+  const ageMs = Number((v && v.ageMs) || 0);
+  if (spoke && ageMs < MOUTH_SPEAKING_CEILING_MS) return false;   // it is saying it: let it finish
   if (searching && !extended) return false;
   return true;
 }
@@ -13071,6 +13089,14 @@ function shelveHeld(card) {
   try {
     if (!shelfReplace(c.code, c)) shelfAdd(c);
     if (h && h.card === c) h.shelved = true;
+    /* BUILD 389. A SHELVE TAP IS A WRITE, NOT A TICKET.
+       19 Nov 2026, 13:19:12 and 13:19:58: he tapped Shelve on the Ballito weather and on Ukraine, both said
+       "shelved", and by 13:19:23 the record still held 0 cards and both cards were gone. The tap put the card
+       into this tab's array and nothing else - the row was never asked for - so the next read of the record
+       found no trace of it and pruned it, which is the shelf doing exactly what it is told. The button says
+       "shelved", so the record has to be told, in the same breath. keepFound is that write: it posts the card
+       and its facts to shelfKeep and logs whether the record took it. */
+    keepFound(c);
     shelfWriteAt = Date.now();
     shelfWriteKind = 'fact';
     logLine('shelf.manual', 'he put it on the shelf himself \u00b7 ' + c.code + ' \u00b7 ' + c.title,
