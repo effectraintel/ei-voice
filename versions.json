@@ -1,8 +1,14 @@
 {
- "latest": 396,
- "updated": "2026-11-19T23:56",
+ "latest": 397,
+ "updated": "2026-11-20T00:12",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 397,
+   "file": "v397.html",
+   "at": "2026-11-20T00:12",
+   "note": "a closed turn is not a busy door"
+  },
   {
    "n": 396,
    "file": "v396.html",

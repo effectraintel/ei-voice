@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 396;
+const BUILD_NO = 397;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -8948,6 +8948,18 @@ function endTurn(reason) {
       ms: curTurn.closed_at - curTurn.at,
     });
   } catch (e) {}
+  /* BUILD 397. A CLOSED TURN IS NOT A BUSY DOOR.
+     19 Nov 2026, 23:56, live on 396. He said "I want to make a song." Thinking settled it at 21:56:03.690, the
+     journey opened at 03.702, and the door wrote its subject question at 03.761 - then held it for eight seconds
+     until note.stale.turn released it at 11.730, so he heard the question at 13.457, nine seconds after the door
+     already knew what to ask. The turn had closed at 01.948 with nothing in it, but the flags that mean "a turn is
+     open, sound is in the air, the reply has not begun" are cleared only by the stale guard, never by the close.
+     So every note minted after an empty or preempted turn waited the full eight seconds. His words: "I just asked
+     i want to make a song, but it took long to prompt the next questions." The turn closing is the moment those
+     flags stop being true; the mouth's own `speaking` flag is what still holds a note while audio is in the air. */
+  turnInFlight = false;
+  awaitingFirstAudio = false;
+  sentenceInFlight = false;
   const done = Object.assign({}, curTurn);
   curDirective = null;
   return done;
@@ -10192,6 +10204,11 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     sendNoteNow(kept.map((n) => n.text).join(' '), speak);
   }
   
+  /* Build 397: the one definition of "the door is busy", so the close and the queue cannot disagree. */
+  function noteBusy() {
+    return !!(turnInFlight || speaking || awaitingFirstAudio || sentenceInFlight);
+  }
+
   function scheduleNoteFlush(delay) {
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => {
@@ -10214,7 +10231,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
       }
       // busy means a turn is open, sound is in the air, or the reply has not started yet — all three cut a
       // sentence if a note lands in them. Only silence counts as free.
-      const busy = turnInFlight || speaking || awaitingFirstAudio;
+      const busy = noteBusy();
       if (busy) { scheduleNoteFlush(400); return; }
       flushNotes();
     }, delay || 600);
