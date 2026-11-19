@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 393;
+const BUILD_NO = 394;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6302,6 +6302,74 @@ function huntClearedByWorld(songShapedAsk) {
   } catch (e) { return false; }
 }
 
+/* BUILD 394. A CHALLENGE TO AN ANSWER IS THE DOOR GOING BACK TO KNOW, NOT THE MOUTH APOLOGISING.
+   19 Nov 2026, 22:5x, live. He asked for "the latest results ... the ATP Masters finals" and the rail handed back the
+   2024 final. He said: "Okay, well, we in 2026 now. So then I wait. Why are you giving me 2024?" and the door
+   answered "I'm sorry, that is just what the search result said, Boss." Asked again - "That even possible. I mean,
+   what are you searching?" - it explained itself. He had to push a THIRD time, in his own words ("what's happening in
+   the tennis right now not like two years back"), before it found Ben Shelton beating Rafael Jodar that afternoon.
+   Nothing in the door treated a challenge as evidence that the KNOWING was wrong. It treated it as something to
+   defend. So: when his words challenge a fact the world gave him in this session, the door itself looks again, with
+   his correction folded into the question, and hands the mouth the new fact. The mouth is never asked to defend the
+   old one. This is the thinking loop the doctrine describes - a shortfall sends THINKING back to hunt exactly the
+   missing input - applied to the one thing that was missing: the fact was stale. */
+const WORLD_CHALLENGE = /\b(?:why (?:are|do|did) you (?:giving|give|telling|tell|showing|show|saying|say)|why didn(?:'|)t you (?:tell|say|give)|that(?:'| i)s (?:wrong|not right|old|out of date|from \d{4})|that was (?:wrong|from \d{4})|not right|isn(?:'|)t right|are you sure|that can(?:'|)t be|doesn(?:'|)t sound right|not the latest|not what i asked|two years (?:back|ago)|we(?:'| a)?re? in \d{4}|we in \d{4}|what year is that|you gave me|sounds old|is that (?:right|correct|current))\b/i;
+let worldRecheckedAt = 0, worldRecheckQ = '';
+
+/* The fact the door is standing on, if the world is what gave it to him. */
+function worldFactOnTheTable() {
+  try {
+    const l = knowLatest();
+    if (!l) return null;
+    return /world/i.test(String(l.source || '')) ? l : null;
+  } catch (e) { return null; }
+}
+
+/* True means the door owns this turn: his words were a challenge, and the world is being asked again. */
+function worldRecheck(said) {
+  const last = worldFactOnTheTable();
+  if (!last) return false;
+  if (!WORLD_CHALLENGE.test(said)) return false;
+  /* One re-look per challenge: saying the same thing twice must not become two searches. */
+  if (worldRecheckQ === said && Date.now() - worldRecheckedAt < 20000) return false;
+  if (!turnClaim('world')) return false;
+  worldRecheckedAt = Date.now(); worldRecheckQ = said;
+  /* His correction is folded into the question the fact came from, so the rail knows what was wrong with it. */
+  const ask = (String(last.q || '') + ' - he says that is not right: ' + said).slice(0, 300);
+  logLine('world.recheck', 'he challenged the fact the door gave him, so the world is asked again \u00b7 '
+    + said.slice(0, 90), { level: 'info', target: 'world' });
+  (async () => {
+    try {
+      const r = await fetch(FNBASE + 'eiWorldLookup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ q: ask, kind: 'web' }),
+      }).then((x) => x.json());
+      worldLookedAt = Date.now();
+      const facts = (r && r.ok && Array.isArray(r.facts)) ? r.facts.join(' ').trim() : '';
+      if (!facts) {
+        logLine('world.recheck.miss', 'the world had nothing for \u00b7 ' + ask.slice(0, 90), { level: 'warn', target: 'world' });
+        doorNote('He said the fact the door gave him was wrong or out of date, and the door looked again and the world '
+          + 'returned nothing. Say in one short line that you looked again and could not find it. Never repeat the '
+          + 'earlier answer, and never claim he was wrong.', true);
+        return;
+      }
+      knowCommit(ask, [facts], 'the world \u00b7 ' + String(r.engine || 'the search rail'));
+      logLine('world.recheck.found', facts.slice(0, 120) + ' \u00b7 ' + String(r.engine || ''),
+        { level: 'info', target: 'world' });
+      doorNote('He said the earlier answer was wrong or out of date, so the door looked again. The newest answer is: '
+        + facts + ' (source: ' + String(r.engine || 'the search rail') + ', as of ' + String(r.as_of || '') + '). '
+        + 'Say it in ONE short sentence with the date it is from. Do not defend the earlier answer, do not apologise '
+        + 'at length, and do not mention that you searched twice.', true);
+    } catch (e) {
+      logLine('world.recheck.failed', String((e && e.message) || e).slice(0, 120), { level: 'warn', target: 'world' });
+      doorNote('He said the earlier answer was wrong or out of date, and the door tried to look again and could not '
+        + 'reach the world. Say in one short line that you could not check it again just now.', true);
+    }
+  })();
+  return true;
+}
+
 async function handleWorldCall(call) {
   worldBusyUntil = Date.now() + 45000;    // build 381: a lookup in flight is not a thinking failure
   const args = call.args || {};
@@ -8833,6 +8901,9 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
         return;
       }
     } catch (e) {}
+    /* BUILD 394. A challenge to a fact the world gave him sends the door back to look, before anything else
+       answers for it. Placed here so an acknowledgement still wins and a song verdict is still his own. */
+    try { if (worldRecheck(said)) return; } catch (e) {}
     /* BUILD 301. "THAT IS THE ONE" IS HIS VERDICT, AND IT COMES FIRST.
        A yes is read by several steps (a choice list, a route question, a read-back), so the sentence that ends a hunt
        was being taken as an answer to something else and the rail was never asked. While a hunt is being narrowed, his
