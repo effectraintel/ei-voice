@@ -1,8 +1,14 @@
 {
- "latest": 369,
- "updated": "2026-11-19T09:05",
+ "latest": 370,
+ "updated": "2026-11-19T09:26",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 370,
+   "file": "v370.html",
+   "at": "2026-11-19T09:26",
+   "note": "the ear's boundary is one verdict"
+  },
   {
    "n": 369,
    "file": "v369.html",

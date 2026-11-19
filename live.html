@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 369;
+const BUILD_NO = 370;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -729,7 +729,7 @@ function thinkAndAct(said) {
 
 let sessionEpoch = 1;
 
-const TURN = { id: 0, epoch: 1, heard: '', owner: '', at: 0, said: [] };
+const TURN = { id: 0, epoch: 1, heard: '', owner: '', at: 0, said: [], answeredAt: 0, closedAt: 0 };
 
 function turnBegin(heard) {
   TURN.id++;
@@ -738,6 +738,8 @@ function turnBegin(heard) {
   TURN.owner = '';
   TURN.at = Date.now();
   TURN.said = [];
+  TURN.answeredAt = 0;
+  TURN.closedAt = 0;
   logLine('turn.begin', 'turn ' + TURN.id + ' \u00b7 epoch ' + TURN.epoch + ' \u00b7 ' + TURN.heard.slice(0, 70),
     { level: 'info', target: 'turn' });
   return TURN;
@@ -753,6 +755,48 @@ function turnClaim(what) {
   TURN.owner = what;
   logLine('turn.owner', what + ' owns turn ' + TURN.id, { level: 'info', target: 'turn' });
   return true;
+}
+
+/* BUILD 370. THE EAR'S BOUNDARY IS ONE DECISION, AND IT IS MADE IN ONE PLACE.
+   19 Nov 2026, 08:58:42-08:59:09, live: one sentence of his became three ear segments. The relay returned his real
+   question at 0.842, then the TAIL of the same sentence 3 seconds later ("Most is finals? Yeah." at 0.575), then an
+   empty segment while the door was still answering. Every segment became a turn, a new turn cancelled the answer
+   being built for the real question, and the empty one made the door say "I did not catch that" into its own
+   answer. He said, correctly, "you're not listening to what I'm saying".
+
+   So the boundary is now a verdict, not an accident of timing:
+     turn       - a real utterance with the door free to answer it
+     extend     - more words for the turn the door is still answering; they do not cancel it
+     empty.held - nothing was heard while the door was answering, so it says nothing at all
+     ask        - nothing was heard and nothing is in flight, so it asks once
+   The test is a-tail-fragment-extends-the-turn-it-belongs-to, written before this. */
+function earFinalVerdict(v) {
+  const text = String((v && v.text) || '').trim();
+  const turnOpen = !!(v && v.turnOpen);
+  const awaiting = !!(v && v.awaiting);
+  const ms = Number((v && v.msSinceTurn) || 0);
+  const mouthBusy = !!(v && v.mouthBusy);
+  if (!text) return (mouthBusy || (turnOpen && awaiting)) ? 'empty.held' : 'ask';
+  if (turnOpen && awaiting && ms < 9000) return 'extend';
+  return 'turn';
+}
+
+/* What the door knows about itself right now, read once, so the verdict never guesses. */
+function earVerdictNow(text) {
+  let turnOpen = false, awaiting = false, ms = 999999;
+  try {
+    turnOpen = !!(TURN && TURN.id && !TURN.closedAt);
+    /* A turn is waiting on an answer when a decider has claimed it OR a note is in flight for it. Without the
+       second half, his words arriving while the mouth was already being fed would still cancel that answer. */
+    awaiting = !!(turnOpen && !TURN.answeredAt && (TURN.owner || turnInFlight || (noteQueue && noteQueue.length)));
+    ms = TURN && TURN.at ? (Date.now() - TURN.at) : 999999;
+  } catch (e) {}
+  let mouthBusy = false;
+  try {
+    mouthBusy = !!(speaking || turnInFlight || awaitingFirstAudio
+      || (noteQueue && noteQueue.length) || owedLine || pendingMouth.length);
+  } catch (e) {}
+  return earFinalVerdict({ text: text, turnOpen: turnOpen, awaiting: awaiting, msSinceTurn: ms, mouthBusy: mouthBusy });
 }
 
 function earEpochOk(epoch) { return Number(epoch) === sessionEpoch; }
@@ -8358,6 +8402,7 @@ function endTurn(reason) {
   if (!curTurn) return null;
   curTurn.state_after = doorStateLabel();
   curTurn.closed_at = Date.now();
+  try { TURN.closedAt = curTurn.closed_at; } catch (e) {}
   curTurn.why = String(reason || '');
   try {
     logLine('turn.close', curTurn.why, {
@@ -13298,6 +13343,7 @@ function handleFrame(text) {
     }
     unheardAt = 0; heardAt = 0;
     const attSaid = attributeEngine(said.engine || '');
+    try { if (String(said.engine || '').trim()) TURN.answeredAt = Date.now(); } catch (e) {}
     logLine('turn.engine', said.engine || '', {
       role: 'engine',
       ms: pendingLatency ? Math.round(pendingLatency * 1000) : '',
@@ -13590,7 +13636,7 @@ function downsample(float32, from, to) {
    reached, the old path is still underneath it, so a broken relay can never leave him talking to nothing. */
 const EAR = true;
 const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
-const EAR_END_MS = 1100;
+const EAR_END_MS = 1800;
 let earWs = null, earReady = false, earText = '', earLive = '', earConf = null, earSpeech = false, earLastVoiced = 0, earClosed = false;
 let earFails = 0, earWatch = 0, earOpenedAt = 0, earPend = [], earEndPending = false, earBeat = 0;
 
@@ -13703,6 +13749,15 @@ function earFeed(data, rms, ours) {
   if (ours) return;                          // the speaker is in the air: the microphone is hearing us, not him
   const voiced = rms > OPEN_RMS;
   if (voiced) { earSpeech = true; earLastVoiced = now; }
+  /* BUILD 370. THE TAIL OF A SENTENCE IS NOT A SECOND SENTENCE. After {t:'end'} the door kept feeding audio, the
+     relay opened a new segment on the last words of the same sentence, and that fragment became a turn. While a
+     segment is finishing the microphone is not fed; if he genuinely carries on speaking, it reopens and the turn
+     goes on rather than going deaf. */
+  if (earClosed) {
+    if (voiced) { earClosed = false; logLine('ear.reopen', 'he carried on speaking, so the turn goes on',
+      { level: 'info', target: 'hear' }); }
+    else return;
+  }
   if (voiced || earSpeech) {
     if (!earOn()) earOpen();
     earPcm(downsample(data, micCtx.sampleRate, 16000));
@@ -13753,7 +13808,21 @@ function earFinish(why) {
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
   const text = String(earText || earLive || '').trim();
   const conf = earConf;
+  const verdict = earVerdictNow(text);
   earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false;
+  if (verdict === 'empty.held') {
+    /* He was not silent; the door was busy. Saying anything here is talking over its own answer. */
+    logLine('ear.empty.held', 'nothing was heard while the door was still answering, so it says nothing',
+      { level: 'info', target: 'hear' });
+    return;
+  }
+  if (verdict === 'extend') {
+    /* More words for the turn already being answered. They are recorded and they do not cancel it. */
+    try { TURN.heard = (TURN.heard ? TURN.heard + ' ' : '') + text; } catch (e) {}
+    logLine('turn.extended', 'more words for turn ' + TURN.id + ', which is still being answered: ' + text.slice(0, 120),
+      { level: 'info', target: 'hear', turn_id: TURN.id });
+    return;
+  }
   if (!text) {
     /* BUILD 355. A TURN THE EAR DID NOT HEAR IS STILL A TURN HE TOOK.
        19 Nov 2026, 00:43-00:47: the door asked "Do you want a cover picture?", he answered five times, the ear came
