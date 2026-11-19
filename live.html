@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 367;
+const BUILD_NO = 368;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6115,6 +6115,7 @@ async function handleWorldCall(call) {
   /* BUILD 343. HANDING IT THE FACT IS ASKING IT TO SPEAK. 18 Nov 2026, 19:34:01, live: the door knew the Cape Town
      weather, handed the fact to the mouth, and never licensed it - so the answer was dropped at 19:34:16 and only
      surfaced at 19:35:40 under a different question, which is the grouping he saw on screen. */
+  turnClaim('the world');
   try { mouthLicence('the world answer was handed over'); } catch (e) {}
   try {
     ws.send(JSON.stringify({
@@ -8699,8 +8700,15 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
         threadKind = 'talk'; threadAt = Date.now();
         logLine('share.guess.closed.question', 'he asked about something else, so the song is put down · '
           + said.slice(0, 50), { level: 'info', target: 'songShare' });
-        doorNote('He has changed subject, so the song is put down and nothing is searched. Answer his question in one '
-          + 'or two short lines. Do not mention a song, a title, or the shelf.', true);
+        /* BUILD 368. THE PUT-DOWN NOTE MAY NOT FORBID THE ANSWER IT IS ASKING FOR.
+           19 Nov 2026, 07:50:18: he asked "How's the weather in Ballito?" with a song still on the table. The note
+           that put the song down said "nothing is searched" and then asked the mouth to answer his question - so the
+           one instruction contradicted the other, the mouth stalled, and the weather arrived twelve seconds later
+           after the world tool had been called anyway. The song is still put down here (it must be), but the note now
+           says what to do instead of what not to do: answer him, and reach for the world tool if it is about the world. */
+        doorNote('He has changed subject, so the song is put down. Answer his question in one or two short lines. '
+          + 'If it is about the world - weather, a place, a price, news, a fact - call the world tool and answer from '
+          + 'what it returns. Do not mention a song, a title, or the shelf.', true);
         return;
       }
     } catch (e) {}
