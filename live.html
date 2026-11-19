@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 390;
+const BUILD_NO = 391;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -690,6 +690,12 @@ function forwardAllowed() {
   try {
     if (notesSentThisTurn) return false;   // the door has already said something
     if (thinkHold) return false;           // thinking is deciding; it has the floor
+    /* BUILD 391. A TURN A DECIDER OWNS IS NOT A TURN NOBODY ANSWERED.
+       19 Nov 2026, 16:08:51, live on 390: to "And what is happening in Ukraine. At the moment," no path claimed the
+       turn and thinking never ran, and his words did not reach the mouth until 16:08:53.719 - two and a third seconds
+       of nothing. The 2.5s was a grace period for deciders that in that turn had nothing to decide. */
+    if (TURN.owner) return false;          // a decider has the floor
+    if (forwardedThisTurn) return false;   // his words have already gone
     return true;
   } catch (e) { return false; }
 }
@@ -1105,6 +1111,7 @@ function heardFlush(why) {
   replyAudible = false;
   turnBeganMuted = typed();
   notesSentThisTurn = 0;
+  forwardedThisTurn = false;
   turnBegin(acted);
   try { doorTurn(acted); } catch (e) { try { doorHears(acted); } catch (e2) {} }
   /* BUILD 358. THE LINE HE READS IS WHAT THE DOOR UNDERSTOOD, EVEN WHEN IT UNDERSTANDS IT A MOMENT LATE.
@@ -1132,13 +1139,16 @@ function heardFlush(why) {
      door must hand his sentence on. If nothing has gone to the mouth a moment after the route decides, his own
      words go, and the model can call the world lookup as it always could. */
   if (forwardTimer) { try { clearTimeout(forwardTimer); } catch (e) {} }
+  /* BUILD 391. WHEN THE DOOR HAS NOTHING TO SAY, IT SAYS SO AT ONCE.
+     19 Nov 2026, 16:08:51, live on 390. Measured on his own run: on the Springboks question a path had something of
+     its own to say, so the note left two hundredths of a second after he stopped. On the Ukraine question nothing
+     claimed the turn, and the door still sat on his words for 2.33 seconds before handing them to the mouth. That
+     wait was the 2.5s grace period below, and it is pure loss whenever no decider wants it. So the forward is now
+     tried the moment the door knows, and the 2.5s stays only as the watchdog for the cases that release later. */
+  forwardHisWords(acted, 'the door had nothing of its own to say, so his words go to the mouth at once');
   forwardTimer = setTimeout(() => {
     forwardTimer = 0;
-    try {
-      if (!forwardAllowed()) return;
-      if (!ws || ws.readyState !== 1) return;
-      logLine('turn.forwarded', 'the door answered with nothing, so his own words go to the mouth · '
-        + String(acted).slice(0, 120), { level: 'warn', target: 'hear' });
+    forwardHisWords(acted, 'the door still had nothing to say, so his words go to the mouth');
       /* BUILD 350. A TURN FORWARDED WITHOUT A LICENCE IS A TURN THE MOUTH MAY NOT ANSWER.
          19 Nov 2026, 00:11 live: the forward worked and the model did answer, and every word of it was dropped -
          "mouth.unheard ... I hear you, Boss. What were you saying?" - because build 341 says the mouth speaks only
@@ -1148,13 +1158,27 @@ function heardFlush(why) {
          quoted line as the line the mouth OWES - so it demanded he say his own sentence back, and every correct
          answer was thrown away: 00:22:53 "the door asked for one line and this is not it: The weather in Ballito is
          on your shelf", and at 00:23:32 the mouth recited its own capabilities instead. His words go in bare. */
-      forwardingNote = true;
-      try {
-        doorNote('He said, in his own words: ' + String(acted).slice(0, 300) + '. Answer him in one short line, in '
-          + 'your own words, and nothing else. Do not ask him to repeat it and do not say you did not hear him.', true);
-      } finally { forwardingNote = false; }
-    } catch (e) {}
   }, 2500);
+}
+
+/* One place that hands his own words to the mouth, so the immediate call and the watchdog cannot disagree.
+   Returns true only if the words actually went: the mouth must be up, nothing may hold the floor, and his
+   sentence may not have gone already. */
+function forwardHisWords(acted, why) {
+  try {
+    if (forwardTimer) { try { clearTimeout(forwardTimer); } catch (e) {} forwardTimer = 0; }
+    if (!forwardAllowed()) return false;
+    if (!sessionUp) return false;                       // the socket is not up yet: the watchdog will try again
+    if (!ws || ws.readyState !== 1) return false;
+    forwardedThisTurn = true;
+    logLine('turn.forwarded', why + ' \u00b7 ' + String(acted).slice(0, 120), { level: 'warn', target: 'hear' });
+    forwardingNote = true;
+    try {
+      doorNote('He said, in his own words: ' + String(acted).slice(0, 300) + '. Answer him in one short line, in '
+        + 'your own words, and nothing else. Do not ask him to repeat it and do not say you did not hear him.', true);
+    } finally { forwardingNote = false; }
+    return true;
+  } catch (e) { return false; }
 }
 
 /* The one entry a finished utterance takes. */
@@ -1920,6 +1944,9 @@ let speaking = false, speakingAt = 0, lastWordAt = 0, awaitingFirstAudio = false
 let turnInFlight = false;
 /* BUILD 349. WHAT THE DOOR SENT THIS TURN, so a turn where it sent nothing is visible. */
 let notesSentThisTurn = 0;
+/* BUILD 391. HIS WORDS GO ONCE. Set when forwardHisWords hands his sentence to the mouth, so the 2.5s watchdog
+   cannot say it a second time. */
+let forwardedThisTurn = false;
 let forwardTimer = 0;
 // Echo bookkeeping. A phone speaker feeds its own voice back into its own microphone.
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
@@ -11778,6 +11805,18 @@ function directiveShouldClose(v) {
 function engineSpokeNow() {
   if (silenceWatch) { clearTimeout(silenceWatch); silenceWatch = null; }
   mouthSpokeAt = Date.now();
+  /* BUILD 391. THE FIRST WORD HE HEARS IS A FACT, NOT AN INFERENCE.
+     19 Nov 2026: asked where the wait sits, the record could not answer. `mouth.directive.speaking` reads like the
+     start of speech and is not: it is the twelve-second patience check, and it says only that the mouth had begun
+     saying it BEFORE that mark. Read as speech start it made two searches look like 12.0s and 14.8s when the turns
+     themselves completed in 14.0s and 15.9s with the sentence being spoken included. A number the record cannot
+     produce is not a measurement, so this line is written the moment audio actually starts, with how long he waited
+     from the note that was meant to answer him. */
+  try {
+    const from = directiveAt || 0;
+    logLine('mouth.spoke', 'the first word he hears \u00b7 ' + (from ? (Date.now() - from) + 'ms' : 'no note owed')
+      + ' after the note', { level: 'info', target: 'mouth', ms: from ? String(Date.now() - from) : '0' });
+  } catch (e) {}
 }
 
 function armSilenceWatch(heard) {
