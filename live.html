@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 398;
+const BUILD_NO = 399;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5662,8 +5662,39 @@ function soundIsReal(answer) {
       && !/\b(?:music|beat|beats|track|style|vibes|sound|mix|song)\b/i.test(t)) {
     hits = [];
   }
-  if (!hits.length) return '';
+  if (!hits.length) return describedSound(answer);
   return hits.sort((a, b) => b.length - a.length)[0];
+}
+
+/* BUILD 399. A SOUND HE DESCRIBES IS A SOUND.
+   19 Nov 2026, 22:16:55, live on 398. He was making a song about a door into a mysterious house and answered the
+   sound question with "slow electronic mystical music". The door logged song.sound.open and then told him the sound
+   ring stays open because that is not a kind of music - the closed vocabulary has no "electronic", no "ambient" and
+   no "mystical". He tried again and was refused again, so the making never reached its cover question and no song
+   was ever made. His own rule from the ring's own promise: "Say you choose and I will pick." The vocabulary is a
+   guard against a stray word becoming a style - the "house" fault, the "gray" fault - and it is not a gate on him.
+   So a short phrase that plainly describes music is taken as the sound, in his own words, and anything that reads
+   like a question or a whole sentence is not. */
+const SOUND_DESCRIPTOR = ['slow', 'fast', 'upbeat', 'mellow', 'dark', 'light', 'happy', 'sad', 'dreamy',
+  'mystical', 'mysterious', 'haunting', 'ethereal', 'ambient', 'electronic', 'synth', 'lo-fi', 'lofi', 'chill',
+  'epic', 'cinematic', 'intimate', 'raw', 'acoustic', 'heavy', 'soft', 'gentle', 'moody', 'uplifting',
+  'atmospheric', 'brooding', 'soulful', 'funky', 'groovy', 'sparse', 'dense', 'warm', 'cold', 'bright', 'deep',
+  'hypnotic', 'meditative', 'trance', 'tribal', 'cinematic', 'orchestral', 'piano', 'guitar', 'vocal', 'instrumental',
+  'stripped', 'layered', 'wide', 'big', 'quiet', 'loud', 'driving', 'rolling', 'swirling', 'floating', 'gritty'];
+
+function describedSound(answer) {
+  const raw = String(answer || '').trim();
+  if (!raw) return '';
+  if (/\?/.test(raw)) return '';                       // a question names nothing
+  const words = raw.toLowerCase().replace(/[^a-z0-9' -]+/g, ' ').split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > 8) return '';     // a sentence is not a style
+  const musicNoun = /\b(?:music|song|track|tune|sound|beat|beats|vibe|vibes|style|mix|feel|instrumental)\b/i.test(raw);
+  const descriptors = words.filter((w) => SOUND_DESCRIPTOR.indexOf(w) >= 0).length;
+  if (!musicNoun && descriptors < 2) return '';
+  /* A phrase that starts as a sentence about something else is not a style, however many words it shares. */
+  if (/^(?:yes|no|ok|okay|but|and|so|well|i|you|we|they|it|that|this|there|what|which|why|how|can|could|do|does|did)\b/i.test(words[0])
+    && !musicNoun) return '';
+  return raw.replace(/^[\s"'\u201c]+|[\s"'\u201d.?!]+$/g, '').trim();
 }
 /* A heard word that is one or two letters from a member, so the door can offer it back rather than pretend it
    heard a style. "regae" finds reggae; "gray" finds nothing, and asking again is the honest answer. */
@@ -8213,6 +8244,16 @@ async function handleShareCall(call) {
       const ti = clean(title);
       if (!ti || ti.length > 60) return;
       if (QUESTION_WORD.test(ti)) return;                    // "Which song", "What about you"
+      /* BUILD 399. THE DOOR'S OWN SENTENCE IS NEVER A SONG.
+         19 Nov 2026, 22:17:07, live on 398. The mouth said "Share it from there whenever you want. That one is real,
+         I checked the record." The word "from" made that a song: title "Share it", artist "there whenever you
+         want". His next sentence began with "Yes", which the door took as a verdict on that phantom offer, and the
+         sharing rail was searched for it and landed "I'll Be Around by The Spinners" on his shelf - a song he never
+         asked for, while his own making still stood waiting on the sound. A title that opens with a verb of doing is
+         ordinary speech, not a song, unless the mouth put it in quotes. */
+      const SPEECHY = /^(?:share|sharing|make|making|play|playing|find|finding|give|get|put|add|search|send|sending|keep|keeping|take|taking|let|lets|do|doing|try|trying|use|using|say|saying|tell|telling|ask|asking|want|wanted|need|needed|like|liked|looking|look|go|going|come|coming)\b/i;
+      if (SPEECHY.test(ti) && !/["\u201c\u201d]/.test(String(title || ''))) return;
+      if (/\b(?:whenever|whatever|wherever|somewhere|there|here|you|i|we|me|my|your)\b/i.test(String(artist || ''))) artist = '';
       if (/\b(?:would you like|do you want|let me know)\b/i.test(String(artist || ''))) artist = '';
       if (ti.split(/\s+/).length > 9) return;      // build 311: a title is short, a sentence is not
       // BUILD 324: two artists can offer the same title, and dropping the second loses the artist he may name.

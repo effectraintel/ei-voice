@@ -1,8 +1,14 @@
 {
- "latest": 398,
- "updated": "2026-11-20T00:28",
+ "latest": 399,
+ "updated": "2026-11-20T00:42",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 399,
+   "file": "v399.html",
+   "at": "2026-11-20T00:42",
+   "note": "a sound he describes is a sound, and the door's own sentence is never a song"
+  },
   {
    "n": 398,
    "file": "v398.html",
