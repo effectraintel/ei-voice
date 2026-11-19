@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 375;
+const BUILD_NO = 376;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -13595,6 +13595,15 @@ function handleFrame(text) {
       try { endTurn('nothing was heard'); } catch (e) {}
       return;
     }
+    /* BUILD 376. AN EMPTY LINE IS NOT A LINE. 19 Nov 2026, 12:45:47, live: a turn closed with an empty engine
+       text and the record took it as the door having said something, which is an empty bubble on his screen. */
+    if (!String(said.engine || '').trim()) {
+      logLine('turn.engine.empty', 'a turn closed with no words in it, so no line is drawn',
+        { level: 'warn', target: 'turn' });
+      unheardAt = 0; heardAt = 0;
+      try { endTurn('nothing was said'); } catch (e) {}
+      return;
+    }
     unheardAt = 0; heardAt = 0;
     const attSaid = attributeEngine(said.engine || '');
     try { if (String(said.engine || '').trim()) TURN.answeredAt = Date.now(); } catch (e) {}
@@ -14103,27 +14112,33 @@ function earFinish(why) {
   }
   if (!text) {
     /* BUILD 374. Two empty hearings in a row reopen the ear. */
+    let deafNow = false;
     try {
       earEmpties++;
       if (earDeafAfter(earEmpties)) {
         earEmpties = 0;
+        deafNow = true;
         logLine('ear.deaf', 'he has spoken twice and no words came back, so the ear is closed and reopened',
           { level: 'warn', target: 'hear' });
         try { if (earWs) earWs.close(); } catch (e) {}
         try { earWs = null; earReady = false; earOpen(); } catch (e) {}
       }
     } catch (e) {}
-    /* BUILD 355. A TURN THE EAR DID NOT HEAR IS STILL A TURN HE TOOK.
-       19 Nov 2026, 00:43-00:47: the door asked "Do you want a cover picture?", he answered five times, the ear came
-       back empty every time, and the door said nothing at all. Five answers into silence is a door that looks dead,
-       and it is the same class as every other fault tonight: a turn with no reply. One plain line, and the question
-       he was answering stays open. */
-    logLine('ear.empty', 'nothing came back from the ear, so the door asks once', { level: 'warn', target: 'hear' });
+    /* BUILD 376. AN EMPTY HEARING IS SILENCE FIRST, AND ONE SHORT LINE ONLY IF IT HAPPENS TWICE.
+       19 Nov 2026, 12:45:24, live on 375: he tapped Shelve, the ear came back with nothing, and the door said
+       "I did not catch that, Boss. Say it once more." He answered "I didn't say anything." Build 355 put that line
+       there to stop five answers into silence, and it was right about that and wrong about the first empty one: a
+       room that is quiet is not a man who was not heard. So the first empty hearing says nothing at all, and only a
+       second one in a row, which is a deaf ear, gets one short line. */
+    logLine('ear.empty.quiet', 'nothing came back from the ear, and nothing is said for the first one',
+      { level: 'warn', target: 'hear' });
     try {
-      const q = 'I did not catch that, Boss. Say it once more.';
-      lastAsked = q;
-      doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '" Nothing was searched, nothing was '
-        + 'made and nothing is on his shelf: the ear came back with no words at all.');
+      if (deafNow) {
+        const q = 'Go on, Boss.';
+        lastAsked = q;
+        doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '" He has spoken twice and the ear has '
+          + 'come back with no words either time. Nothing was searched, nothing was made and nothing is on his shelf.');
+      }
     } catch (e) {}
     return;
   }

@@ -1,8 +1,14 @@
 {
- "latest": 375,
- "updated": "2026-11-19T10:35",
+ "latest": 376,
+ "updated": "2026-11-19T10:48",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 376,
+   "file": "v376.html",
+   "at": "2026-11-19T10:48",
+   "note": "a quiet room is not a man who was not heard"
+  },
   {
    "n": 375,
    "file": "v375.html",
