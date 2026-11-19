@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 392;
+const BUILD_NO = 393;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -11515,7 +11515,64 @@ async function handleShareToCall(call) {
    now stand in front of the mint, because a promise to be careful is not a guard. */
 let payMintedAt = 0, payMintedAmount = 0, payMintedCode = '';
 
-/* What he actually said, as numbers. "R100" and "100" are the same amount; "grand" and "thousand" multiply. */
+/* BUILD 393. AN AMOUNT SPOKEN AS A WORD IS STILL AN AMOUNT HE SAID.
+   19 Nov 2026, 22:50:43, live on 392: he said "Uh, just ten Rand and it's for a friend." and the guard below
+   answered pay.amount.unheard - "R10 is not in his words" - so his payment request was refused, the mouth fell to
+   a fragment ("R10. Is") and then to silence. The guard was built to stop money being acted on from a guess, which
+   is right, but it only ever read DIGITS, so no amount he spoke as a word could ever pass it: "ten rand", "fifty
+   rand", "a hundred rand" were all unheard. The reader now reads the words too, and stays strict where it must:
+   it only ever returns a number that the words actually make, and a lone "one" ("one more thing") only counts when
+   a currency word sits beside it, so a stray word can never become an amount. */
+const NUM_WORD = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70,
+  eighty: 80, ninety: 90,
+};
+const NUM_SCALE = { hundred: 100, thousand: 1000, grand: 1000, million: 1000000 };
+const CURRENCY_WORD = /^(?:r|rand|rands|buck|bucks|zar|dollar|dollars|euro|euros|pound|pounds|rupee|rupees)$/;
+
+function numberFromWords(ws) {
+  let total = 0, current = 0, seen = false;
+  for (const w of ws) {
+    if (w in NUM_WORD) { current += NUM_WORD[w]; seen = true; }
+    else if (w === 'hundred') { current = (current || 1) * 100; seen = true; }
+    else if (w === 'thousand' || w === 'grand') { total += (current || 1) * 1000; current = 0; seen = true; }
+    else if (w === 'million') { total += (current || 1) * 1000000; current = 0; seen = true; }
+    else if (w === 'and' || w === 'a' || w === 'an') { /* the glue inside one number */ }
+    else return null;
+  }
+  return seen ? total + current : null;
+}
+
+function amountsInWords(said) {
+  const toks = String(said || '').toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  const out = [];
+  let i = 0;
+  while (i < toks.length) {
+    const w = toks[i];
+    if (!(w in NUM_WORD) && !(w in NUM_SCALE) && w !== 'a' && w !== 'an') { i++; continue; }
+    const run = [];
+    let j = i;
+    while (j < toks.length) {
+      const x = toks[j];
+      const joins = (x === 'a' || x === 'an') && j + 1 < toks.length && (toks[j + 1] in NUM_SCALE);
+      if (x in NUM_WORD || x in NUM_SCALE || x === 'and' || joins) { run.push(x); j++; } else break;
+    }
+    if (!run.length) { i++; continue; }
+    const n = numberFromWords(run);
+    if (n && n > 0) {
+      const near = [toks[j - 1], toks[j], toks[j + 1]].filter(Boolean);
+      const moneyNear = near.some((x) => CURRENCY_WORD.test(x));
+      if (n !== 1 || moneyNear) out.push(n);
+    }
+    i = j > i ? j : i + 1;
+  }
+  return out;
+}
+
+/* What he actually said, as numbers. "R100", "100" and "one hundred rand" are the same amount; "grand" and
+   "thousand" multiply. */
 function amountsHeSaid() {
   const said = String(lastHeardText || '').toLowerCase();
   const out = [];
@@ -11526,6 +11583,7 @@ function amountsHeSaid() {
     if (isFinite(n) && n > 0) out.push(n);
   }
   if (/\bgrand\b|\bthousand\b/.test(said)) for (const n of out.slice()) out.push(n * 1000);
+  for (const n of amountsInWords(said)) if (!out.some((x) => Math.abs(x - n) < 0.5)) out.push(n);
   return out;
 }
 
