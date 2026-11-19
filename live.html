@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 384;
+const BUILD_NO = 385;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1402,7 +1402,7 @@ const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send e
   + 'If he has not answered the question you asked, ask it again in fewer words. ';
 
 const BRIEF = NO_CLAIM +
-  'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. ' +
+  'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. Never say that anything is on his shelf, and never mention a shelf at all: what he looks up is held and he taps a button himself if he wants to keep it. ' +
   // Edwin, 13 Nov 2026, 23:24: "I think we always need to default to Google for now, we can expand on
   // this later, as this is not a core function." Google's search is the engine, and since build 222 the
   // rail is where it is asked. His own search inside the voice answers without its sources: measured on
@@ -6823,8 +6823,47 @@ function negatedHere(t, re) {
     || /\bnothing\b/i.test(m[0]);
 }
 
+/* BUILD 385. THE BUTTON SPEAKS FOR ITSELF.
+   19 Nov 2026, 14:15:30, live on 384: the weather answer ended "It's on your shelf if you want to see more." Nothing
+   had been shelved - the card is held until he taps Shelve - so the door said "Nothing has been put on your shelf,
+   Boss." a moment later. Two untrue-in-sequence lines, and his ruling: "It should not say it is on my shelf anymore
+   anywhere, the button should speak for itself." So a shelf claim is now taken OUT of the answer before it is drawn
+   or spoken, and nothing is said about a shelf afterwards. */
+function stripShelfClaim(text) {
+  try {
+    const shelfWriteClaim = /\b(?:is|are|it'?s|its|that'?s|those are|these are|they'?re) (?:now )?on (?:the|your|his) shelf\b|\b(?:has|have) been (?:put|added|placed|kept|saved) (?:on|to|in) (?:the|your|his) shelf\b|\b(?:put|puts|putting|added|add|adds|place|placed|placing|keep|kept|save|saved|saving|stuck)\b[^.!?]{0,48}\b(?:on|to|in|onto)\b[^.!?]{0,14}\b(?:the|your|his) shelf\b|\bshelf\b[^.!?]{0,40}\b(?:with|and)\b[^.!?]{0,20}\b(?:links?|sources?)\b|\bsitting (?:on|in) (?:the|your|his) shelf\b/i;
+    const shelfAsk = /\?|\b(?:would you like|do you want|shall (?:i|we)|want me to|let me know)\b/i;
+    const shelfNegative = /\b(?:nothing|none|not|no one|nobody|isn'?t|wasn'?t|never|couldn'?t|could not|can'?t|cannot)\b/i;
+    const shelfCapability = /\b(?:i|we|you|it|the house|the engine|they)\s+(?:can|could|may|might|am able to|are able to)\b|\b(?:all of it|all of them|everything|anything|whatever)\b|\bfor you to\b/i;
+    const src = String(text || '');
+    if (!/shelf/i.test(src)) return src;
+    const parts = src.match(/[^.!?]+[.!?]*/g) || [src];
+    const kept = parts.filter((x) => !(shelfWriteClaim.test(x) && !shelfAsk.test(x) && !shelfNegative.test(x)
+      && !shelfCapability.test(x)));
+    if (kept.length === parts.length) return src;
+    return kept.join('').replace(/\s+/g, ' ').trim();
+  } catch (e) { return String(text || ''); }
+}
+
+function scrubShelfClaim() {
+  try {
+    const before = String(said.engine || '');
+    if (!before) return;
+    const after = stripShelfClaim(before);
+    if (after === before) return;
+    said.engine = after;
+    try {
+      const el = turns.engine && turns.engine.querySelector('.said');
+      if (el) el.textContent = after;
+    } catch (e) {}
+    logLine('claim.shelfwrite.stripped', 'the answer claimed his shelf, so the sentence was taken out of it: '
+      + before.slice(0, 120), { level: 'warn', target: 'no-shelf-write' });
+  } catch (e) {}
+}
+
 function judgeClaim() {
   try {
+    try { scrubShelfClaim(); } catch (e) {}
     const t = String(said.engine || '');
     if (!t) return;
     /* BUILD 306. THE MAKING'S FIRST QUESTION IS ONLY EVER ASKED OF A MAKING HE ASKED FOR.
@@ -7143,18 +7182,11 @@ function judgeClaim() {
       .find(x => shelfWriteClaim.test(x) && !shelfAsk.test(x) && !shelfNegative.test(x)
         && !shelfCapability.test(x));
     if (shelfClaimSentence && !(shelfWriteAt && Date.now() - shelfWriteAt < 60000)) {
-      if (Date.now() - unbackedWarnedAt >= 15000) {
-        unbackedWarnedAt = Date.now();
-        hiddenHold = true;                      // the false sentence is not spoken
-        hiddenHoldUntil = Date.now() + 1500;
-        logLine('claim.shelfwrite', String(shelfClaimSentence).trim().slice(0, 160), { level: 'warn', target: 'no-shelf-write' });
-        correctedThisTurn = true;               // one reply, not a reply plus a nudge
-        /* BUILD 333. A NOTE THE MOUTH MUST SPEAK IS WORDS TO SAY, NEVER AN ORDER TO FOLLOW. He was shown this
-           one verbatim, because a note written in the third person ("Nothing was written to his shelf just now,
-           so do not say...") went out with speak=true and the mouth simply read it. One true line, quotable. */
-        doorNote('Say exactly this, in one line, and nothing else: "Nothing has been put on your shelf, Boss."',
-          true);
-      }
+      /* BUILD 385. AND NOTHING IS SAID ABOUT IT AFTERWARDS. The correction line ("Nothing has been put on your
+         shelf, Boss.") is gone at his word: the Shelve button speaks for itself, so the door neither claims a shelf
+         nor explains one. The sentence is already out of the answer above. */
+      logLine('claim.shelfwrite', String(shelfClaimSentence).trim().slice(0, 160),
+        { level: 'warn', target: 'no-shelf-write' });
       return;
     }
     // 14 Nov 09:51:32. No rail call was made that turn, and the mouth said "The sharing rail didn't answer,
@@ -13341,7 +13373,16 @@ function sayGreeting() {
   // A member who has never had an answer here gets one extra sentence, once in their life: what to
   // ask, and the word that opens help. Everyone else gets the plain line. (7 Nov 2026)
   // Reopening the door a minute later is the same conversation, not a new arrival: it gets no greeting.
-  if (Date.now() - lastGreetAt < 120000) { resumeSpeak = ''; resumeNote = ''; greeting = false; return; }
+  /* BUILD 385. A DOOR THAT OPENS MUST SAY SOMETHING.
+     19 Nov 2026, 14:15:45, live on 384: he silenced the voice and opened it again 44 seconds after the greeting, so
+     the two-minute rule swallowed it and the door opened in silence. His words: "Then I opened the session and
+     nothing happened next." Re-opening is not a new arrival, so it gets no greeting - but silence cannot be how he
+     learns the door is awake: a single short sentence, and nothing beyond it. */
+  if (Date.now() - lastGreetAt < 120000) {
+    resumeSpeak = ''; resumeNote = ''; greeting = false;
+    doorAsk("I'm here, Boss.", 'Say exactly this, in one line, and nothing else: "I\u2019m here, Boss."');
+    return;
+  }
   lastGreetAt = Date.now();
   const fresh = !localStorage.getItem(HELP_SEEN);
   const note = resumeNote; resumeNote = '';
