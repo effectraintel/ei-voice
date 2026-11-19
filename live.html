@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 383;
+const BUILD_NO = 384;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -14460,12 +14460,18 @@ function vpBlocks(text) {
     vpSuppressed++;
     logLine('ear.other', 'that voice is clearly not his (' + score.toFixed(3) + ' below ' + VP_OTHER
       + '), so the door stays quiet: ' + words.slice(0, 80), { level: 'warn', target: 'voice' });
-    /* Three in a row is not a television; it is either a room full of people or him with a cold. One short line, once
-       a session, so nobody is left talking to a door that has gone deaf without saying so. */
-    if (vpSuppressed >= 3 && !vpWarned) {
-      vpWarned = true;
-      const q = 'That is not the voice I know, Boss. If it is you, say: it is me.';
-      doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '"');
+    /* BUILD 384. A BOARDED DOOR NEVER IGNORES HIM TWICE IN A ROW.
+       19 Nov 2026, 14:14, live on 383: he said "Start fresh." and was refused at 0.645, said it again and was refused at
+       0.608, and the door said nothing at all either time. The reference on record was sampled while the door was
+       still speaking (build 380), so his own voice now scores under the floor and every test run dies at the first
+       sentence. The fingerprint is the boarding proof; the voice print is a courtesy, and a courtesy may not lock the
+       owner out. One refusal stands, the second is answered and the score is kept, so the record still shows what the
+       gate thought. */
+    if (vpSuppressed >= 2) {
+      logLine('vp.let-through', 'refused once already, so he is answered and the score is kept \u00b7 '
+        + score.toFixed(3) + ' \u00b7 ' + words.slice(0, 60), { level: 'warn', target: 'voice' });
+      vpSuppressed = 0;
+      return false;
     }
     return true;
   } catch (e) { return false; }
