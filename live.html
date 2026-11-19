@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 377;
+const BUILD_NO = 378;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -13829,7 +13829,10 @@ async function vpEnrolThenGreet() {
         + 'and nothing else about it.');
     } catch (e) {}
   }
-  if (sessionUp && greeting) sayGreeting();
+  /* The enrolment line is spoken by the mouth, which clears the greeting flag as it speaks. The door's own first
+     question still has to be asked after it, so the flag is set again rather than the greeting being lost. */
+  try { greeting = true; } catch (e) {}
+  if (sessionUp) sayGreeting();
 }
 
 function vpRecord(seconds) {
