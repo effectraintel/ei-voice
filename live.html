@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 366;
+const BUILD_NO = 361;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -656,18 +656,10 @@ function thinkFast(said) {
    failure is not a licence to guess. So the door says one plain line, asks no journey question, searches
    nothing and shelves nothing. */
 function thinkLost(said) {
-  /* BUILD 363. WHEN THINKING DOES NOT ANSWER, THE DOOR ROUTES IT ITSELF.
-     19 Nov 2026, 01:44: thinking took longer than six seconds, and the door answered "Nothing was decided on that, Boss.
-     Say it once more." to "I want to create a song." - a sentence it understands perfectly well, and which the door's
-     own reader had already routed correctly for weeks before thinking existed. A slow model is not a reason to tell
-     him he was not understood. The fallback is the door's own gate, and the record says it took that path. */
-  logLine('think.fallback', 'thinking did not answer, so the door routes it itself: ' + String(said).slice(0, 90),
-    { level: 'warn', target: 'think' });
-  try { return doorHears(said); } catch (e) {}
   logLine('phase.think', 'failed · nothing was decided, so nothing was asked and nothing was searched',
     { level: 'warn', target: 'think' });
-  doorAsk('Sorry, Boss, I did not follow that. Say it once more.',
-    'Say exactly this, in one line, and nothing else: "Sorry, Boss, I did not follow that. Say it once more." '
+  doorAsk('Nothing was decided on that, Boss. Say it once more.',
+    'Say exactly this, in one line, and nothing else: "Nothing was decided on that, Boss. Say it once more." '
     + 'Nothing was searched, nothing was put on his shelf, and no question about a song is asked.');
 }
 
@@ -689,12 +681,12 @@ function thinkAndAct(said) {
       thinkHold = false;
       logLine('think.hold.cleared', 'the thinking call never came back, so the mouth is released', { level: 'warn', target: 'think' });
     }
-  }, 15000);
+  }, 8000);
   return fetchT(FNBASE + 'doorThink', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  }, 12000).then((r) => r.json()).then((o) => {
+  }, 6000).then((r) => r.json()).then((o) => {
     if (id !== thinkSeq) {
       logLine('think.stale', 'he said something newer, so this answer is dropped', { level: 'info', target: 'think' });
       return;
@@ -902,7 +894,6 @@ function heardFlush(why) {
   replyAudible = false;
   turnBeganMuted = typed();
   notesSentThisTurn = 0;
-  newTurn();
   try { doorTurn(acted); } catch (e) { try { doorHears(acted); } catch (e2) {} }
   /* BUILD 358. THE LINE HE READS IS WHAT THE DOOR UNDERSTOOD, EVEN WHEN IT UNDERSTANDS IT A MOMENT LATE.
      19 Nov 2026, 01:06: he said "start fresh", the ear wrote "Stored fresh." at 0.669, and the door took it as a fresh
@@ -1860,19 +1851,6 @@ const GUESS_BRIEF = '\n\nAbout songs (build 328):\n'
   + 'and only the stores can put a song on his shelf.\n'
   + '- When he names one, the door asks the stores once. Say nothing about the outcome until you are told.\n'
   + '- If he names a line he remembers, use it: a lyric fragment is the best clue there is.\n';
-
-/* BUILD 362. HOW THE MOUTH SPEAKS, because a race against time is a design fault, not a mood.
-   19 Nov 2026, 01:33: "Is there settings to slow down the speech and then after it finished give more time for input...
-   At the moment it feels like a race against time and a bit unnatural. Humans speak with bits and pieces and stutters."
-   The pace of the voice is not a setting on this model, so it is said plainly in the brief instead. */
-const PACE = '\n\nHow to speak, added 19 November because he said it felt like a race:\n'
-  + '- Speak at a calm, measured pace, slower than feels natural to you, and leave a short pause at the end of each line. '
-  + 'He is listening, not reading.\n'
-  + '- One thought per turn. Never stack two questions, and never fill a silence with "I am here" or a list of what you '
-  + 'can do.\n'
-  + '- If he interrupts you, stop at once, say one short word of acknowledgement such as "Go on, Boss", and then be '
-  + 'silent until he has finished. Never finish the sentence he interrupted.\n'
-  + '- If you only caught part of what he said, ask for the part you missed, in one short line. Never guess it.\n';
 
 const MANNERS = '\n\nTwo rules about the working, added 8 November after he heard them break:\n'
   + '- Never narrate what you are doing. No "trying to find", no "let me look", no "one moment", no running '
@@ -3390,9 +3368,9 @@ async function openDoor() {
     // The corridor's first slice (card #167): facts from the session record, built
     // server-side, handed to the voice before the socket opens. If it cannot be had,
     // say so rather than letting the model guess at the clock.
-    let brief = BRIEF + PACE + SONG_SCRIPT + MANNERS + GUESS_BRIEF + sittingHandover();
+    let brief = BRIEF + SONG_SCRIPT + MANNERS + GUESS_BRIEF + sittingHandover();
     const np = await nowPack;
-    if (np && np.text) brief = BRIEF + PACE + '\n\n' + np.text + MANNERS;
+    if (np && np.text) brief = BRIEF + '\n\n' + np.text + MANNERS;
     else brief = BRIEF + '\n\n(The clock is unavailable on this door right now. If asked the time or the date, say you cannot see it.)' + MANNERS;
 
     stage('opening the voice');
@@ -4623,9 +4601,6 @@ function correctionCue(t) {
   return at;
 }
 let routeCorrectedAt = 0;      // a correction turn is a route, never a title to search for
-/* BUILD 364. A ROUTE THAT HAS ANSWERED OWNS THE TURN, so the sharing branch may not ask a second question on the
-   same sentence. 01:48: "I want to create a song." opened the making and then also asked "Which song, Boss?". */
-let routeAnsweredAt = 0;
 
 /* Build 137, change 6: a route sentence is never a query. "I want to create a song" carries no title in
    it, so nothing may be searched with those words. Everything in the sentence is the asking. */
@@ -4668,7 +4643,6 @@ function openSongBeat() {
   if (songDraft.said && !stale) return;      // he has already given the words: nothing is open
   if (stale) { songDraftReset(); songDraft.at = Date.now(); }
   if (!songDraft.askBeat) songDraft.askBeat = 'subject';
-  claimTurn('the making');
   logLine('journey.open', 'open at ' + songDraft.askBeat, { level: 'info', target: 'music' });
 }
 
@@ -5101,12 +5075,6 @@ function songRouteGate(heard) {
     askSongFork();
   }
   if (songRoute.pick) logLine('song.route', songRoute.pick, { level: 'info', target: 'music' });
-  /* BUILD 364. A ROUTE THAT HAS ANSWERED OWNS THE TURN.
-     19 Nov 2026, 01:48: he said "I want to create a song." (0.971), the door opened the making - "A new one, then.
-     What should the song be about?" - and then carried straight on into the sharing branch and asked "Which song,
-     Boss? The title and who sings it." Two deciders answered one sentence, and he was asked for a title for a song he
-     wanted to write. The gate now says whether it answered, and the turn stops when it has. */
-  return !!(songRoute.pick || negMake);
 }
 const SONG_FILLER = /\b(i|we|you|want|wanna|would|like|please|can|could|will|make|making|write|create|sing|do|need|give|me|us|a|an|the|to|for|about|of|on|in|with|some|song|songs|tune|tracks|track|music|thing|something|anything|one|another|new|it|that|this|and|my|our|his|her|their|just|now|again|actually|really|be|is|are|it's|its)\b/gi;
 const SONG_PERSON = /\b(friend|mate|buddy|girlfriend|boyfriend|wife|husband|partner|mom|mum|mother|dad|father|sister|brother|son|daughter|kid|child|family|someone|somebody|person|people|colleague|boss|client|gran|grandma|grandpa)\b/i;
@@ -8437,7 +8405,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     try { if (songTakesProse(said)) return; } catch (e) {}
     /* Build 246: the question the door asked comes first. A subject he has just given is not a route. */
     if (doorTakesSubject(said)) { try { descentHear(said); } catch (e) {} return; }
-    try { if (!forkAnswer(said)) { if (songRouteGate(said)) routeAnsweredAt = Date.now(); } } catch (e) {}
+    try { if (!forkAnswer(said)) songRouteGate(said); } catch (e) {}
     try { shadowRouteNote(said, songRoute && songRoute.pick); } catch (e) {}
     try { songHearTurn(said); } catch (e) {}
     try { descentHear(said); } catch (e) {}
@@ -8550,26 +8518,6 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   }
 
   function guessTurn(said) {
-    /* BUILD 364. ONE SENTENCE GETS ONE ANSWER. If the song route already opened a making on this very turn, the
-       sharing branch does not ask for a title on the back of it. */
-    /* BUILD 366. AN OPEN QUESTION BELONGS TO WHOEVER ASKED IT.
-       19 Nov 2026, 00:01: the cover question was open ("journey · picture · still open"), he said "I didn't say anything.",
-       and the sharing branch claimed the turn and asked "Which song, Boss? The title and who sings it." - while the
-       making was still waiting on its own question. The making has an open beat, so the sharing branch may not answer
-       at all until that beat is settled or the journey is closed. */
-    try {
-      if (songDraft && songDraft.askBeat) {
-        logLine('share.blocked.open.question', 'the making is waiting on "' + String(songDraft.askBeat)
-          + '", so the sharing branch stays out of this turn', { level: 'info', target: 'songShare' });
-        return false;
-      }
-    } catch (e) {}
-    if (!claimTurn('the sharing branch')) return false;
-    if (routeAnsweredAt && Date.now() - routeAnsweredAt < 1500) {
-      logLine('share.ask.suppressed', 'the song route already answered this turn, so no title is asked on top of it',
-        { level: 'info', target: 'songShare' });
-      return false;
-    }
     /* Build 317: "Yes, I am actually." names nothing. With songs on the table it asks which one; with none it asks for
        a title. Either way his affirmation is never sent to the mouth as a clue and never becomes a title. */
     try {
@@ -9737,35 +9685,9 @@ function echoedNote(text) {
   return '';
 }
 
-/* BUILD 365. ONE OWNER PER TURN.
-   19 Nov 2026, 01:48: "I want to create a song." was answered twice - the making opened and the sharing branch asked for
-   a title on top of it. That was not one bug, it was the shape of the page: several deciders in a row, each able to
-   speak, and nothing saying who owns the turn. The token is claimed by whichever decider asks the door to say something
-   first. Every later one in the same turn is recorded and silent, so a collision is visible in the log instead of
-   arriving in his ear as two questions. */
-let turnNo = 0, turnOwner = '';
-
-function newTurn() {
-  turnNo++; turnOwner = '';
-  return turnNo;
-}
-
-function claimTurn(what) {
-  if (turnOwner) {
-    logLine('turn.second.decider', what + ' wanted to answer, but ' + turnOwner + ' already owns turn ' + turnNo,
-      { level: 'warn', target: 'turn' });
-    return false;
-  }
-  turnOwner = what;
-  logLine('turn.claimed', what + ' owns turn ' + turnNo, { level: 'info', target: 'turn' });
-  return true;
-}
-
 function doorNote(text, speak) {
   const t = String(text || '').trim();
   if (!t) return;
-  /* the token belongs to a DECIDER, not to a note: one decider may say two things in a turn, and often must (the
-     route it took, then the question it asks). Claiming happens where the decision is made. */
   /* BUILD 333. WHAT THE DOOR SAID TO THE MOUTH IS REMEMBERED WHERE IT IS WRITTEN, not only where it is sent, so a
      note that waits in the queue is still recognised if the mouth repeats it. */
   try {
@@ -13459,7 +13381,7 @@ async function openMic() {
       /* BUILD 361. NO BARGE-IN ON OUR OWN SOUND. The speaker's own voice was loud enough to count as a voice and cut
          the door's sentence to a fragment - the "shhh" heard at 01:24. While our audio is playing, only a voice well
          above the bleed may stop it. */
-      if (!speaking && (!ours || (loudFrames >= BARGE_FRAMES && rms > ECHO_RMS * 1.2 && Date.now() - playRunStart > 250))) {
+      if (!speaking && (!ours || (loudFrames >= BARGE_FRAMES * 3 && rms > ECHO_RMS * 2 && Date.now() - playRunStart > 400))) {
         speaking = true;
         if (ours) barge();
       }
@@ -13469,12 +13391,7 @@ async function openMic() {
       if (speaking) {
         speaking = false;
         lastWordAt = Date.now();
-        /* BUILD 362. WITH THE EAR, NOTHING IS AWAITING FIRST AUDIO.
-           This flag means "he has stopped and the model has not begun answering yet", and every note waits on it. It
-           was set by the microphone, and only the model could clear it - so from 347 on, every answer waited for the
-           eight-second stale line. That is the wait he felt at 01:33. The model is not answering his audio any more;
-           the door's note is what makes it speak, so the flag stays down. */
-        if (!(EAR && earOn())) awaitingFirstAudio = true;
+        awaitingFirstAudio = true;
       }
     }
 
@@ -13563,10 +13480,7 @@ function downsample(float32, from, to) {
    reached, the old path is still underneath it, so a broken relay can never leave him talking to nothing. */
 const EAR = true;
 const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
-/* BUILD 362. HUMANS PAUSE. 19 Nov 2026, 01:33: "it feels like a race against time and a bit unnatural". 1.1 seconds
-   after his last syllable is a machine's idea of a finished sentence; a breath, a stutter or a second thought ends it
-   early and the door answers half of what he meant. 1.9 seconds, and every extra word he says restarts the clock. */
-const EAR_END_MS = 1900;
+const EAR_END_MS = 1100;
 let earWs = null, earReady = false, earText = '', earLive = '', earConf = null, earSpeech = false, earLastVoiced = 0, earClosed = false;
 let earFails = 0, earWatch = 0, earOpenedAt = 0, earPend = [], earEndPending = false, earBeat = 0;
 
@@ -13605,11 +13519,6 @@ function earOpen() {
         earConf = (typeof f.conf === 'number' ? f.conf : null);
         logLine('ear.final', t + ' \u00b7 conf ' + (f.conf == null ? '?' : f.conf) + ' \u00b7 ' + (f.lang || ''),
           { level: 'info', target: 'hear' });
-        /* BUILD 366. WHAT THE RELAY ACTUALLY SAID, kept whole. 19 Nov 2026, 23:59:58: he said "Start fresh" and the ear
-           returned "I want to create a song." at 0.964 - a sentence from ten minutes earlier, in a session that had just
-           been replaced. Either the page replayed old audio or the relay answered from a buffer, and those two look
-           identical in the log without the frame itself. */
-        try { logLine('ear.frame', JSON.stringify(f).slice(0, 240), { level: 'info', target: 'hear' }); } catch (e) {}
         return;
       }
       if (f.t === 'end') { earFinish('the ear finished the turn'); return; }
@@ -13740,28 +13649,11 @@ function earFinish(why) {
     return;
   }
   logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
-  /* BUILD 362. HIS WORDS SAID OVER THE DOOR ARE HIS WORDS, NOT NOISE.
-     19 Nov 2026, 01:33: "I speak now and don't get cut off, but I'm not being heard." Build 361 threw away every
-     hearing that arrived while the door's own sound was in the air, and a person who starts talking as the door
-     finishes was being erased. Now only a piece of the door's own line is dropped; anything else is HELD until the
-     door's voice is out of the air, and then handed over. Nothing is lost and nothing is answered twice. */
-  const ownWords = looksLikeOurOwnWords(text);
-  if (ownWords) {
+  if (looksLikeOurOwnWords(text)) {
     logLine('ear.self', 'that is the door\u2019s own line coming back, not his words: ' + text.slice(0, 80)
       + ' \u00b7 after "' + String(lastEngineLine).slice(0, 60) + '"', { level: 'warn', target: 'hear' });
     return;
   }
-  try {
-    const inAir = playing() || (ourSoundEndsAt && performance.now() < ourSoundEndsAt + 200);
-    if (inAir) {
-      const wait = Math.max(200, (ourSoundEndsAt || 0) - performance.now() + 250);
-      logLine('ear.held', 'he spoke over the door, so his words wait ' + Math.round(wait) + 'ms for the door to stop: '
-        + text.slice(0, 80), { level: 'info', target: 'hear' });
-      setTimeout(() => { try { earFinish('he spoke over the door'); } catch (e) {} }, Math.min(wait, 4000));
-      earText = text; earConf = conf;
-      return;
-    }
-  } catch (e) {}
   /* BUILD 353. A HEARING THE EAR IS NOT SURE OF IS NOT HIS WORDS.
      19 Nov 2026, 00:22:11: he said "start fresh" and the ear gave back "Goldfish." at confidence 0.157, and the door
      acted on it. At 00:24:01 "R100" came back as "100 grand" at 0.543. A word the recogniser is not sure of is a word
