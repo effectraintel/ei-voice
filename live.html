@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 391;
+const BUILD_NO = 392;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -814,6 +814,9 @@ function turnClaim(what) {
     return false;
   }
   TURN.owner = what;
+  /* BUILD 392. THE WORLD'S TURN IS THE WORLD'S. judgeClaim below is the SONG rail's guard, and it must not judge a
+     turn the world answered. Stamped here, at the one place ownership is given. */
+  if (what === 'world') worldAnsweredAt = Date.now();
   logLine('turn.owner', what + ' owns turn ' + TURN.id, { level: 'info', target: 'turn' });
   return true;
 }
@@ -1947,6 +1950,8 @@ let notesSentThisTurn = 0;
 /* BUILD 391. HIS WORDS GO ONCE. Set when forwardHisWords hands his sentence to the mouth, so the 2.5s watchdog
    cannot say it a second time. */
 let forwardedThisTurn = false;
+/* BUILD 392. When the world last owned a turn, so the song-rail guard can tell a tennis question from a song one. */
+let worldAnsweredAt = 0;
 let forwardTimer = 0;
 // Echo bookkeeping. A phone speaker feeds its own voice back into its own microphone.
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
@@ -7253,8 +7258,17 @@ function judgeClaim() {
     // can say it.
     const claims = /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|there(?:'?s| is| are| is not| isnt)? nothing on (?:your|the) shelf|couldn'?t reach (?:it|that|the (?:sharing |music )?rail|sharing service)|no answer from (?:the |your )?(?:sharing |music )?rail|(?:the |your )?(?:sharing |music )?rail (?:is |was |seems |must be |has been )?(?:down|not answering|not responding|unreachable|unavailable|playing up|broken)|(?:the |your )?(?:sharing |music )?rail (?:did\s*n[o'\u2019]?t|did not|does\s*n[o'\u2019]?t|does not|has\s*n[o'\u2019]?t|has not|had\s*n[o'\u2019]?t|never|won'?t|would\s*n[o'\u2019]?t|could\s*n[o'\u2019]?t) (?:answer|respond|reply|come back|come through|get back|work|find|locate|reach)/i;
     if (!claims.test(t)) return;
+    /* BUILD 392. A WORLD TURN IS NOT A SONG TURN.
+       19 Nov 2026, 22:39:13, live on 391. He asked "Can you tell me what is happening in the ATP Masters? Final
+       interim."; the world answered from Wikipedia (and wrongly - that is the rail's fault, fixed in the same
+       build); the mouth began "I cannot find what is happening in the ATP Masters right now"; this guard is the
+       SONG rail's, it read "cannot find" as a song-rail excuse, found no song-rail call behind it, and corrected
+       him with "Nothing has been searched yet, Boss. Which song is it?" So the door asked which song on a tennis
+       question, which is the fault he retired on 18 Nov: the door never hunts. A turn the world owns is excused
+       here, and says so in the record. */
+    const worldTurn = (TURN && TURN.owner === 'world') || (Date.now() - worldAnsweredAt < 25000);
     const answered = railCallsThisTurn > 0 || (Date.now() - railAnsweredAt < 20000)
-      || (Date.now() - railToldAt < 20000);
+      || (Date.now() - railToldAt < 20000) || worldTurn;
     // Build 139: the truth, not a denial, when the song is already found and locked. On 10 Nov he was told
     // "I couldn't find that song right now" while Back in Black sat on his shelf with its link made.
     // 14 Nov 13:07: the door was deaf to "Pump pump the jam", the mouth covered for it with "Nothing was
