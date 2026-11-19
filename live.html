@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 378;
+const BUILD_NO = 379;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -13790,16 +13790,20 @@ async function vpEnrolThenGreet() {
   vpTried = true;
   let ok = false;
   try {
-    const has = await vpRelayHasVoice();
-    if (!has) {
-      logLine('vp.skip', 'the relay cannot measure a voice yet, so he is not asked', { level: 'warn', target: 'voice' });
-      return sayGreeting();
-    }
     const line = 'One thing once, Boss. Say this so I know it is you: this is my door, this is my voice.';
     logLine('vp.ask', 'no voice on record: he is asked once, and never again', { level: 'notice', target: 'voice' });
     doorAsk(line, 'Say exactly this, in one line, and nothing else: "' + line + '" Then stop and say nothing more.');
     await vpWaitQuiet(14000);
     const got = await vpRecord(7.0);
+    if (got === null) {
+      /* No answer at all: this relay does not measure voices. He is not asked again this session and nothing is said,
+         because a door that apologises for a capability it never had is worse than one that simply carries on. */
+      logLine('vp.relay.old', 'the relay answered no measurement, so the door carries on without a voice on record',
+        { level: 'warn', target: 'voice' });
+      try { greeting = true; } catch (e) {}
+      if (sessionUp) sayGreeting();
+      return;
+    }
     if (got && got.ok && got.v && got.v.length) {
       const s = doorSession();
       const d = await gatePost('doorVoiceprint', {
