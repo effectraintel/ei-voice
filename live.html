@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 387;
+const BUILD_NO = 388;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -1289,8 +1289,8 @@ const DECLS = [{
               /* Build 222. This is the search. His own search inside the voice comes back with no links at
                  all (measured: groundingChunks 0 in the live audio session), so a fact answered that way can
                  never be shown with its source. Asked here, the rail returns the facts and the links that
-                 back them, and the door puts both on his shelf. */
-              description: 'The search rail: anything about the world outside his house. Use it FIRST for a score, a result, a price, a news event, a date, a person, or anything happening now, and for the weather. It answers with the facts and the source links behind them, and the door puts what it found on his shelf for him to open. For a map of a place - "map of Japan", "where is Durban on a map" - it answers with a map he can open. Speak only from the facts it returns and name the source it names. Never answer a world question from memory and never name a source you were not given. Not for his own rooms, family, money or records: that is house. Never for a question about the door itself, its rail, its shelf or why something just happened: the web knows nothing about this door, so answer from what you did, or say you do not know.',
+                 back them, and the door holds both. */
+              description: 'The search rail: anything about the world outside his house. Use it FIRST for a score, a result, a price, a news event, a date, a person, or anything happening now, and for the weather. It answers with the facts and the source links behind them, and the door HOLDS what it found: it is not on his shelf, and you never say it is. He taps a button himself if he wants to keep it. For a map of a place - "map of Japan", "where is Durban on a map" - it answers with a map he can open. Speak only from the facts it returns and name the source it names. Never answer a world question from memory and never name a source you were not given. Not for his own rooms, family, money or records: that is house. Never for a question about the door itself, its rail, its shelf or why something just happened: the web knows nothing about this door, so answer from what you did, or say you do not know.',
               parameters: {
                 type: 'OBJECT',
                 properties: {
@@ -6872,7 +6872,15 @@ function scrubShelfClaim() {
       const el = turns.engine && turns.engine.querySelector('.said');
       if (el) el.textContent = after;
     } catch (e) {}
-    logLine('claim.shelfwrite.stripped', 'the answer claimed his shelf, so the sentence was taken out of it: '
+    /* BUILD 388. A STRIP IS NOT A SILENCE. The mouth speaks as it streams, so by the time this runs the words have
+       already been said aloud: the sentence can be taken out of the transcript, and the audio cannot be taken back.
+       19 Nov 2026, 13:05:49, live on 387: "It is 25 degrees and sunny in Ballito right now, Boss, according to
+       wttr.in. That fact is on your shelf now." - his ears heard the claim and his screen did not show it, which is
+       a screen that disagrees with what he heard. The cure is that the mouth never generates it (the world tool's
+       own description was telling it that a lookup lands on his shelf, and it believed the tool over the rule), not
+       that the line is edited afterwards. The record says "spoken" so this is never mistaken for a clean turn. */
+    logLine('claim.shelfwrite.stripped', 'the answer SAID this aloud and the sentence was taken out of the transcript '
+      + '(the audio cannot be taken back): '
       + before.slice(0, 120), { level: 'warn', target: 'no-shelf-write' });
   } catch (e) {}
 }
