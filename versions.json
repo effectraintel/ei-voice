@@ -1,8 +1,14 @@
 {
- "latest": 374,
- "updated": "2026-11-19T10:23",
+ "latest": 375,
+ "updated": "2026-11-19T10:35",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 375,
+   "file": "v375.html",
+   "at": "2026-11-19T10:35",
+   "note": "the shelf is his choice: a Shelve button under each answer"
+  },
   {
    "n": 374,
    "file": "v374.html",

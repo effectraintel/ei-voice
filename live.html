@@ -74,6 +74,17 @@
   .said { white-space:pre-wrap; overflow-wrap:anywhere; }
   .turn.you .said { color:#cfc6b6; }
   .lat { margin-top:5px; font-size:11.5px; color:var(--gold); letter-spacing:.04em; }
+  /* BUILD 375. The Shelve button: small, quiet, beside the line it belongs to. */
+  .lat.chip { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .lat.chip .shelve {
+    appearance:none; -webkit-appearance:none; cursor:pointer;
+    font:inherit; font-size:10.5px; letter-spacing:.10em; text-transform:uppercase;
+    color:var(--gold); background:transparent;
+    border:1px solid rgba(176,141,47,.45); border-radius:999px;
+    padding:2px 9px; line-height:1.5;
+  }
+  .lat.chip .shelve:hover { border-color:var(--gold); background:rgba(176,141,47,.10); }
+  .lat.chip .shelve.done { color:var(--dim); border-color:rgba(154,145,132,.35); cursor:default; }
   /* the gate: a shut door is the default state, not an error state */
   #gate { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
     background:rgba(12,11,10,.93); backdrop-filter:blur(6px); padding:22px; }
@@ -504,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 374;
+const BUILD_NO = 375;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -6317,9 +6328,9 @@ async function handleWorldCall(call) {
               + 'short lines and say where it came from. ')
           : '')
         + (!quietShelf && srcList.length
-          ? 'The door has put ONE card on his shelf and it carries the ' + srcList.length + ' source link'
-            + (srcList.length === 1 ? '' : 's') + ' inside it, so say it is on his shelf and let him open it. '
-            + 'Never say the links are beside it, because they are in it. '
+          ? 'NOTHING was put on his shelf: he decides that himself, with the Shelve button under your answer. '
+            + 'So answer him from these facts in one or two short lines, name the source, and never say it is on '
+            + 'his shelf or that he can open it there. '
           : '')
         + 'If the place or thing is not the one he meant, ask him which he meant rather than answering about it.)';
       logLine('world.look', ask + ' · ' + r.engine + ' · ' + String(facts).slice(0, 120), { level: 'info', target: 'world' });
@@ -6336,19 +6347,18 @@ async function handleWorldCall(call) {
       /* ONLY IF WE KNOW CAN WE KEEP IT. A card is an act: it puts a thing in his world and it stays there. */
       const mayKeep = mayAct('world', 'keeping the looked-up fact');
       const foundCard = (quietShelf || !mayKeep) ? null : worldCard(ask, r);
+      /* BUILD 375. NOTHING LANDS ON HIS SHELF UNLESS HE PUTS IT THERE.
+         19 Nov 2026, 12:29: "Yes all landed on the shelf so it fills up the space quickly.... is good for demo
+         purposes but not for real life. To replace this behaviour, give an option (small button next lookup
+         subtext called Shelve) that a user can just click to put it on the shelf straight from there."
+         So the card is built and HELD against this answer, and the chip under the answer carries the button. */
       if (foundCard) {
-        if (!shelfReplace(foundCard.code, foundCard)) shelfAdd(foundCard);
-        keepFound(foundCard);
-        /* Build 229 - ONE ANSWER, ONE CARD. 14 Nov 2026, 23:11: "When I googled how can I get to Cape Town it
-           landed 4 items on the shelf. We only need 1 as it contains all the links in it already."
-           He is right and nothing was missing. Build 222 did BOTH halves of the same job and neither was
-           removed: it put the sources inside the card (detail.sources, drawn as tappable links when he opens
-           it) AND made every source its own card. So one answer cost three cards, two of them duplicating
-           links already in the first. The card is the answer; its links travel inside it. */
-        shelfWriteAt = Date.now();
-        shelfWriteKind = 'fact';
-        logLine('world.card', foundCard.code + ' \u00b7 ' + foundCard.title, { level: 'info', target: 'shelf' });
+        heldLookup = { card: foundCard, at: Date.now(), shelved: false };
+        logLine('world.held', foundCard.code + ' \u00b7 held, not shelved \u00b7 ' + foundCard.title,
+          { level: 'info', target: 'shelf' });
       }
+      /* Build 229 still holds: ONE ANSWER, ONE CARD. The card is built once, it carries its source links inside
+         it, and now it waits in the hand rather than on the shelf. */
     }
   } catch (e) {
     result = 'the world lookup could not run: ' + ((e && e.message) ? e.message : String(e))
@@ -12780,6 +12790,25 @@ function whenAt(iso) {
   catch (e) { return String(iso || ''); }
 }
 
+/* BUILD 375. THE SHELVE BUTTON. A lookup is held against the answer it belongs to, and he puts it on his shelf
+   himself, or he does not. Nothing is written until he taps it. */
+let heldLookup = null;
+function shelveHeld(card) {
+  const h = heldLookup;
+  const c = card || (h && h.card);
+  if (!c) return false;
+  if (h && h.card === c && h.shelved) return false;
+  try {
+    if (!shelfReplace(c.code, c)) shelfAdd(c);
+    if (h && h.card === c) h.shelved = true;
+    shelfWriteAt = Date.now();
+    shelfWriteKind = 'fact';
+    logLine('shelf.manual', 'he put it on the shelf himself \u00b7 ' + c.code + ' \u00b7 ' + c.title,
+      { level: 'info', target: 'shelf' });
+    return true;
+  } catch (e) { return false; }
+}
+
 function worldCard(ask, r) {
   try {
     const facts = ((r && r.facts) || []).map(String).filter(Boolean);
@@ -13696,7 +13725,24 @@ function handleFrame(text) {
       if (prev) prev.remove();
       const l = document.createElement('div');
       l.className = 'lat chip';
-      l.textContent = 'looked up: ' + looked;
+      const lbl = document.createElement('span');
+      lbl.textContent = 'looked up: ' + looked;
+      l.appendChild(lbl);
+      /* BUILD 375. THE SHELVE BUTTON: his choice, under the answer it belongs to. */
+      try {
+        if (heldLookup && heldLookup.card && !heldLookup.shelved) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'shelve';
+          b.textContent = 'Shelve';
+          b.setAttribute('aria-label', 'Put this on the shelf');
+          const cardForButton = heldLookup.card;   // this answer's card, not whatever comes next
+          b.onclick = function () {
+            if (shelveHeld(cardForButton)) { b.textContent = 'shelved'; b.disabled = true; b.classList.add('done'); }
+          };
+          l.appendChild(b);
+        }
+      } catch (e) {}
       closing.appendChild(l);
     }
     looked = null;
