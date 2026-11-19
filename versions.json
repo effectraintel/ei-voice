@@ -1,8 +1,14 @@
 {
- "latest": 373,
- "updated": "2026-11-19T10:19",
+ "latest": 374,
+ "updated": "2026-11-19T10:23",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 374,
+   "file": "v374.html",
+   "at": "2026-11-19T10:23",
+   "note": "the corridor does not stall: stuck flags expire, a deaf ear is reopened, a door phrase is taken"
+  },
   {
    "n": 373,
    "file": "v373.html",

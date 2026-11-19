@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 373;
+const BUILD_NO = 374;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -781,8 +781,55 @@ function earFinalVerdict(v) {
   return 'turn';
 }
 
+/* The door's own vocabulary. A hearing that lands exactly on one of these is his, whatever the recogniser's number. */
+const DOOR_PHRASES = ['start fresh', 'carry on', 'carry on where we left off', 'make a song', 'make me a song',
+  'payment request', 'share a song', 'stop', 'never mind'];
+function earPhraseExact(text) {
+  const n = String(text || '').toLowerCase().replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return DOOR_PHRASES.indexOf(n) >= 0;
+}
+function earAcceptsHearing(v) {
+  const text = String((v && v.text) || '').trim();
+  const conf = (v && v.conf);
+  if (!text) return false;
+  if (earPhraseExact(text)) return true;
+  if (conf === null || conf === undefined) return true;
+  return Number(conf) >= 0.55;
+}
+
+/* BUILD 374. A FLAG ONLY THE MODEL CAN CLEAR IS A CORRIDOR THAT NEVER REOPENS.
+   19 Nov 2026, 11:59-12:21, live: he spoke for twenty minutes and the record shows 26 empty hearings in a row, each
+   one "nothing was heard while the door was still answering". The door was not answering; it had answered at 11:46
+   and closed. `owedLine`, `pendingMouth` and `turnInFlight` were still set, so every hearing was judged as talking
+   over the door, and the door said nothing either. Silence on both sides is the stall he reports as being stuck in
+   the corridor. So the flags expire on the clock, and sound in the air is the only thing that can hold him off. */
+const BUSY_WINDOW = { owed: 4000, pending: 2500, note: 2500, turn: 8000 };
+function expireStuckFlags() {
+  const now = Date.now();
+  try {
+    if (owedLine && owedAt && (now - owedAt) > BUSY_WINDOW.owed) {
+      logLine('mouth.owed.expired', 'a line nobody said for ' + Math.round((now - owedAt) / 1000)
+        + 's is not being said any more', { level: 'warn', target: 'mouth' });
+      owedLine = '';
+    }
+  } catch (e) {}
+  try {
+    if (pendingMouth && pendingMouth.length && pendingMouthAt && (now - pendingMouthAt) > BUSY_WINDOW.pending) {
+      pendingMouth.length = 0;
+    }
+  } catch (e) {}
+  try {
+    if ((turnInFlight || awaitingFirstAudio) && TURN && TURN.at && (now - TURN.at) > BUSY_WINDOW.turn) {
+      turnInFlight = false; awaitingFirstAudio = false;
+    }
+  } catch (e) {}
+}
+
 /* What the door knows about itself right now, read once, so the verdict never guesses. */
 function earVerdictNow(text) {
+  /* BUILD 374. The flags expire BEFORE anything is judged on them. Judged first, a turn that has been "in flight"
+     for twenty minutes still reads as awaiting, and every hearing is discarded as talking over the door. */
+  try { expireStuckFlags(); } catch (e) {}
   let turnOpen = false, awaiting = false, ms = 999999;
   try {
     turnOpen = !!(TURN && TURN.id && !TURN.closedAt);
@@ -793,8 +840,10 @@ function earVerdictNow(text) {
   } catch (e) {}
   let mouthBusy = false;
   try {
-    mouthBusy = !!(speaking || turnInFlight || awaitingFirstAudio
-      || (noteQueue && noteQueue.length) || owedLine || pendingMouth.length);
+    mouthBusy = !!(playing()
+      || (speaking && speakingAt && (Date.now() - speakingAt) < 1500)
+      || turnInFlight || awaitingFirstAudio
+      || (noteQueue && noteQueue.length) || owedLine || (pendingMouth && pendingMouth.length));
   } catch (e) {}
   return earFinalVerdict({ text: text, turnOpen: turnOpen, awaiting: awaiting, msSinceTurn: ms, mouthBusy: mouthBusy });
 }
@@ -1799,7 +1848,7 @@ let doorGen = 0;          // bumped by anything that cancels an opening in fligh
 if (stored !== voice) localStorage.setItem('ei-live-voice', voice);
 let micCtx = null, micStream = null, proc = null, playCtx = null, playAt = 0;
 let listening = false, busy = false, sessionUp = false;
-let speaking = false, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency = null;
+let speaking = false, speakingAt = 0, lastWordAt = 0, awaitingFirstAudio = false, pendingLatency = null;
 /* BUILD 305. turnInFlight was read here and written three thousand lines below, never declared, so it lived
    as an implicit global that only existed once something had assigned it. On 18 Nov 2026, 09:09:08 the very
    first note of the visit was the welcome-back question, before any turn had run: Safari threw
@@ -13401,7 +13450,7 @@ function handleFrame(text) {
          every frame was thrown away and he heard nothing. A sound that arrives before the door has asked is now kept:
          if the door asks for its own words, it is played; if the turn closes without that, it is dropped and recorded. */
       if (!mouthScripted()) {
-        if (pendingMouth.length < 60) pendingMouth.push({ data: data, mime: p.inlineData.mimeType });
+        if (pendingMouth.length < 60) { pendingMouth.push({ data: data, mime: p.inlineData.mimeType }); pendingMouthAt = Date.now(); }
         pendingMouthAt = pendingMouthAt || Date.now();
         heldFrames++;
         unheardAt = Date.now();
@@ -13714,10 +13763,10 @@ async function openMic() {
          the door's sentence to a fragment - the "shhh" heard at 01:24. While our audio is playing, only a voice well
          above the bleed may stop it. */
       if (!speaking && (!ours || (loudFrames >= BARGE_FRAMES * 3 && rms > ECHO_RMS * 2 && Date.now() - playRunStart > 400))) {
-        speaking = true;
+        speaking = true; speakingAt = Date.now();
         if (ours) barge();
       }
-      if (!speaking) speaking = true;
+      if (!speaking) { speaking = true; speakingAt = Date.now(); }
     } else {
       loudFrames = 0;
       if (speaking) {
@@ -13980,6 +14029,13 @@ function looksLikeOurOwnWords(text) {
   return false;
 }
 
+/* BUILD 374. AN EAR THAT HEARS A BOUNDARY AND NO WORDS IS DEAF, AND IT IS REOPENED.
+   19 Nov 2026, 11:59-12:21: 26 empty hearings in a row. He was speaking (every one was preceded by "he stopped
+   speaking"), and no transcript came back for twenty minutes. Nothing in the door noticed, because an empty hearing
+   looked the same as a quiet one. Two in a row is a deaf ear, not a quiet man. */
+let earEmpties = 0;
+function earDeafAfter(n) { return Number(n) >= 2; }
+
 function earFinish(why) {
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
   const text = String(earText || earLive || '').trim();
@@ -14000,6 +14056,17 @@ function earFinish(why) {
     return;
   }
   if (!text) {
+    /* BUILD 374. Two empty hearings in a row reopen the ear. */
+    try {
+      earEmpties++;
+      if (earDeafAfter(earEmpties)) {
+        earEmpties = 0;
+        logLine('ear.deaf', 'he has spoken twice and no words came back, so the ear is closed and reopened',
+          { level: 'warn', target: 'hear' });
+        try { if (earWs) earWs.close(); } catch (e) {}
+        try { earWs = null; earReady = false; earOpen(); } catch (e) {}
+      }
+    } catch (e) {}
     /* BUILD 355. A TURN THE EAR DID NOT HEAR IS STILL A TURN HE TOOK.
        19 Nov 2026, 00:43-00:47: the door asked "Do you want a cover picture?", he answered five times, the ear came
        back empty every time, and the door said nothing at all. Five answers into silence is a door that looks dead,
@@ -14024,7 +14091,12 @@ function earFinish(why) {
      19 Nov 2026, 00:22:11: he said "start fresh" and the ear gave back "Goldfish." at confidence 0.157, and the door
      acted on it. At 00:24:01 "R100" came back as "100 grand" at 0.543. A word the recogniser is not sure of is a word
      the door does not own: it asks once, plainly, and acts on nothing. Anything above the line is his. */
-  if (conf !== null && conf < 0.55) {
+  /* BUILD 374. A DOOR PHRASE HEARD EXACTLY IS NOT AN UNSURE HEARING.
+     19 Nov 2026, 11:45:58, live on 372: he said "Start fresh." and the ear returned it word for word at 0.485, so
+     the confidence gate refused it and the door answered "Sorry, Boss, I did not catch that." Twice in one morning.
+     A short phrase is exactly what a recogniser is least sure about, and it is the one case where the words carry
+     more evidence than the number: if the hearing IS one of the door's own phrases, it is his. */
+  if (!earAcceptsHearing({ text: text, conf: conf })) {
     logLine('ear.lowconf', 'not sure enough to act on: ' + text.slice(0, 120) + ' \u00b7 conf ' + conf,
       { level: 'warn', target: 'hear' });
     try { lastAsked = 'Sorry, Boss, I did not catch that. Say it once more.'; doorAsk(lastAsked,
