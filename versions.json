@@ -1,8 +1,14 @@
 {
- "latest": 399,
- "updated": "2026-11-20T00:42",
+ "latest": 400,
+ "updated": "2026-11-20T00:58",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 400,
+   "file": "v400.html",
+   "at": "2026-11-20T00:58",
+   "note": "a retraction is heard, and stopping the making stops it"
+  },
   {
    "n": 399,
    "file": "v399.html",

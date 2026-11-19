@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 399;
+const BUILD_NO = 400;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -8730,7 +8730,14 @@ async function handleShareCall(call) {
      picture was answered, and the make went into the studio carrying the withdrawal line as the words. Nothing
      about that sentence is words for a song: it is him changing his mind, and changing his mind has to be heard
      before anything else in the turn. */
-  const SONG_WITHDRAW = /\b(?:no\s+more\s+song|forget\s+(?:the\s+)?song|cancel\s+(?:the\s+)?song|stop\s+(?:the\s+|that\s+)?song|(?:i\s+)?(?:don'?t|do\s+not|didn'?t)\s+(?:want|wanna)\s+(?:to\s+)?(?:create|make|write|do|have)\s+(?:a\s+|another\s+|that\s+|the\s+)?song|(?:not|n'?t)\s+going\s+to\s+(?:create|make|write)\s+(?:a\s+|another\s+|the\s+)?song)\b/i;
+  /* BUILD 400. HE SAID STOP AND THE DOOR OFFERED HIM REGGAE, BLUES OR POP.
+     19 Nov 2026, 22:34:07, live on 399: "No, we're not gonna be. Let's stop this. I'm not gonna make a song
+     Anymore." The regex below only knew "going to" and "not going to", so "gonna" walked straight past it, and
+     "let's stop this" was not a phrase it had at all. The door read the sentence as a sound attempt, asked "Did you
+     mean swing, Boss?" about a sound he never gave, and then offered him a list of genres. He had to say "I don't
+     want to make a song anymore" in exactly the shape the regex knew before it was heard. A stop is the clearest
+     thing a person can say and it must never depend on his grammar matching ours. */
+  const SONG_WITHDRAW = /\b(?:no\s+more\s+song|forget\s+(?:the\s+)?song|cancel\s+(?:the\s+)?song|scrap\s+(?:the\s+|it|that)|stop\s+(?:the\s+|that\s+)?song|(?:let'?s|let\s+us)\s+stop(?:\s+(?:this|it|that|the\s+song|here|now))?|stop\s+(?:this|it)(?:\s+now)?|(?:i\s+)?(?:don'?t|do\s+not|didn'?t)\s+(?:want|wanna)\s+(?:to\s+)?(?:create|make|write|do|have)\s+(?:a\s+|another\s+|that\s+|the\s+)?song|(?:not|n'?t)\s+(?:going|gonna|go)\s+to?\s*(?:create|make|write)\s+(?:a\s+|another\s+|the\s+)?song|(?:not|n'?t)\s+(?:gonna|going\s+to)\s+(?:create|make|write)\s+(?:a\s+|another\s+|the\s+)?song)\b/i;
   function songWithdrawn(t) {
     const s = String(t || '');
     if (!SONG_WITHDRAW.test(s)) return false;
@@ -8785,9 +8792,36 @@ async function handleShareCall(call) {
     } catch (e) { return false; }
   }
   
+  /* BUILD 400. A RETRACTION IS HEARD BEFORE THE WORDS ARE TAKEN.
+     19 Nov 2026, 22:33:52, live on 399. He gave the subject by mistake and said so in the same breath: "A huge wave.
+     That no, no, ignore that. All that. Like sorry." The door wrote the WHOLE sentence down as the subject of the
+     song, retraction and apology included, and moved on to ask the sound. He then had to stop the making entirely to
+     get out of it. So a sentence that takes something back is read first, the words it withdraws are dropped, and
+     the question he was answering is asked again - because the honest answer to "ignore that" is to ask once more,
+     not to sing it. */
+  const SONG_RETRACT = /\b(?:ignore\s+(?:that|it|this)|forget\s+(?:that|it|this)|scratch\s+(?:that|it|this)|disregard\s+(?:that|it|this)|take\s+that\s+back|all\s+that|not\s+(?:that|what\s+i\s+said)|that(?:'s|\s+is)\s+(?:not|wrong)|no,?\s+no,?\s*(?:no|ignore|forget|that)|let\s+me\s+start\s+(?:again|over))\b/i;
+  function songRetracted(t) {
+    try {
+      const s0 = String(t || '');
+      if (!SONG_RETRACT.test(s0)) return false;
+      return !!(songDraft.at && (Date.now() - songDraft.at) < 20 * 60 * 1000);
+    } catch (e) { return false; }
+  }
   function doorTakesSubject(t) {
     if (!subjectAnswerOpen()) return false;
     if (SUBJECT_OTHER_ACT.test(t)) return false;
+    /* He took it back in the same breath: nothing is written, and the question he was answering is asked again. */
+    if (songRetracted(t)) {
+      songDraft.said = '';
+      songDraft.askBeat = 'subject';
+      songDraft.at = Date.now();
+      logLine('song.subject.retracted', 'he took it back, so nothing was written and the question is asked again \u00b7 '
+        + String(t).slice(0, 100), { level: 'info', target: 'music' });
+      doorNote('He took back what he just said, so nothing has been written and no song is being made from it. Say in '
+        + 'one short line that you have let it go, then ask him once what the song should be about. Ask nothing else.',
+        true);
+      return true;
+    }
     if (songConcrete(t) < 2) return false;          // nothing to sing about
     songDraft.said = t;
     songDraft.askBeat = '';
