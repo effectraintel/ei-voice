@@ -1410,12 +1410,18 @@ function dispatchToolCall(call) {
 // Edwin's log, 8 Nov 22:13, lines 1409-1410: nothing was called, and the engine said "I have just sent
 // ... It's all taken care of." No mail left. A door that can announce a delivery it never made is worse than
 // one that asks twice, so the brief forbids the sentence and the door checks it afterwards.
+/* BUILD 390. ONE SENTENCE IS THE ROOM'S LENGTH.
+   19 Nov 2026, his ruling: "We don't need a novel we need a summary. So ask for one sentence will do it as we
+   can't broadcast more than that in any case in text or voice back." This is the brief's own rule, so it holds
+   on every path rather than only where a note remembers to say it. */
+const ONE_LINE = 'Answer in ONE short sentence. One sentence is all the room carries: a second sentence is '
+  + 'words he hears after he has already stopped listening. Never stack two facts into one line to fit more in. ';
 const NO_CLAIM = 'You cannot send, post or deliver anything by talking. A send exists only as the result of the '
   + 'sharing tool: if you have not called it in this turn and read its answer, nothing has been sent, and you must '
   + 'not say it has, or that it is on its way, or that he should look for it. Never fill a silence with a claim. '
   + 'If he has not answered the question you asked, ask it again in fewer words. ';
 
-const BRIEF = NO_CLAIM +
+const BRIEF = NO_CLAIM + ONE_LINE +
   'You are Effectra, the Effectra Intelligence engine, speaking aloud to Edwin, your owner. When you look something up, say where you got it and keep to what that source actually says; if the sources do not settle it, say you cannot confirm it rather than picking an answer. Never guess a result, a score, a price or a date and present it as fact. Never say that anything is on his shelf, and never mention a shelf at all: what he looks up is held and he taps a button himself if he wants to keep it. ' +
   // Edwin, 13 Nov 2026, 23:24: "I think we always need to default to Google for now, we can expand on
   // this later, as this is not a core function." Google's search is the engine, and since build 222 the
@@ -6421,14 +6427,14 @@ async function handleWorldCall(call) {
         + ' (source: ' + r.engine + ', as of ' + r.as_of + '. If you name a source, name this one and nothing else. '
         + (quietShelf
           ? (songInFlight()
-            ? 'A song of his is being made, so nothing was put on his shelf: answer him from these facts in one or '
-              + 'two short lines, say where it came from, and say the song is still being made. '
-            : 'He is settling a song, so nothing was put on his shelf: answer him from these facts in one or two '
-              + 'short lines and say where it came from. ')
+            ? 'A song of his is being made, so nothing was put on his shelf: answer him from these facts in ONE '
+              + 'short sentence, say where it came from, and say the song is still being made. '
+            : 'He is settling a song, so nothing was put on his shelf: answer him from these facts in ONE short '
+              + 'sentence and say where it came from. ')
           : '')
         + (!quietShelf && srcList.length
           ? 'NOTHING was put on his shelf: he decides that himself, with the Shelve button under your answer. '
-            + 'So answer him from these facts in one or two short lines, name the source, and never say it is on '
+            + 'So answer him from these facts in ONE short sentence, name the source, and never say it is on '
             + 'his shelf or that he can open it there. '
           : '')
         + 'If the place or thing is not the one he meant, ask him which he meant rather than answering about it.)';
@@ -9111,7 +9117,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
            one instruction contradicted the other, the mouth stalled, and the weather arrived twelve seconds later
            after the world tool had been called anyway. The song is still put down here (it must be), but the note now
            says what to do instead of what not to do: answer him, and reach for the world tool if it is about the world. */
-        doorNote('He has changed subject, so the song is put down. Answer his question in one or two short lines. '
+        doorNote('He has changed subject, so the song is put down. Answer his question in ONE short sentence. '
           + 'If it is about the world - weather, a place, a price, news, a fact - call the world tool and answer from '
           + 'what it returns. Do not mention a song, a title, or the shelf.', true);
         return;
