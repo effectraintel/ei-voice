@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 365;
+const BUILD_NO = 366;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -8552,6 +8552,18 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   function guessTurn(said) {
     /* BUILD 364. ONE SENTENCE GETS ONE ANSWER. If the song route already opened a making on this very turn, the
        sharing branch does not ask for a title on the back of it. */
+    /* BUILD 366. AN OPEN QUESTION BELONGS TO WHOEVER ASKED IT.
+       19 Nov 2026, 00:01: the cover question was open ("journey · picture · still open"), he said "I didn't say anything.",
+       and the sharing branch claimed the turn and asked "Which song, Boss? The title and who sings it." - while the
+       making was still waiting on its own question. The making has an open beat, so the sharing branch may not answer
+       at all until that beat is settled or the journey is closed. */
+    try {
+      if (songDraft && songDraft.askBeat) {
+        logLine('share.blocked.open.question', 'the making is waiting on "' + String(songDraft.askBeat)
+          + '", so the sharing branch stays out of this turn', { level: 'info', target: 'songShare' });
+        return false;
+      }
+    } catch (e) {}
     if (!claimTurn('the sharing branch')) return false;
     if (routeAnsweredAt && Date.now() - routeAnsweredAt < 1500) {
       logLine('share.ask.suppressed', 'the song route already answered this turn, so no title is asked on top of it',
@@ -13593,6 +13605,11 @@ function earOpen() {
         earConf = (typeof f.conf === 'number' ? f.conf : null);
         logLine('ear.final', t + ' \u00b7 conf ' + (f.conf == null ? '?' : f.conf) + ' \u00b7 ' + (f.lang || ''),
           { level: 'info', target: 'hear' });
+        /* BUILD 366. WHAT THE RELAY ACTUALLY SAID, kept whole. 19 Nov 2026, 23:59:58: he said "Start fresh" and the ear
+           returned "I want to create a song." at 0.964 - a sentence from ten minutes earlier, in a session that had just
+           been replaced. Either the page replayed old audio or the relay answered from a buffer, and those two look
+           identical in the log without the frame itself. */
+        try { logLine('ear.frame', JSON.stringify(f).slice(0, 240), { level: 'info', target: 'hear' }); } catch (e) {}
         return;
       }
       if (f.t === 'end') { earFinish('the ear finished the turn'); return; }
