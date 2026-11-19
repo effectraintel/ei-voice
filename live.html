@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 385;
+const BUILD_NO = 386;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -773,6 +773,12 @@ let sessionEpoch = 1;
 const TURN = { id: 0, epoch: 1, heard: '', owner: '', at: 0, said: [], answeredAt: 0, closedAt: 0 };
 
 function turnBegin(heard) {
+  /* BUILD 386. A LINE ABOUT A LOOKUP BELONGS TO THE ANSWER THAT PRODUCED IT.
+     19 Nov 2026, 12:23: he asked for Back in Black, the rail landed it, the landing line was never spoken, and the
+     "looked up: sharing · naming" chip with its SHELVE button was drawn 12 seconds later under "Glad you think so,
+     Boss." - an answer about something else entirely. `looked` and the held card outlive their turn unless the next
+     turn takes them with it. */
+  try { looked = null; heldLookup = null; } catch (e) {}
   TURN.id++;
   TURN.epoch = sessionEpoch;
   TURN.heard = String(heard || '');
@@ -1905,6 +1911,8 @@ let forwardTimer = 0;
 // At a threshold low enough to catch a quiet word, that echo looks exactly like the
 // owner interrupting, so the page used to cut its own sentence off mid-word.
 let playRunStart = 0, loudFrames = 0, looked = null;
+/* BUILD 386: the last moment the door minted a line the mouth must say. */
+let doorLineAt = 0;
 let ourSoundEndsAt = 0, lastVoicedAt = 0;   // ms on the page clock (build 47)
 let sessionVoice = '', sessionModel = '';   // what this door asked for, shown in the footer (build 50)
 // Build 39. The engine says one line before the microphone opens, so the boundary between
@@ -7391,8 +7399,17 @@ async function handleShareCall(call) {
              is kept, because a refusal must never be heard - and it is released the moment the door mints its own
              line (sendNoteNow), so it can no longer hold the question itself back for twelve seconds, which is what
              made the tail he caught on 334. */
-          try { hiddenHold = true; hiddenHoldUntil = Date.now() + 12000; } catch (e) {}
-          logLine('mouth.held.refusal', 'a search was refused while he is naming a song, so nothing it says is heard',
+          /* BUILD 386. AND IT MAY NOT SWALLOW A LINE THE DOOR HAS ALREADY ASKED FOR.
+             19 Nov 2026, 12:23:15, live: the landing note ("Back In Black by AC/DC is on your shelf") went out at
+             12:23:14.551, the model tried one more search while naming a song a second later, and this hold silenced
+             the landing line itself - so he heard nothing, saw the card for a moment, and then saw it go. A refusal
+             is dropped by the gate; the door's own line is still said. */
+          const doorLineFresh = Date.now() - doorLineAt < 10000;
+          if (!doorLineFresh) {
+            try { hiddenHold = true; hiddenHoldUntil = Date.now() + 12000; } catch (e) {}
+          }
+          logLine('mouth.held.refusal', 'a search was refused while he is naming a song, so nothing it says is heard'
+            + (doorLineFresh ? ' (the door\u2019s own line was just minted, so it is not held)' : ''),
             { level: 'info', target: 'think' });
           result = 'Nothing was searched and nothing is said about searching. The door has already asked him one '
             + 'question and is asking it now, so say nothing about this at all: no apology, no mention of the '
@@ -9861,6 +9878,8 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   function sendNoteNow(text, speak) {
   notesSentThisTurn++;
   lastNoteSentAt = Date.now();
+  /* BUILD 386: when the door last minted a line of its own, so a refusal can tell whether it is about to swallow it. */
+  try { if (speak) doorLineAt = Date.now(); } catch (e) {}
   if (forwardTimer) { try { clearTimeout(forwardTimer); } catch (e) {} forwardTimer = 0; }
     // STAGE 1: a note the mouth must SPEAK is a directive, and it is minted here, before anything is
     // sent, so the words that follow can be traced back to it. A context note (speak false) is not a
