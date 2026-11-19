@@ -515,7 +515,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 376;
+const BUILD_NO = 377;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -13099,6 +13099,12 @@ function doorRefused(raw) {
 }
 
 function sayGreeting() {
+  /* BUILD 377. ONE THING ONCE, BEFORE ANYTHING ELSE. If the record holds no voice, the door asks for it here, at the
+     first opening, and never again. It waits for that answer rather than talking over it. */
+  try {
+    if (!vpKnown && vpStatusP) { vpStatusP.then(() => { if (sessionUp && greeting) sayGreeting(); }); return; }
+    if (vpKnown && !vpEnrolled && !vpTried) { vpEnrolThenGreet(); return; }
+  } catch (e) {}
   /* BUILD 298. HE IS ASKED, NOT RESUMED. A return is not a continuation he did not ask for: the door says what it
      still holds and lets him choose. One question, and his next words settle it. */
   if (resumePending) {
@@ -13327,6 +13333,8 @@ function handleFrame(text) {
     /* BUILD 285: the moment the door opens is the start of "nothing has been asked yet". */
     try { sessionOpenedAt = Date.now(); heardThisSession = false; } catch (e) {}
     logLine('door.open', 'door opened', { voice: sessionVoice, model: sessionModel, level: 'notice' });
+    /* BUILD 377: ask the record whether his voice is kept yet, while the door settles. */
+    try { vpStatus(); } catch (e) {}
     stopClock();
     foldForDoor(true);
     setState('one moment');
@@ -13762,6 +13770,116 @@ function handleFrame(text) {
   }
 }
 
+/* ---------- BUILD 377 · the enrolment, once ever ---------- */
+
+function vpWaitQuiet(ms) {
+  /* The mouth has to be out of the air before his voice is recorded, or the sample is half the door. */
+  const until = Date.now() + ms;
+  return new Promise((resolve) => {
+    const tick = () => {
+      let busy = false;
+      try { busy = playing() || (ourSoundEndsAt && performance.now() < ourSoundEndsAt + 300); } catch (e) {}
+      if (!busy || Date.now() > until) return resolve(!busy);
+      setTimeout(tick, 120);
+    };
+    tick();
+  });
+}
+
+async function vpEnrolThenGreet() {
+  vpTried = true;
+  let ok = false;
+  try {
+    const has = await vpRelayHasVoice();
+    if (!has) {
+      logLine('vp.skip', 'the relay cannot measure a voice yet, so he is not asked', { level: 'warn', target: 'voice' });
+      return sayGreeting();
+    }
+    const line = 'One thing once, Boss. Say this so I know it is you: this is my door, this is my voice.';
+    logLine('vp.ask', 'no voice on record: he is asked once, and never again', { level: 'notice', target: 'voice' });
+    doorAsk(line, 'Say exactly this, in one line, and nothing else: "' + line + '" Then stop and say nothing more.');
+    await vpWaitQuiet(14000);
+    const got = await vpRecord(7.0);
+    if (got && got.ok && got.v && got.v.length) {
+      const s = doorSession();
+      const d = await gatePost('doorVoiceprint', {
+        session_token: s && s.token, action: 'enrol', vector: got.v, secs: got.secs || 0,
+        device_label: String((navigator && navigator.platform) || '').slice(0, 60),
+      });
+      if (d && d.ok) {
+        vpEnrolled = true; vpVector = got.v.map(Number);
+        logLine('vp.enrolled', 'his voice is on record now \u00b7 ' + (got.secs || '?') + 's \u00b7 '
+          + got.v.length + ' numbers', { level: 'notice', target: 'voice' });
+        ok = true;
+        doorNote('His voice is on record for the first time this opening. Say one short line that you have it and '
+          + 'that you will know him from a voice in the room, then carry on.');
+      } else {
+        logLine('vp.enrol.refused', String((d && d.error) || 'the record refused it'), { level: 'warn', target: 'voice' });
+      }
+    } else {
+      logLine('vp.enrol.miss', 'the sample came back empty or too short', { level: 'warn', target: 'voice' });
+    }
+  } catch (e) {
+    logLine('vp.enrol.fail', String((e && e.message) || e), { level: 'error', target: 'voice' });
+  }
+  if (!ok) {
+    /* It failed, and he should not be left wondering why the door asks again next time. One short line, once. */
+    try {
+      doorNote('You could not keep his voice this time. Say one short line that you will ask once more next time, '
+        + 'and nothing else about it.');
+    } catch (e) {}
+  }
+  if (sessionUp && greeting) sayGreeting();
+}
+
+function vpRecord(seconds) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (why) => {
+      if (settled) return;
+      settled = true;
+      vpRecording = false;
+      try { if (vpWs && vpWs.readyState === 1) vpWs.send(JSON.stringify({ t: 'end' })); } catch (e) {}
+      logLine('vp.sample', 'recording stopped: ' + why + ' \u00b7 ' + vpFrames.length + ' frame(s) \u00b7 '
+        + Math.round((Date.now() - vpStartedAt) / 100) / 10 + 's', { level: 'info', target: 'voice' });
+      setTimeout(() => {
+        try { if (vpWs) vpWs.close(); } catch (e) {}
+        vpWs = null;
+        resolve(settledAnswer);
+      }, 4000);
+    };
+    let settledAnswer = null;
+    try {
+      const w = new WebSocket(EAR_URL + '?enrol=1');
+      vpWs = w;
+      w.binaryType = 'arraybuffer';
+      w.onopen = () => {
+        vpFrames = []; vpHeard = 0; vpQuietSince = 0; vpStartedAt = Date.now(); vpRecording = true;
+        logLine('vp.sample.open', 'recording his sample, once', { level: 'info', target: 'voice' });
+        setTimeout(() => finish('the sample is long enough'), Math.round(seconds * 1000));
+      };
+      w.onmessage = (ev) => {
+        let f = null;
+        try { f = JSON.parse(ev.data); } catch (e) { return; }
+        if (!f) return;
+        if (f.t === 'voiceprint') {
+          settledAnswer = f;
+          logLine('vp.sample.measured', (f.ok ? 'measured ' + (f.secs || '?') + 's' : 'refused: ' + (f.why || '')),
+            { level: f.ok ? 'info' : 'warn', target: 'voice' });
+          finish('the relay measured it');
+          return;
+        }
+        if (f.t === 'end' && !settledAnswer) finish('the relay closed the turn');
+      };
+      w.onerror = () => { logLine('vp.sample.error', 'the sample socket failed', { level: 'error', target: 'voice' }); finish('the socket failed'); };
+      w.onclose = () => { if (vpRecording) finish('the socket closed'); };
+    } catch (e) {
+      logLine('vp.sample.fail', String((e && e.message) || e), { level: 'error', target: 'voice' });
+      finish('could not open a socket');
+    }
+  });
+}
+
 /* ---------- microphone ---------- */
 
 async function openMic() {
@@ -13796,6 +13914,8 @@ async function openMic() {
     // spoken into it are not travelling anywhere and he would only get the tail of them.
     // (Edwin, 7 Nov: "The mic should not come alive until it is open. I've talked to it when
     // it started to come alive and then it just caught half of my words.")
+    /* BUILD 377: while his voice is being recorded once, the microphone feeds that and nothing else. */
+    if (vpRecording) { try { vpFeedFrame(data); } catch (e) {} return; }
     if (!sessionUp || !listening) { quietLevel(); return; }
 
     const norm = Math.min(1, Math.max(0, (20 * Math.log10(rms + 1e-8) + 62) / 52));
@@ -13889,6 +14009,31 @@ function closeMic() {
   playCtx = null; playAt = 0;
 }
 
+/* One microphone frame into the enrolment socket, with the same silence rule the ear uses: a quiet room is not part of
+   his sample, and the sample ends shortly after he stops rather than running to the cap. */
+function vpFeedFrame(data) {
+  if (!vpRecording || !vpWs || vpWs.readyState !== 1) return;
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+  const rms = Math.sqrt(sum / data.length);
+  const voiced = rms > OPEN_RMS;
+  if (voiced) { vpHeard++; vpQuietSince = 0; }
+  else if (vpHeard > 0 && !vpQuietSince) vpQuietSince = Date.now();
+  const pcm = downsample(data, micCtx.sampleRate, 16000);
+  const i16 = new Int16Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) {
+    const v = Math.max(-1, Math.min(1, pcm[i]));
+    i16[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  try { vpWs.send(i16.buffer); } catch (e) {}
+  // he has said it: two seconds of quiet after a real sample is the end of it
+  if (vpHeard >= 8 && vpQuietSince && Date.now() - vpQuietSince > 1800 && Date.now() - vpStartedAt > 2000) {
+    try { if (vpWs && vpWs.readyState === 1) vpWs.send(JSON.stringify({ t: 'end' })); } catch (e) {}
+    vpRecording = false;
+    logLine('vp.sample.said', 'he stopped, so the sample is finished', { level: 'info', target: 'voice' });
+  }
+}
+
 function downsample(float32, from, to) {
   if (to === from) return float32;
   const ratio = from / to, out = new Float32Array(Math.floor(float32.length / ratio));
@@ -13916,6 +14061,63 @@ function downsample(float32, from, to) {
    reached, the old path is still underneath it, so a broken relay can never leave him talking to nothing. */
 const EAR = true;
 const EAR_URL = 'wss://ei-stt-relay-347691905240.africa-south1.run.app/stt';
+
+/* ---------- BUILD 377 · HIS VOICE, KEPT ONCE ----------
+   19 Nov 2026, 12:49: "At the end there the engine heard voices... I eventually got it to stand down." The ear could
+   not tell his voice from the room's. The relay now measures every turn and hands back the numbers; this is the one
+   enrolled voice they are compared against, kept by the door (doorVoiceprint) and asked for ONCE, at the first
+   opening, because consent lives in opening the door.
+
+   It is a courtesy gate, not a lock. No enrolment, no numbers, a short turn, or a sentence that says "it's me" all
+   mean the turn is answered exactly as before. A mismatch never closes the typed lane. */
+const VP_FLOOR_DEFAULT = 0.90;
+const VP_FORCE = /\b(it'?s me|it is me|that'?s me|this is me)\b/i;
+let vpKnown = false, vpEnrolled = false, vpVector = null, vpFloor = VP_FLOOR_DEFAULT;
+let vpStatusP = null, vpTried = false, vpSupported = null;
+let vpRecording = false, vpFrames = [], vpHeard = 0, vpQuietSince = 0, vpWs = null, vpStartedAt = 0;
+let earVp = null, vpSuppressed = 0, vpWarned = false;
+
+function vpCos(a, b) {
+  try {
+    if (!a || !b || a.length !== b.length || !a.length) return null;
+    let dot = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    if (!(na > 0) || !(nb > 0)) return null;
+    return dot / Math.sqrt(na * nb);
+  } catch (e) { return null; }
+}
+
+function vpStatus() {
+  if (vpStatusP) return vpStatusP;
+  const s = doorSession();
+  if (!s) { vpKnown = true; return Promise.resolve(); }
+  vpStatusP = gatePost('doorVoiceprint', { session_token: s.token, action: 'status' })
+    .then((d) => {
+      vpEnrolled = !!(d && d.enrolled);
+      vpVector = (d && Array.isArray(d.vector)) ? d.vector.map(Number) : null;
+      vpFloor = Number(d && d.floor) || VP_FLOOR_DEFAULT;
+      vpKnown = true;
+      logLine('vp.status', (vpEnrolled ? 'his voice is on record' : 'no voice on record yet')
+        + (vpVector ? ' \u00b7 ' + vpVector.length + ' numbers' : '') + ' \u00b7 floor ' + vpFloor,
+        { level: 'info', target: 'voice' });
+    })
+    .catch((e) => {
+      vpKnown = true;
+      logLine('vp.status.fail', String((e && e.message) || e), { level: 'warn', target: 'voice' });
+    });
+  return vpStatusP;
+}
+
+/* The relay has to be the build that measures a voice. If it is not, the door does not ask at all: an invitation it
+   cannot honour is worse than no invitation. */
+function vpRelayHasVoice() {
+  if (vpSupported !== null) return Promise.resolve(vpSupported);
+  const http = EAR_URL.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/stt$/, '/alive');
+  return fetch(http + '?cb=' + Date.now(), { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((d) => { vpSupported = !!(d && d.voiceprint); logLine('vp.relay', vpSupported ? 'the relay measures voices' : 'the relay does not measure voices yet', { level: vpSupported ? 'info' : 'warn', target: 'voice' }); return vpSupported; })
+    .catch(() => { vpSupported = false; logLine('vp.relay.fail', 'the relay could not be asked', { level: 'warn', target: 'voice' }); return false; });
+}
 const EAR_END_MS = 1800;
 let earWs = null, earReady = false, earText = '', earLive = '', earConf = null, earSpeech = false, earLastVoiced = 0, earClosed = false;
 let earFails = 0, earWatch = 0, earOpenedAt = 0, earPend = [], earEndPending = false, earBeat = 0;
@@ -13961,6 +14163,7 @@ function earOpen() {
       /* A partial is what the ear thinks so far, and it is never the turn. The finals are the turn. */
       if (f.t === 'partial') { if (f.text) earLive = String(f.text); return; }
       if (f.t === 'final') {
+        if (Array.isArray(f.vpv) && f.vpv.length) earVp = f.vpv.map(Number);
         const t = String(f.text || '').trim();
         if (t) earText = earText ? earText + ' ' + t : t;
         earConf = (typeof f.conf === 'number' ? f.conf : null);
@@ -14091,9 +14294,47 @@ function looksLikeOurOwnWords(text) {
 let earEmpties = 0;
 function earDeafAfter(n) { return Number(n) >= 2; }
 
+/* The voice decision, in one place. It answers "does this turn belong to him", and it FAILS OPEN every way it can:
+   no enrolment, no numbers from the relay, a turn too short to measure, or his own words saying it is him. */
+function vpBlocks(text) {
+  try {
+    if (!vpEnrolled || !vpVector || !earVp) return false;
+    const words = String(text || '');
+    if (VP_FORCE.test(words)) {
+      logLine('vp.force', 'he said it is him, so the turn is his: ' + words.slice(0, 80), { level: 'info', target: 'voice' });
+      earVp = null; vpSuppressed = 0;
+      return false;
+    }
+    const score = vpCos(earVp, vpVector);
+    earVp = null;
+    if (score == null) return false;
+    logLine('vp.score', String(score.toFixed(3)) + ' \u00b7 floor ' + vpFloor + ' \u00b7 ' + words.slice(0, 60),
+      { level: score >= vpFloor ? 'info' : 'warn', target: 'voice' });
+    if (score >= vpFloor) { vpSuppressed = 0; return false; }
+    vpSuppressed++;
+    logLine('ear.other', 'that voice is not his (' + score.toFixed(3) + '), so the door stays quiet: '
+      + words.slice(0, 80), { level: 'warn', target: 'voice' });
+    /* Three in a row is not a television; it is either a room full of people or him with a cold. One short line, once
+       a session, so nobody is left talking to a door that has gone deaf without saying so. */
+    if (vpSuppressed >= 3 && !vpWarned) {
+      vpWarned = true;
+      const q = 'That is not the voice I know, Boss. If it is you, say: it is me.';
+      doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '"');
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
 function earFinish(why) {
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
   const text = String(earText || earLive || '').trim();
+  /* BUILD 377. IS THIS HIM? The relay measured this turn; the door decides what to do about it.
+     Silence for a voice that is not his, because answering the room is exactly what he reported at 12:49. */
+  if (vpRecording) { earText = ''; earLive = ''; earConf = null; return; }
+  if (vpBlocks(text)) {
+    earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false;
+    return;
+  }
   const conf = earConf;
   const verdict = earVerdictNow(text);
   earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false;
