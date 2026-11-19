@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 370;
+const BUILD_NO = 371;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -9733,13 +9733,21 @@ function openDirective() {
   directiveOpen = true;
   try { if (directiveCap) clearTimeout(directiveCap); } catch (e) {}
   try {
-    directiveCap = setTimeout(() => {
-      if (directiveOpen) {
+    const capOnce = (extended) => {
+      directiveCap = setTimeout(() => {
+        if (!directiveOpen) return;
+        if (!directiveShouldClose({ searching: !!doorSearching, extended: extended })) {
+          logLine('mouth.directive.extended', 'the door is still looking, so the mouth is not shut yet',
+            { level: 'info', target: 'mouth' });
+          capOnce(true);
+          return;
+        }
         directiveOpen = false;
-        logLine('mouth.directive.closed', 'twelve seconds and the line was never said, so the mouth is shut again',
+        logLine('mouth.directive.closed', 'the line was never said inside the door\u2019s patience, so the mouth is shut again',
           { level: 'info', target: 'mouth' });
-      }
-    }, 12000);
+      }, doorPatience({ searching: !!doorSearching }));
+    };
+    capOnce(false);
   } catch (e) {}
 }
 
@@ -11344,6 +11352,40 @@ function utcStamp(v) {
   const n = Date.parse(s);
   return Number.isFinite(n) ? n : 0;
 }
+/* BUILD 371. THE DOOR'S PATIENCE IS ONE NUMBER, AND IT IS NOT 2.5 SECONDS.
+   19 Nov 2026, live: all eleven "no words came back" turns came exactly 2.5 seconds after the note, while the world
+   lookup was still running - the Alcaraz answer took fifteen seconds and the door had already given up and sent a
+   SECOND note with his own words. That second note is where the duplicate and diverged lines came from. And at
+   08:58:59 "twelve seconds and the line was never said" shut the mouth mid-lookup, which is why the answer arrived
+   cut to "Carlos Alcaraz defeated Daniil".
+
+   So the wait is decided here: a plain answer gets twelve seconds, a lookup gets thirty, and a turn the door already
+   owns is never nudged at all. */
+function doorPatience(v) {
+  const searching = !!(v && v.searching);
+  return searching ? 30000 : 12000;
+}
+
+/* May the door nudge the mouth with a second note? Only when nobody is already answering and nothing is in flight. */
+function silenceNudgeAllowed(v) {
+  const owner = String((v && v.owner) || '');
+  const answered = !!(v && v.answered);
+  const searching = !!(v && v.searching);
+  const speaking = !!(v && v.speaking);
+  const inflight = !!(v && v.turnInFlight);
+  if (owner || answered) return false;      // someone owns this turn; a nudge competes with a real answer
+  if (searching || speaking || inflight) return false;
+  return true;
+}
+
+/* May the mouth be shut at the cap? Not while the door is still looking, and only once. */
+function directiveShouldClose(v) {
+  const searching = !!(v && v.searching);
+  const extended = !!(v && v.extended);
+  if (searching && !extended) return false;
+  return true;
+}
+
 function engineSpokeNow() {
   if (silenceWatch) { clearTimeout(silenceWatch); silenceWatch = null; }
   mouthSpokeAt = Date.now();
@@ -11355,7 +11397,15 @@ function armSilenceWatch(heard) {
   silenceWatch = setTimeout(() => {
     silenceWatch = null;
     if (Date.now() - silenceAt < 2400) return;                       // something moved on already
-    if (doorSearching || hiddenHold || turnInFlight || speaking) return;  // the door is working
+    if (hiddenHold) return;
+    /* BUILD 371. A TURN THE DOOR OWNS IS NOT SILENCE. */
+    let owned = '';
+    try { owned = String(TURN.owner || ''); } catch (e) {}
+    if (!silenceNudgeAllowed({ owner: owned, answered: !!(TURN && TURN.answeredAt),
+      searching: !!doorSearching, speaking: !!speaking, turnInFlight: !!turnInFlight })) {
+      logLine('turn.nudge.held', 'the door is already answering this turn, so it is not nudged', { level: 'info', target: 'turn' });
+      return;
+    }
     if (typeof ws === 'undefined' || !ws || ws.readyState !== 1) return;
     // The door held a line on purpose, so he was answered even though nothing was spoken back at him.
     // Nudging here is what produced "I'm still with you, Boss. Is there anything else..." on 10 Nov.
@@ -11374,7 +11424,7 @@ function armSilenceWatch(heard) {
           + 'Reply to what he said in one short line. Do not mention this note.)' }] }], turnComplete: true },
       }));
     } catch (e) { /* one more silence is no worse than the first */ }
-  }, 2500);
+  }, doorPatience({ searching: !!doorSearching }));
 }
 
 /* Build 241. What the shelf reader offered, against what the page is holding. Only cards whose kind comes
