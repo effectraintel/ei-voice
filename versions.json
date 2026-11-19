@@ -1,8 +1,14 @@
 {
- "latest": 372,
- "updated": "2026-11-19T09:34",
+ "latest": 373,
+ "updated": "2026-11-19T10:19",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 373,
+   "file": "v373.html",
+   "at": "2026-11-19T10:19",
+   "note": "the knowledge base and the act contract"
+  },
   {
    "n": 372,
    "file": "v372.html",

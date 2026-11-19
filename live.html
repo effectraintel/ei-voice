@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 372;
+const BUILD_NO = 373;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -803,6 +803,7 @@ function earEpochOk(epoch) { return Number(epoch) === sessionEpoch; }
 
 function bumpEpoch(why) {
   sessionEpoch++;
+  try { knowReset(why || 'a new pass'); } catch (e) {}
   try { earPend.length = 0; } catch (e) {}
   earText = ''; earLive = ''; earSpeech = false; earClosed = false; earEndPending = false;
   logLine('epoch.bump', why + ' \u00b7 the ear is now epoch ' + sessionEpoch, { level: 'info', target: 'hear' });
@@ -2135,6 +2136,9 @@ let freshGreeting = null;
 function freshGreetRoute() { return (typeof ws !== 'undefined' && ws && ws.readyState === 1) ? 'socket' : 'queue'; }
 async function startFreshSession(note) {
   try { logLine('sitting.fresh.session', 'a fresh session: the socket is replaced, so nothing said before survives it', { level: 'info', target: 'sitting' }); } catch (e) {}
+  /* BUILD 373. A FRESH SESSION STARTS WITH NOTHING IN ITS KNOWLEDGE. Doctrine, 19 Nov: the next time he enters it
+     starts a new thinking session and builds again. */
+  try { knowReset('he chose a fresh session'); } catch (e) {}
   try { if (ws) shutDoor(); } catch (e) {}
   freshGreeting = note || 'He chose a FRESH session and this socket is new: nothing was said before. Say in one short '
     + 'line that the door is fresh and ask what he wants.';
@@ -4492,6 +4496,112 @@ function mayAct(journey, what) {
   return false;
 }
 
+/* ---------------------------------------------------------------------------------------------------------------
+   BUILD 373 - THE KNOWLEDGE BASE AND THE ACT CONTRACT. DOCTRINE, 19 NOVEMBER 2026, 12:17.
+
+   "THERE IS 2 STEPS, THINKING - TURNS TO KNOWLEDGE AND ACTING OUT BASED ON THE KNOWLEDGE THAT WAS CREATED. EVERY
+   ACT WILL ACT FROM A KNOWLEDGE BASE THAT WAS CREATED AND USE THIS AS THE INPUT TO FULFIL AND COMPLETE THE ACTION
+   REQUIRED. ACTIONS WILL SPECIFY A MINIMUM SET OF REQUIRED INPUTS AND KNOWLEDGE GENERATION WILL HAVE TO ENSURE THAT
+   IT MEETS THE REQUIREMENTS TO ENABLE ACTING."
+
+   So the door holds a knowledge base, not a single fact. It is the chain of resolved questions, each with the facts
+   worth keeping, its source and its time - never a copy of what the world said. A new session starts empty.
+
+   And every act declares the inputs it cannot run without. The gate asks whether the knowledge MEETS that contract;
+   if it is short, the act does not happen and the missing inputs are named, so the next thinking turn has one job.
+   --------------------------------------------------------------------------------------------------------------- */
+const KNOW = { session: 0, links: [] };
+
+function knowReset(why) {
+  try {
+    KNOW.links.length = 0;
+    KNOW.session = sessionEpoch;
+    logLine('know.reset', 'a new thinking session, so the knowledge starts empty \u00b7 ' + String(why || ''),
+      { level: 'info', target: 'know' });
+  } catch (e) {}
+}
+
+function knowCommit(q, facts, source) {
+  try {
+    const link = {
+      id: 'K' + (KNOW.links.length + 1),
+      q: String(q || '').slice(0, 300),
+      facts: (Array.isArray(facts) ? facts : [facts]).map(function (f) { return String(f || ''); })
+        .filter(Boolean).slice(0, 6),
+      source: String(source || ''),
+      at: Date.now(),
+    };
+    if (!link.q && !link.facts.length) return null;
+    KNOW.links.push(link);
+    if (KNOW.links.length > 24) KNOW.links.shift();
+    logLine('know.commit', link.id + ' \u00b7 ' + link.q.slice(0, 90) + ' \u00b7 ' + link.facts.length
+      + ' fact(s) \u00b7 from ' + link.source, { level: 'info', target: 'know' });
+    return link;
+  } catch (e) { return null; }
+}
+
+function knowRecall() { return KNOW.links; }
+function knowLatest() { return KNOW.links.length ? KNOW.links[KNOW.links.length - 1] : null; }
+
+/* Does the session's knowledge supply one named input? Read from the chain, never from a guess. */
+function knowSupplies(input) {
+  const need = String(input || '').toLowerCase();
+  if (!need) return false;
+  return KNOW.links.some(function (l) {
+    if (need === 'question') return !!l.q;
+    if (need === 'facts') return l.facts.length > 0;
+    if (need === 'source') return !!l.source;
+    const hay = (l.q + ' ' + l.facts.join(' ')).toLowerCase();
+    return hay.indexOf(need) >= 0;
+  });
+}
+
+/* The contract each act declares. An act that is not here cannot be judged, so it is never allowed. */
+const ACT_NEEDS = {
+  answer_world: ['question', 'facts', 'source'],
+  keep_fact: ['facts', 'source'],
+  make_song: ['subject', 'style', 'words'],
+  share_song: ['song', 'to'],
+  pay: ['amount', 'currency', 'item'],
+};
+
+function actGate(act, extra) {
+  const name = String(act || '');
+  const needs = ACT_NEEDS[name];
+  if (!needs) {
+    try {
+      logLine('act.no.contract', name + ' declares no required inputs, so it cannot be judged and is not allowed',
+        { level: 'warn', target: 'act' });
+    } catch (e) {}
+    return { allowed: false, missing: ['contract'] };
+  }
+  const missing = needs.filter(function (n) { return !knowSupplies(n) && !(extra && extra[n]); });
+  if (missing.length) {
+    try {
+      logLine('phase.act', 'refused \u00b7 ' + name + ' \u00b7 the knowledge is short of ' + missing.join(', ')
+        + ' \u00b7 thinking runs again for them', { level: 'warn', target: 'act' });
+    } catch (e) {}
+    return { allowed: false, missing: missing };
+  }
+  try {
+    logLine('act.allowed', name + ' \u00b7 the knowledge meets its contract (' + needs.join(', ') + ')',
+      { level: 'info', target: 'act' });
+  } catch (e) {}
+  return { allowed: true, missing: [] };
+}
+
+/* RECALL then CONTEXTUALISE. "That one", "that part", "what about that" are resolved against what this session
+   already asked, so the world is never asked his raw words with the context left behind. A question that stands on
+   its own is left exactly as he said it. */
+const REFERRING = /\b(?:that one|that part|this one|about that|of that|in that|those|them|the same|that|it|there)\b/i;
+function resolveQuestion(words) {
+  const w = String(words || '').trim();
+  const last = knowLatest();
+  if (!w || !last) return w;
+  if (!REFERRING.test(w)) return w;
+  return w + ' (in the session so far: ' + last.q + ')';
+}
+
 function armMake() {
   try {
     if (!pictureSettled()) {
@@ -6009,7 +6119,8 @@ function askIsAboutTheDoor(ask) {
 
 async function handleWorldCall(call) {
   const args = call.args || {};
-  const ask = String(args.ask || lastHeardText || '').slice(0, 300).trim();
+  const askedRaw = String(args.ask || lastHeardText || '').slice(0, 300).trim();
+  const ask = resolveQuestion(askedRaw);
   const kind = String(args.kind || 'auto');
   let result = '';
   const t0 = Date.now();
@@ -6121,6 +6232,7 @@ async function handleWorldCall(call) {
       };
       /* BUILD 331. A MAP IS A KNOWING BEFORE IT IS A CARD: the place, and the rail that resolved it. */
       commitKnowing('world', 'a map of ' + place, 'the world \u00b7 ' + String(r.engine || 'the map rail'));
+      knowCommit(ask, ['a map of ' + place], 'the world \u00b7 ' + String(r.engine || 'the map rail'));
       if (!quietShelf && mayAct('world', 'keeping the map')) {
         shelfAdd(mapCard);
         keepFound(mapCard);
@@ -6169,6 +6281,9 @@ async function handleWorldCall(call) {
       /* BUILD 331. THE FACT AND ITS SOURCE ARE THE KNOWING. He corrected this himself at 17:38: a web lookup and a
          house lookup can both be required to know, so the world is a source and it is written down as one. */
       commitKnowing('world', String(facts).slice(0, 240), 'the world \u00b7 ' + String(r.engine || 'a lookup'));
+      /* BUILD 373. THE FACT IS COMMITTED TO THE SESSION'S KNOWLEDGE, AND THE ANSWER IS AN ACT THAT STANDS ON IT. */
+      knowCommit(ask, [String(facts).slice(0, 240)], 'the world \u00b7 ' + String(r.engine || 'a lookup'));
+      const mayAnswer = actGate('answer_world');
       /* ONLY IF WE KNOW CAN WE KEEP IT. A card is an act: it puts a thing in his world and it stays there. */
       const mayKeep = mayAct('world', 'keeping the looked-up fact');
       const foundCard = (quietShelf || !mayKeep) ? null : worldCard(ask, r);
