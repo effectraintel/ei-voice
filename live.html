@@ -504,7 +504,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 361;
+const BUILD_NO = 367;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -709,6 +709,61 @@ function thinkAndAct(said) {
 }
 
 /* The door obeys the thinking object. One plan, one act, one line. */
+/* ================= BUILD 367. THE TURN IS A THING, AND IT CARRIES ITS SESSION =================
+   19 Nov 2026, 02:12. He rolled the door back to 361 on his own word - "we are going backwards" - after five builds
+   that each fixed one fault and made another. The root cause was named that night and this is the build of it:
+
+   1. THE TURN IS A THING. Until now a "turn" was whatever the chain of gates in doorHears happened to do to one
+      sentence. Several of them could answer the same sentence - the making opened and the sharing branch asked for a
+      title on top of it - because nothing in the page knew a turn had already been answered. Now every finished
+      utterance creates a turn, a turn has exactly one owner, and a decider that is not the owner is refused and
+      recorded instead of speaking.
+   2. A TURN CARRIES ITS SESSION EPOCH. At 23:59:58 he said "Start fresh" and the ear returned "I want to create a
+      song." at 0.964 - a sentence from the session that had just been replaced. Frames held for a socket that was
+      closing and transcripts arriving from it were indistinguishable from new speech. Now the epoch goes with the
+      socket, frames held for an old epoch are thrown away when the epoch moves, and a transcript from an old socket
+      is dropped at the door with a line in the record.
+   3. ONE ROUTER. Thinking may annotate a turn; it may not re-enter the router on a turn that has already been
+      answered. That re-entry was the second decider.
+   Nothing here changes what the door says. It changes who is allowed to say it. */
+
+let sessionEpoch = 1;
+
+const TURN = { id: 0, epoch: 1, heard: '', owner: '', at: 0, said: [] };
+
+function turnBegin(heard) {
+  TURN.id++;
+  TURN.epoch = sessionEpoch;
+  TURN.heard = String(heard || '');
+  TURN.owner = '';
+  TURN.at = Date.now();
+  TURN.said = [];
+  logLine('turn.begin', 'turn ' + TURN.id + ' \u00b7 epoch ' + TURN.epoch + ' \u00b7 ' + TURN.heard.slice(0, 70),
+    { level: 'info', target: 'turn' });
+  return TURN;
+}
+
+function turnClaim(what) {
+  if (TURN.owner === what) return true;      // the same decider answering again is still its own turn
+  if (TURN.owner) {
+    logLine('turn.refused', what + ' asked to answer turn ' + TURN.id + ', but ' + TURN.owner + ' already owns it',
+      { level: 'warn', target: 'turn' });
+    return false;
+  }
+  TURN.owner = what;
+  logLine('turn.owner', what + ' owns turn ' + TURN.id, { level: 'info', target: 'turn' });
+  return true;
+}
+
+function earEpochOk(epoch) { return Number(epoch) === sessionEpoch; }
+
+function bumpEpoch(why) {
+  sessionEpoch++;
+  try { earPend.length = 0; } catch (e) {}
+  earText = ''; earLive = ''; earSpeech = false; earClosed = false; earEndPending = false;
+  logLine('epoch.bump', why + ' \u00b7 the ear is now epoch ' + sessionEpoch, { level: 'info', target: 'hear' });
+}
+
 function obeyThinking(o, said) {
   thinkLast = o;
   try {
@@ -717,6 +772,13 @@ function obeyThinking(o, said) {
       logLine('think.handoff', o.journey + ' keeps the door\'s own path \u00b7 ' + String(said).slice(0, 40),
         { level: 'info', target: 'think' });
       thinkHold = false;
+      /* ONE ROUTER. If the door already answered this turn, thinking does not run the chain a second time - that
+         second pass is what put two answers on one sentence at 01:48. */
+      if (TURN.owner) {
+        logLine('think.refused', 'the door already answered turn ' + TURN.id + ', so thinking does not route it again',
+          { level: 'warn', target: 'turn' });
+        return;
+      }
       return doorHears(said);
     }
     if (o.plan === 'settle') {
@@ -894,6 +956,7 @@ function heardFlush(why) {
   replyAudible = false;
   turnBeganMuted = typed();
   notesSentThisTurn = 0;
+  turnBegin(acted);
   try { doorTurn(acted); } catch (e) { try { doorHears(acted); } catch (e2) {} }
   /* BUILD 358. THE LINE HE READS IS WHAT THE DOOR UNDERSTOOD, EVEN WHEN IT UNDERSTANDS IT A MOMENT LATE.
      19 Nov 2026, 01:06: he said "start fresh", the ear wrote "Stored fresh." at 0.669, and the door took it as a fresh
@@ -3920,6 +3983,8 @@ function songHearTurn(heard) {
   // Build 138: a beat is open, so his next answer is that beat's answer, taken here rather than trusting
   // the mouth to pass it on. "You choose" skips it, which is the promise that keeps the journey honest.
   const beat = songDraft.askBeat || '';
+  /* the making asked the question, so the making owns the answer to it */
+  if (beat && !turnClaim('the making')) return;
     /* BUILD 257. One answer path for the picture: the cover beat in the script. The row is gone, so the separate
        spoken-picture branch written for it goes with it. */
     if (beat) {
@@ -4643,6 +4708,7 @@ function openSongBeat() {
   if (songDraft.said && !stale) return;      // he has already given the words: nothing is open
   if (stale) { songDraftReset(); songDraft.at = Date.now(); }
   if (!songDraft.askBeat) songDraft.askBeat = 'subject';
+  turnClaim('the making');
   logLine('journey.open', 'open at ' + songDraft.askBeat, { level: 'info', target: 'music' });
 }
 
@@ -8518,6 +8584,16 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   }
 
   function guessTurn(said) {
+    /* BUILD 367. AN OPEN QUESTION BELONGS TO WHOEVER ASKED IT, and a turn has one owner. At 00:01 the cover question
+       was open, he said "I didn't say anything.", and the sharing branch asked "Which song, Boss?" over the top of it. */
+    try {
+      if (songDraft && songDraft.askBeat) {
+        logLine('share.blocked.open.question', 'the making is waiting on "' + String(songDraft.askBeat)
+          + '", so the sharing branch stays out of turn ' + TURN.id, { level: 'info', target: 'songShare' });
+        return false;
+      }
+    } catch (e) {}
+    if (!turnClaim('the sharing branch')) return false;
     /* Build 317: "Yes, I am actually." names nothing. With songs on the table it asks which one; with none it asks for
        a title. Either way his affirmation is never sent to the mouth as a clue and never becomes a title. */
     try {
@@ -13490,15 +13566,17 @@ function earOpen() {
   if (earWs && (earWs.readyState === 0 || earWs.readyState === 1)) return;
   try {
     const s = new WebSocket(EAR_URL);
+    s.__epoch = sessionEpoch;                 // a transcript belongs to the session its socket was opened in
     earWs = s;
     s.binaryType = 'arraybuffer';
     s.onopen = () => {
       if (s !== earWs) { try { s.close(); } catch (e) {} return; }
       earReady = true; earOpenedAt = Date.now();
       try {
-        const held = earPend.splice(0, earPend.length);
+        const held = earPend.splice(0, earPend.length).filter((h) => h && earEpochOk(h.e));
+        try { const lost = held.length; } catch (e) {}
         if (held.length) logLine('ear.flush', held.length + ' frame(s) held while the ear was opening were sent', { level: 'warn', target: 'hear' });
-        for (const b of held) { try { s.send(b); } catch (e) {} }
+        for (const h of held) { try { s.send(h.b); } catch (e) {} }
         if (earEndPending) { earEndPending = false; s.send(JSON.stringify({ t: 'end' })); }
       } catch (e) {}
       logLine('ear.open', 'the ear is Google\u2019s: en-US, streaming, our own boundary', { level: 'info', target: 'hear' });
@@ -13508,6 +13586,15 @@ function earOpen() {
     };
     s.onmessage = (ev) => {
       if (s !== earWs) return;
+      /* BUILD 367. A TRANSCRIPT FROM A SESSION THAT HAS BEEN REPLACED IS NOT HIS WORD.
+         19 Nov 2026, 23:59:58: "Start fresh" came back as "I want to create a song." at 0.964 - a sentence from the
+         session that had just been replaced. The socket carries the epoch it was opened in, so anything arriving from
+         an older one is dropped here, named in the record, and never reaches the door. */
+      if (!earEpochOk(s.__epoch)) {
+        logLine('ear.stale', 'a transcript from epoch ' + s.__epoch + ' arrived in epoch ' + sessionEpoch
+          + ', so it is dropped: ' + String((ev.data || '')).slice(0, 90), { level: 'warn', target: 'hear' });
+        return;
+      }
       let f = null;
       try { f = JSON.parse(ev.data); } catch (e) { return; }
       if (!f) return;
@@ -13565,12 +13652,12 @@ function earPcm(float32) {
      away in silence. Three seconds are held while the socket opens, so the first words of a turn are never the ones
      lost. */
   if (!earOn()) {
-    earPend.push(i16.buffer);
+    earPend.push({ b: i16.buffer, e: sessionEpoch });
     if (earPend.length > 240) earPend.shift();       // three seconds at 80ms a frame
     earOpen();
     return;
   }
-  try { earWs.send(i16.buffer); } catch (e) { earPend.push(i16.buffer); }
+  try { earWs.send(i16.buffer); } catch (e) { earPend.push({ b: i16.buffer, e: sessionEpoch }); }
 }
 
 function earFeed(data, rms, ours) {

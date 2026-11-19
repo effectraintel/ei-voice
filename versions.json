@@ -1,8 +1,14 @@
 {
- "latest": 361,
- "updated": "2026-11-19T00:08",
+ "latest": 367,
+ "updated": "2026-11-19T00:17",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 367,
+   "file": "v367.html",
+   "at": "2026-11-19T00:17",
+   "note": "the turn is a thing, and it carries its session"
+  },
   {
    "n": 361,
    "file": "v361.html",
