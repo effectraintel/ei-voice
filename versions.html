@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>the door · every version</title>
+<title>the door &middot; every version</title>
 <style>
   :root { --ink:#e8dfcc; --dim:#8b8172; --gold:#c9a86a; --bg:#141210; --card:#1a1714; --line:#2e2a24; }
   * { box-sizing:border-box; }
@@ -33,13 +33,34 @@
          padding:12px 14px; font-size:12.5px; line-height:1.5; }
   footer { margin-top:28px; font-size:9.5px; letter-spacing:.22em; text-transform:uppercase; color:#5f5749; }
 </style>
+<style>
+  /* BUILD 405. WHAT EACH BUILD WAS FOR, UNDER ITS OWN NUMBER.
+     Edwin, 20 Nov 2026, 15:16: "under every version number like v403, list a short summary what the build was for
+     and when I click it open a new window with all the details, so that I don't have to ask you every time." */
+  li { display:block; padding:13px 2px; }
+  .top { display:flex; align-items:baseline; gap:12px; }
+  .top .n { flex:0 0 auto; }
+  .top .t { flex:1 1 auto; }
+  .top .at { flex:0 0 auto; }
+  .top a { flex:0 0 auto; }
+  .why { margin:5px 0 0 0; padding-left:0; }
+  .why a { display:block; color:var(--ink); text-decoration:none; font-size:13px; line-height:1.45; }
+  .why a:hover .head, .why a:focus .head { color:var(--gold); }
+  .why .head { display:block; color:#d8cbb0; }
+  .why .line { display:block; color:var(--dim); font-size:12.5px; margin-top:2px; }
+  .why .none { color:#5f574c; font-size:12.5px; }
+  li.here .why .head { color:var(--gold); }
+  .openwin::after { content:" \2197"; font-size:10px; opacity:.7; }
+  footer { margin-top:30px; padding-top:16px; border-top:1px solid var(--line);
+           color:var(--dim); font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+</style>
 </head>
 <body>
 <div class="wrap">
   <div class="mark">Effectra Intelligence</div>
   <h1>Every version of the door</h1>
   <p class="sub">Tap a build to open it. A version in the address is pinned: it stays on that build instead of
-     climbing to the newest one.</p>
+     climbing to the newest one. Tap a build's name to read what it was for in its own window.</p>
   <div id="now" class="now" hidden></div>
   <ol id="list"></ol>
   <div id="err" class="err" hidden></div>
@@ -47,7 +68,6 @@
 </div>
 <script>
 (function () {
-  var here = String(location.hostname || '');
   var list = document.getElementById('list');
   function fail(why) {
     var e = document.getElementById('err');
@@ -55,37 +75,74 @@
     e.textContent = 'The list of versions could not be read just now (' + why + '). '
       + 'The door itself still opens: door.effectra.ai';
   }
-  fetch('versions.json?t=' + Date.now(), { cache: 'no-store' })
-    .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
-    .then(function (d) {
-      var builds = (d && Array.isArray(d.builds)) ? d.builds : [];
-      if (!builds.length) { fail('the list is empty'); return; }
-      var newest = Number(d.latest || (builds[0] && builds[0].n) || 0);
-      var row = document.getElementById('now');
-      row.hidden = false;
-      row.innerHTML = '<b>Newest: build ' + newest + '</b>'
-        + '<a href="live.html?v=' + newest + '&amp;t=' + Date.now() + '">open it</a>';
-      builds.slice().sort(function (a, b) { return Number(b.n) - Number(a.n); })
-        .forEach(function (b, i) {
-          var li = document.createElement('li');
-          if (Number(b.n) === newest && i === 0) li.className = 'here';
-          var n = document.createElement('span'); n.className = 'n'; n.textContent = 'v' + b.n;
-          var t = document.createElement('span'); t.className = 't'; t.textContent = 'build ' + b.n;
-          var at = document.createElement('span'); at.className = 'at'; at.textContent = String(b.at || '');
-          var a = document.createElement('a');
-          a.href = String(b.file || ('v' + b.n + '.html'));
-          a.textContent = 'open';
-          li.appendChild(n); li.appendChild(t); li.appendChild(at); li.appendChild(a);
-          list.appendChild(li);
-        });
-      var live = document.createElement('li');
-      var ln = document.createElement('span'); ln.className = 'n'; ln.textContent = 'live';
-      var lt = document.createElement('span'); lt.className = 't'; lt.textContent = 'whatever is newest';
-      var la = document.createElement('a'); la.href = 'live.html'; la.textContent = 'open';
-      live.appendChild(ln); live.appendChild(lt); live.appendChild(la);
-      list.appendChild(live);
-    })
-    .catch(function (e) { fail(String((e && e.message) || e)); });
+  function el(tag, cls, text) {
+    var d = document.createElement(tag);
+    if (cls) d.className = cls;
+    if (text != null) d.textContent = text;
+    return d;
+  }
+  Promise.all([
+    fetch('versions.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }),
+    /* The notes are a separate read: if they are missing the list must still draw, because the door itself is
+       what matters and a build with no note is still a build. */
+    fetch('builds.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : { builds: [] }; })
+      .catch(function () { return { builds: [] }; })
+  ]).then(function (both) {
+    var d = both[0] || {}, notes = {};
+    ((both[1] && both[1].builds) || []).forEach(function (b) { notes[String(b.n)] = b; });
+    var builds = (d && Array.isArray(d.builds)) ? d.builds : [];
+    if (!builds.length) { fail('the list is empty'); return; }
+    var newest = Number(d.latest || (builds[0] && builds[0].n) || 0);
+    var row = document.getElementById('now');
+    row.hidden = false;
+    row.innerHTML = '<b>Newest: build ' + newest + '</b>'
+      + '<a href="live.html?v=' + newest + '&amp;t=' + Date.now() + '">open it</a>';
+    builds.slice().sort(function (a, b) { return Number(b.n) - Number(a.n); })
+      .forEach(function (b, i) {
+        var n = Number(b.n);
+        var li = document.createElement('li');
+        if (n === newest && i === 0) li.className = 'here';
+        var top = el('div', 'top');
+        top.appendChild(el('span', 'n', 'v' + n));
+        top.appendChild(el('span', 't', 'build ' + n));
+        top.appendChild(el('span', 'at', String(b.at || '')));
+        var a = document.createElement('a');
+        a.href = String(b.file || ('v' + n + '.html'));
+        a.textContent = 'open';
+        top.appendChild(a);
+        li.appendChild(top);
+
+        var note = notes[String(n)];
+        if (note && note.title && note.detail && note.detail.length) {
+          var why = el('div', 'why');
+          var link = document.createElement('a');
+          /* A new window, because he asked for one: the list is where he is, and the story is a place he visits. */
+          link.href = 'build.html?v=' + n;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.className = 'openwin';
+          link.appendChild(el('span', 'head', String(note.title)));
+          if (note.summary) link.appendChild(el('span', 'line', String(note.summary)));
+          why.appendChild(link);
+          li.appendChild(why);
+        } else {
+          var none = el('div', 'why');
+          none.appendChild(el('span', 'none', 'no note was written for this build'));
+          li.appendChild(none);
+        }
+        list.appendChild(li);
+      });
+    var live = document.createElement('li');
+    var ltop = el('div', 'top');
+    ltop.appendChild(el('span', 'n', 'live'));
+    ltop.appendChild(el('span', 't', 'whatever is newest'));
+    var la = document.createElement('a'); la.href = 'live.html'; la.textContent = 'open';
+    ltop.appendChild(la);
+    live.appendChild(ltop);
+    list.appendChild(live);
+  }).catch(function (e) { fail(String((e && e.message) || e)); });
 })();
 </script>
 </body>
