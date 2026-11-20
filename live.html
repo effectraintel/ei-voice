@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 402;
+const BUILD_NO = 403;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -4397,6 +4397,22 @@ function songHearTurn(heard) {
        sound, but soundIsReal already answers in a member, so a long answer that names one is a real answer
        and throwing it away only sent the question back unanswered. */
     if (beat === 'sound' && words.length) {
+      /* BUILD 403 - A CHECK-IN IS NOT AN ANSWER.
+         20 Nov 2026, 12:30:00 on 402: the door asked for the sound, he waited twenty-eight seconds, said "Hello.",
+         and the record took it as a sound attempt (`song.sound.open · Hello.`). Asking whether the door is still
+         there is not a kind of music, and recording it as one both miscounts his tries and invites the door to
+         re-ask as if he had answered badly. It puts the same question back, unchanged. */
+      if (isCheckIn(t)) {
+        const q = 'What kind of music should it be? Say you choose and I will pick.';
+        logLine('song.beat.checkin', 'he asked whether the door was there, so the open question goes back unchanged',
+          { level: 'info', target: 'music' });
+        railNote(q);
+        doorNote('He is checking that you are still here, and his song is waiting on one question he has not answered. '
+          + 'Say exactly this, one short line and nothing else: "' + q + '" Never name a kind of music, never give '
+          + 'examples and never offer a choice of styles.', true);
+        armAskWatch(Date.now(), q);
+        return;
+      }
       /* Build 181. The slot is closed: only a member of SOUND_WORDS fills it, and the member is what is kept,
          not the word that happened to reach the ear. A word that is no sound at all leaves the ring OPEN and
          asks again - the ring is a question, never permission to carry on. */
@@ -4912,6 +4928,26 @@ const MAKING_CLOSE_LINE = 'Say exactly this, one short line: "It is being made n
 function makingPostedNote() {
   return 'The door has put the song into the studio. Say exactly this, one short line: "It will be on your shelf '
     + 'soon." Nothing else: do not ask about a picture, do not ask anything else, and never say it is sent.';
+}
+
+/* BUILD 403 - THE DOOR NEVER OFFERS A LIST OF KINDS OF MUSIC.
+   20 Nov 2026, 12:30:05 on 402: asked to re-ask the sound question, the mouth said "What kind of music should it be?
+   Reggae, blues, pop?" He forbade candidate lists on 18 November: the sound is his to give, and a door that names
+   three kinds has chosen for him. The note already said "exactly this and nothing else" and the mouth added them
+   anyway, so the guard is mechanical: a line that offers two or more kinds joined by "or" is replaced by the
+   question itself. */
+function offersSoundList(t) {
+  try {
+    const s = String(t || '').toLowerCase();
+    /* A list does not need the word "or": "Reggae, blues, pop?" is a list too, and it is the one he actually
+       heard. Two or more kinds of music in one line is the door choosing for him. */
+    let n = 0;
+    for (const w of SOUND_WORDS) {
+      if (new RegExp('\\b' + String(w).replace(/[^a-z0-9 ]/gi, '') + '\\b', 'i').test(s)) n++;
+      if (n >= 2) return true;
+    }
+    return false;
+  } catch (e) { return false; }
 }
 
 function armMake() {
@@ -7340,6 +7376,15 @@ function judgeClaim() {
        the address, which is why the fault read as a vocabulary slip instead of a false claim. A claim of
        making, or of a thing on its way, now needs a receipt from the rail: with none, the door says what
        is true and asks the ring that is still open. */
+    /* BUILD 403: a choice of styles is a choice the door took from him. */
+    if (offersSoundList(t)) {
+      const beat = openJourneyBeat() || 'What kind of music should it be?';
+      logLine('beat.nolist', t.slice(0, 160), { level: 'warn', target: 'music' });
+      doorCorrect(beat, 'Say exactly this, one short line and nothing else: "' + beat + '" Never name a kind of '
+        + 'music, never give examples, and never offer a choice of styles: the sound is his to give and naming one '
+        + 'chooses for him.', true);
+      return;
+    }
     const madeClaim = /\b(?:being made|it'?s being made|making it now|in the studio|on its way|will arrive|is arriving|arrives in (?:a few|the next) minutes|in a few minutes|words are being written|almost ready|nearly ready)\b/i;
     if (madeClaim.test(t) && !(makeReceiptAt && Date.now() - makeReceiptAt < 20 * 60 * 1000)) {
       if (Date.now() - unbackedWarnedAt >= 8000) {
@@ -15072,7 +15117,7 @@ function earFeed(data, rms, ours) {
      the mouth still speaks, not by guesswork at half past one. */
   if (ours) return;                          // the speaker is in the air: the microphone is hearing us, not him
   const voiced = rms > OPEN_RMS;
-  if (voiced) { earSpeech = true; earLastVoiced = now; }
+  if (voiced) { earSpeech = true; earLastVoiced = now; earVoicedFrames++; }
   /* BUILD 370. THE TAIL OF A SENTENCE IS NOT A SECOND SENTENCE. After {t:'end'} the door kept feeding audio, the
      relay opened a new segment on the last words of the same sentence, and that fragment became a turn. While a
      segment is finishing the microphone is not fed; if he genuinely carries on speaking, it reopens and the turn
@@ -15087,6 +15132,14 @@ function earFeed(data, rms, ours) {
     earPcm(downsample(data, micCtx.sampleRate, 16000));
   }
   if (earSpeech && !voiced && !earClosed && now - earLastVoiced > EAR_END_MS) {
+    /* BUILD 403: a segment too short to be a word is a click, a cough or a chair. It ends here, silently, and it
+       never reaches the ear, so it can never come back as an empty turn. */
+    if (!earIsSpeech(earVoicedFrames)) {
+      logLine('ear.noise', 'too short to be speech (' + earVoicedFrames + ' frame(s)), so it is not a turn',
+        { level: 'info', target: 'hear' });
+      earSpeech = false; earVoicedFrames = 0; earLastVoiced = 0;
+      return;
+    }
     earClosed = true;
     logLine('ear.turn.end', 'he stopped speaking; the ear is finishing the turn', { level: 'info', target: 'hear' });
     try {
@@ -15134,12 +15187,34 @@ function looksLikeOurOwnWords(text) {
    looked the same as a quiet one. Two in a row is a deaf ear, not a quiet man. */
 let earEmpties = 0;
 function earDeafAfter(n) { return Number(n) >= 2; }
+/* BUILD 403 - A NOISE IN THE ROOM IS NOT A TURN.
+   Edwin, 20 Nov 2026, 14:35: "every time I type, it picks up the typing noise and say go on boss".
+   The log, 12:31:30 on 402: two keystrokes opened and closed two segments, each ended with no words, the empty
+   counter reached two, and the door said "Go on, Boss." and reopened the ear. A keyboard is not a man speaking.
+   So a segment has to carry speech before it is a turn at all: a click is one frame, a word is many. */
+const EAR_MIN_FRAMES = 3;
+let earVoicedFrames = 0;
+function earIsSpeech(frames) { return Number(frames || 0) >= EAR_MIN_FRAMES; }
 
 /* The voice decision, in one place. It answers "does this turn belong to him", and it FAILS OPEN every way it can:
    no enrolment, no numbers from the relay, a turn too short to measure, or his own words saying it is him. */
 function vpBlocks(text) {
   try {
     if (!vpEnrolled || !vpVector || !earVp) return false;
+    /* BUILD 403 - A QUESTION THE DOOR ASKED OUTRANKS THE VOICE PRINT.
+       20 Nov 2026, 12:29:32 on 402: the door asked "What kind of music should it be? Say you choose and I will pick.",
+       he answered "You can choose." and the voice print scored it 0.697, under the 0.72 floor, so the door stayed
+       quiet. He then sat in front of it for twenty-eight seconds waiting, said "Hello", and was asked again with a
+       list. The print is a courtesy that stops the room answering for him; a question the door itself has asked,
+       and is waiting on, is the one place where a near miss must be taken. It is logged either way. */
+    let beatOpen = '';
+    try { beatOpen = String(openJourneyBeat() || ''); } catch (e) { beatOpen = ''; }
+    if (beatOpen) {
+      logLine('vp.beat', 'a question of the door\u2019s is open, so his answer is taken and the score is kept: '
+        + String(text || '').slice(0, 60), { level: 'info', target: 'voice' });
+      earVp = null; vpSuppressed = 0;
+      return false;
+    }
     const words = String(text || '');
     if (VP_FORCE.test(words)) {
       logLine('vp.force', 'he said it is him, so the turn is his: ' + words.slice(0, 80), { level: 'info', target: 'voice' });
@@ -15186,7 +15261,8 @@ function earFinish(why) {
   }
   const conf = earConf;
   const verdict = earVerdictNow(text);
-  earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false;
+  const hadVoice = earSpeech;                       // BUILD 403: did the relay hear a voice at all
+  earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false; earVoicedFrames = 0;
   if (verdict === 'empty.held') {
     /* He was not silent; the door was busy. Saying anything here is talking over its own answer. */
     logLine('ear.empty.held', 'nothing was heard while the door was still answering, so it says nothing',
@@ -15220,16 +15296,18 @@ function earFinish(why) {
        there to stop five answers into silence, and it was right about that and wrong about the first empty one: a
        room that is quiet is not a man who was not heard. So the first empty hearing says nothing at all, and only a
        second one in a row, which is a deaf ear, gets one short line. */
-    logLine('ear.empty.quiet', 'nothing came back from the ear, and nothing is said for the first one',
+    /* BUILD 403 - THE DOOR DOES NOT NAG.
+       20 Nov 2026, 14:35: "every time I type, it picks up the typing noise and say go on boss". The line is gone.
+       A hearing with no voice in it at all is silence in the room, and silence says nothing and counts for nothing.
+       A hearing where the relay DID hear a voice and produced no words is a possibly deaf ear, and that is worth
+       reopening - silently. He is never told to go on. */
+    if (!hadVoice) {
+      logLine('ear.silence', 'nothing was voiced and nothing was heard: a noise in the room is not a turn',
+        { level: 'info', target: 'hear' });
+      return;
+    }
+    logLine('ear.empty.quiet', 'a voice came through and no words came back, so nothing is said',
       { level: 'warn', target: 'hear' });
-    try {
-      if (deafNow) {
-        const q = 'Go on, Boss.';
-        lastAsked = q;
-        doorAsk(q, 'Say exactly this, in one line, and nothing else: "' + q + '" He has spoken twice and the ear has '
-          + 'come back with no words either time. Nothing was searched, nothing was made and nothing is on his shelf.');
-      }
-    } catch (e) {}
     return;
   }
   logLine('ear.turn', why + ' \u00b7 ' + text.slice(0, 200), { level: 'info', target: 'hear' });
