@@ -1,0 +1,1970 @@
+{
+ "note": "what each build was for, read out of the build's own note in the door's source. versions.html lists these; build.html?v=NNN opens one.",
+ "builds": [
+  {
+   "n": 404,
+   "at": "2026-11-20T15:02",
+   "file": "v404.html",
+   "title": "test is not taste",
+   "summary": "the ear kept hearing \"test\" as \"taste\", so the door puts the word back and says it did.",
+   "detail": [
+    "20 Nov 2026, 14:58: \"Keeps on hearing test as taste!\" The record agrees: 19 Nov 22:05:15, his own line on the screen read \"Maybe there's just one thing I'm going to taste, but I'm going to taste it on a different version.\" He was talking about a test. South African English puts \"test\" and \"taste\" very close together, and the recogniser prefers the commoner word. The repair is deliberately narrow, because \"taste\" is a real word and he may mean it: only the shapes that cannot be literal are touched - a future \"going to taste\", \"taste it/that/this\", and \"taste the door/rail/build/page\".",
+    "\"Well, first I trying to taste the lager\" and \"my taste in music\" are left exactly as they were heard. Every repair is written to the record as ear.repaired, so a change to his words is never silent. The phrase set in the relay is where this belongs properly, and \"test\" now goes in it too."
+   ]
+  },
+  {
+   "n": 403,
+   "at": "2026-11-20T14:41",
+   "file": "v403.html",
+   "title": "a keystroke is not a man speaking",
+   "summary": "typing noise opened turns and the door said \"Go on, Boss\"; a voice with no words behind it now says nothing.",
+   "detail": [
+    "a choice of styles is a choice the door took from him."
+   ]
+  },
+  {
+   "n": 402,
+   "at": "2026-11-20T14:22",
+   "file": "v402.html",
+   "title": "a session starts new",
+   "summary": "the welcome-back question is gone, and the making says it is being made before it promises the shelf.",
+   "detail": [
+    "a session starts new, so a sitting left behind is not picked up and not asked about. It is dropped, and the record says so rather than leaving it to be found again next time."
+   ]
+  },
+  {
+   "n": 401,
+   "at": "2026-11-20T13:44",
+   "file": "v401.html",
+   "title": "the door stopped paying for its own silence",
+   "summary": "polling needs a live pass and a page he is looking at; an idle room beats every 90 seconds instead of 20.",
+   "detail": [
+    "the timer may tick every twenty seconds, but a tick is not a call. Only a due beat asks."
+   ]
+  },
+  {
+   "n": 400,
+   "at": "2026-11-20T00:58",
+   "file": "v400.html",
+   "title": "he said stop and the door offered him reggae, blues or pop",
+   "summary": "a retraction is heard before the words are taken, and a stop ends the making whatever the grammar.",
+   "detail": [
+    "19 Nov 2026, 22:34:07, live on 399: \"No, we're not gonna be. Let's stop this. I'm not gonna make a song Anymore.\" The regex below only knew \"going to\" and \"not going to\", so \"gonna\" walked straight past it, and \"let's stop this\" was not a phrase it had at all.",
+    "The door read the sentence as a sound attempt, asked \"Did you mean swing, Boss?\" about a sound he never gave, and then offered him a list of genres. He had to say \"I don't want to make a song anymore\" in exactly the shape the regex knew before it was heard. A stop is the clearest thing a person can say and it must never depend on his grammar matching ours."
+   ]
+  },
+  {
+   "n": 399,
+   "at": "2026-11-20T00:42",
+   "file": "v399.html",
+   "title": "a sound he describes is a sound",
+   "summary": "a short phrase that plainly describes music is taken as the sound, and the door no longer reads a song out of its own sentence.",
+   "detail": [
+    "19 Nov 2026, 22:16:55, live on 398. He was making a song about a door into a mysterious house and answered the sound question with \"slow electronic mystical music\". The door logged song.sound.open and then told him the sound ring stays open because that is not a kind of music - the closed vocabulary has no \"electronic\", no \"ambient\" and no \"mystical\".",
+    "He tried again and was refused again, so the making never reached its cover question and no song was ever made. His own rule from the ring's own promise: \"Say you choose and I will pick.\" The vocabulary is a guard against a stray word becoming a style - the \"house\" fault, the \"gray\" fault - and it is not a gate on him. So a short phrase that plainly describes music is taken as the sound, in his own words, and anything that reads like a question or a whole sentence is not."
+   ]
+  },
+  {
+   "n": 398,
+   "at": "2026-11-20T00:28",
+   "file": "v398.html",
+   "title": "thinking named the journey, so the reader may not veto it",
+   "summary": "the door could be silenced by its own reader after thinking had already decided; the making opens anyway.",
+   "detail": [
+    "19 Nov 2026, 22:06:31, live on 397. He said \"Let's create a quickly create another song.\" Thinking read it correctly - MAKE, 2415ms, with its own question - and handed it to the door's path. The door's own reader found no route in those words (song.read never ran, and song.route.shadow recorded the disagreement: gate \"\", solver \"make\", agree false), so the gate returned without a word.",
+    "Thinking's question was thrown away with it, the turn closed empty at 22:06:34.249, and the door said NOTHING for the next seventy seconds while he waited. His words: \"never answered my request.\" Thinking has already decided what this is. The reader is a second opinion on the same sentence, and a second opinion may not overrule a decision into an empty turn."
+   ]
+  },
+  {
+   "n": 397,
+   "at": "2026-11-20T00:12",
+   "file": "v397.html",
+   "title": "a closed turn is not a busy door",
+   "summary": "the subject question was minted and then held for eight seconds by a turn that had already closed.",
+   "detail": [
+    "19 Nov 2026, 23:56, live on 396. He said \"I want to make a song.\" Thinking settled it at 21:56:03.690, the journey opened at 03.702, and the door wrote its subject question at 03.761 - then held it for eight seconds until note.stale.turn released it at 11.730, so he heard the question at 13.457, nine seconds after the door already knew what to ask. The turn had closed at 01.948 with nothing in it, but the flags that mean \"a turn is open, sound is in the air, the reply has not begun\" are cleared only by the stale guard, never by the close.",
+    "So every note minted after an empty or preempted turn waited the full eight seconds. His words: \"I just asked i want to make a song, but it took long to prompt the next questions.\" The turn closing is the moment those flags stop being true; the mouth's own `speaking` flag is what still holds a note while audio is in the air."
+   ]
+  },
+  {
+   "n": 396,
+   "at": "2026-11-19T23:56",
+   "file": "v396.html",
+   "title": "a question the door owes is never left unsaid",
+   "summary": "the cover question was minted, dropped as never heard, and never asked again, so he sat waiting on a silent door.",
+   "detail": [
+    "A QUESTION THE DOOR OWES IS NEVER LEFT UNSAID. The cover question is the last thing the making needs, and on 395 it was minted, dropped as never heard, and never asked again, so he sat waiting on a silent door."
+   ]
+  },
+  {
+   "n": 395,
+   "at": "2026-11-19T23:23",
+   "file": "v395.html",
+   "title": "the ear spells an acronym as numbers",
+   "summary": "he asked about the ATP Finals and his own line on the screen read \"80 EP\", so the door puts the acronym back.",
+   "detail": [
+    "19 Nov 2026, 23:4x, live: he asked about the ATP Finals and his own line on the screen read \"80 EP\". The search then answered correctly, which is what made it worth fixing rather than shrugging at: the door had understood him and the world had answered him, and the only thing wrong was the words the ear handed over, sitting in his own line where he reads them back. The repair is deliberately narrow.",
+    "Only a pattern that cannot mean anything else is touched, and every repair is written to the record as ear.repaired, so a change to his words is never silent. This is a floor under the ear, not a substitute for it: the phrase set in the relay is where the same fix belongs properly, and \"ATP\" now goes in it."
+   ]
+  },
+  {
+   "n": 394,
+   "at": "2026-11-19T23:14",
+   "file": "v394.html",
+   "title": "a challenge is the door going back to know",
+   "summary": "asked for the latest results the rail handed back 2024, and the mouth apologised instead of knowing again.",
+   "detail": [
+    "19 Nov 2026, 22:5x, live. He asked for \"the latest results ... the ATP Masters finals\" and the rail handed back the 2024 final. He said: \"Okay, well, we in 2026 now.",
+    "So then I wait. Why are you giving me 2024?\" and the door answered \"I'm sorry, that is just what the search result said, Boss.\" Asked again - \"That even possible. I mean, what are you searching?\" - it explained itself.",
+    "He had to push a THIRD time, in his own words (\"what's happening in the tennis right now not like two years back\"), before it found Ben Shelton beating Rafael Jodar that afternoon. Nothing in the door treated a challenge as evidence that the KNOWING was wrong. It treated it as something to defend.",
+    "So: when his words challenge a fact the world gave him in this session, the door itself looks again, with his correction folded into the question, and hands the mouth the new fact. The mouth is never asked to defend the old one. This is the thinking loop the doctrine describes - a shortfall sends THINKING back to hunt exactly the missing input - applied to the one thing that was missing: the fact was stale."
+   ]
+  },
+  {
+   "n": 393,
+   "at": "2026-11-19T23:02",
+   "file": "v393.html",
+   "title": "an amount spoken as a word is still an amount",
+   "summary": "he said \"ten Rand\" and the guard answered that R10 was not in his words.",
+   "detail": [
+    "19 Nov 2026, 22:50:43, live on 392: he said \"Uh, just ten Rand and it's for a friend.\" and the guard below answered pay.amount.unheard - \"R10 is not in his words\" - so his payment request was refused, the mouth fell to a fragment (\"R10. Is\") and then to silence. The guard was built to stop money being acted on from a guess, which is right, but it only ever read DIGITS, so no amount he spoke as a word could ever pass it: \"ten rand\", \"fifty rand\", \"a hundred rand\" were all unheard.",
+    "The reader now reads the words too, and stays strict where it must: it only ever returns a number that the words actually make, and a lone \"one\" (\"one more thing\") only counts when a currency word sits beside it, so a stray word can never become an amount."
+   ]
+  },
+  {
+   "n": 392,
+   "at": "2026-11-19T22:42",
+   "file": "v392.html",
+   "title": "the world's turn is the world's",
+   "summary": "the song rail's guard must not judge a turn the world answered.",
+   "detail": [
+    "THE WORLD'S TURN IS THE WORLD'S. judgeClaim below is the SONG rail's guard, and it must not judge a turn the world answered. Stamped here, at the one place ownership is given."
+   ]
+  },
+  {
+   "n": 391,
+   "at": "2026-11-19T16:18",
+   "file": "v391.html",
+   "title": "a turn a decider owns is not a turn nobody answered",
+   "summary": "no path claimed a world question, thinking never ran, and his words reached the mouth twenty seconds late.",
+   "detail": [
+    "19 Nov 2026, 16:08:51, live on 390: to \"And what is happening in Ukraine. At the moment,\" no path claimed the turn and thinking never ran, and his words did not reach the mouth until 16:08:53.719 - two and a third seconds of nothing. The 2.5s was a grace period for deciders that in that turn had nothing to decide."
+   ]
+  },
+  {
+   "n": 390,
+   "at": "2026-11-19T16:04",
+   "file": "v390.html",
+   "title": "one sentence is the room's length",
+   "summary": "his ruling: ask for one sentence, because that is all that can be broadcast in text or voice.",
+   "detail": [
+    "19 Nov 2026, his ruling: \"We don't need a novel we need a summary. So ask for one sentence will do it as we can't broadcast more than that in any case in text or voice back.\" This is the brief's own rule, so it holds on every path rather than only where a note remembers to say it."
+   ]
+  },
+  {
+   "n": 389,
+   "at": "2026-11-19T15:26",
+   "file": "v389.html",
+   "title": "a mouth that is speaking is not a mouth that is silent",
+   "summary": "the door shut its own mouth mid-sentence at twelve seconds and then said the same line again.",
+   "detail": [
+    "19 Nov 2026, 13:18:42 and 13:19:41, live on 388: the door shut its own mouth with \"the line was never said inside the door's patience\" at 12.2 seconds and at 11.5 seconds, and the two answers landed 2.7 and 6.5 seconds after that. Both had started speaking within three seconds of the note. The patience was counting to the END of the sentence, and a sentence that is being said is not a failure to say it: the record then said two lines were never said, and he heard both.",
+    "So the rule is the start, not the end - once words have come back for this directive it is being answered and is left alone, up to a ceiling, so nothing can hold the mouth open for ever."
+   ]
+  },
+  {
+   "n": 388,
+   "at": "2026-11-19T15:13",
+   "file": "v388.html",
+   "title": "a strip is not a silence",
+   "summary": "a sentence can be taken out of the transcript, but the audio cannot be taken back.",
+   "detail": [
+    "A STRIP IS NOT A SILENCE. The mouth speaks as it streams, so by the time this runs the words have already been said aloud: the sentence can be taken out of the transcript, and the audio cannot be taken back.",
+    "19 Nov 2026, 13:05:49, live on 387: \"It is 25 degrees and sunny in Ballito right now, Boss, according to wttr.in. That fact is on your shelf now.\" - his ears heard the claim and his screen did not show it, which is a screen that disagrees with what he heard. The cure is that the mouth never generates it (the world tool's own description was telling it that a lookup lands on his shelf, and it believed the tool over the rule), not that the line is edited afterwards.",
+    "The record says \"spoken\" so this is never mistaken for a clean turn."
+   ]
+  },
+  {
+   "n": 387,
+   "at": "2026-11-19T14:59",
+   "file": "v387.html",
+   "title": "the count says what is behind the days before today",
+   "summary": "the shelf row now says how many cards sit behind it, so the row is not mistaken for all of them.",
+   "detail": [
+    "the count says how many are behind the days before today, so he knows the row is not all of it."
+   ]
+  },
+  {
+   "n": 386,
+   "at": "2026-11-19T14:34",
+   "file": "v386.html",
+   "title": "a line about a lookup belongs to the answer that produced it",
+   "summary": "the landing line was never spoken and the chip with its Shelve button was drawn into the wrong turn.",
+   "detail": [
+    "19 Nov 2026, 12:23: he asked for Back in Black, the rail landed it, the landing line was never spoken, and the \"looked up: sharing · naming\" chip with its SHELVE button was drawn 12 seconds later under \"Glad you think so, Boss.\" - an answer about something else entirely. `looked` and the held card outlive their turn unless the next turn takes them with it."
+   ]
+  },
+  {
+   "n": 385,
+   "at": "2026-11-19T14:25",
+   "file": "v385.html",
+   "title": "the button speaks for itself",
+   "summary": "the door said an answer was on his shelf and then said nothing had been shelved; the Shelve button now speaks alone.",
+   "detail": [
+    "19 Nov 2026, 14:15:30, live on 384: the weather answer ended \"It's on your shelf if you want to see more.\" Nothing had been shelved - the card is held until he taps Shelve - so the door said \"Nothing has been put on your shelf, Boss.\" a moment later. Two untrue-in-sequence lines, and his ruling: \"It should not say it is on my shelf anymore anywhere, the button should speak for itself.\" So a shelf claim is now taken OUT of the answer before it is drawn or spoken, and nothing is said about a shelf afterwards."
+   ]
+  },
+  {
+   "n": 384,
+   "at": "2026-11-19T14:16",
+   "file": "v384.html",
+   "title": "a boarded door never ignores him twice in a row",
+   "summary": "he said \"Start fresh\" and was refused at 0.645 and again at 0.608, and the door said nothing either time.",
+   "detail": [
+    "19 Nov 2026, 14:14, live on 383: he said \"Start fresh.\" and was refused at 0.645, said it again and was refused at 0.608, and the door said nothing at all either time. The reference on record was sampled while the door was still speaking (build 380), so his own voice now scores under the floor and every test run dies at the first sentence. The fingerprint is the boarding proof; the voice print is a courtesy, and a courtesy may not lock the owner out.",
+    "One refusal stands, the second is answered and the score is kept, so the record still shows what the gate thought."
+   ]
+  },
+  {
+   "n": 383,
+   "at": "2026-11-19T14:12",
+   "file": "v383.html",
+   "title": "a new session may not anchor its lines into the old one",
+   "summary": "on a reopened session the first engine line was inserted above the divider, into the previous session.",
+   "detail": [
+    "A NEW SESSION MAY NOT ANCHOR ITS LINES INTO THE OLD ONE. An engine line is inserted after the row of the turn the door last asked about. On a reopened session that row is in the previous session, above the divider, so the first line of the new sitting was drawn up there and his own line went below it.",
+    "The divider is a hard edge: nothing after it belongs above it."
+   ]
+  },
+  {
+   "n": 382,
+   "at": "2026-11-19T14:07",
+   "file": "v382.html",
+   "title": "a forwarded note is the answer to his turn, so it keeps its licence",
+   "summary": "The eight-second rule exists so a door-scripted line never cuts a sentence in half.",
+   "detail": [
+    "A FORWARDED NOTE IS THE ANSWER TO HIS TURN, SO IT KEEPS ITS LICENCE. The eight-second rule exists so a door-scripted line never cuts a sentence in half. It must not apply to the note that carries his own words to the mouth: that note IS the reply, and downgrading it to context is how a sentence of his went unanswered at 14:03:02."
+   ]
+  },
+  {
+   "n": 381,
+   "at": "2026-11-19T13:42",
+   "file": "v381.html",
+   "title": "six seconds was never a thinking deadline",
+   "summary": "19 Nov 2026, 13:34:14, live: the model was still deciding and calling a tool when the door declared the turn a failure and closed it, so the flight prices it fetched two seconds later had no",
+   "detail": [
+    "SIX SECONDS WAS NEVER A THINKING DEADLINE.",
+    "19 Nov 2026, 13:34:14, live: the model was still deciding and calling a tool when the door declared the turn a failure and closed it, so the flight prices it fetched two seconds later had nowhere to go. Thinking runs until it is done; the deadline exists only so a hung socket cannot deafen the door for ever."
+   ]
+  },
+  {
+   "n": 380,
+   "at": "2026-11-19T13:27",
+   "file": "v380.html",
+   "title": "the sample is HIS voice, never the door's",
+   "summary": "The sample is HIS voice, never the door's.",
+   "detail": [
+    "The sample is HIS voice, never the door's. While the mouth is speaking, its own sound is in the room and the microphone hears it; feeding that in makes the reference a mixture and the man then fails to match himself."
+   ]
+  },
+  {
+   "n": 379,
+   "at": "2026-11-19T13:17",
+   "file": "v379.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 378,
+   "at": "2026-11-19T13:15",
+   "file": "v378.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 377,
+   "at": "2026-11-19T13:03",
+   "file": "v377.html",
+   "title": "one thing once, before anything else",
+   "summary": "If the record holds no voice, the door asks for it here, at the first opening, and never again.",
+   "detail": [
+    "ONE THING ONCE, BEFORE ANYTHING ELSE. If the record holds no voice, the door asks for it here, at the first opening, and never again. It waits for that answer rather than talking over it."
+   ]
+  },
+  {
+   "n": 376,
+   "at": "2026-11-19T10:48",
+   "file": "v376.html",
+   "title": "an empty line is not a line",
+   "summary": "19 Nov 2026, 12:45:47, live: a turn closed with an empty engine text and the record took it as the door having said something, which is an empty bubble on his screen.",
+   "detail": [
+    "AN EMPTY LINE IS NOT A LINE.",
+    "19 Nov 2026, 12:45:47, live: a turn closed with an empty engine text and the record took it as the door having said something, which is an empty bubble on his screen."
+   ]
+  },
+  {
+   "n": 375,
+   "at": "2026-11-19T10:35",
+   "file": "v375.html",
+   "title": "nothing lands on his shelf unless he puts it there",
+   "summary": "19 Nov 2026, 12:29: \"Yes all landed on the shelf so it fills up the space quickly....",
+   "detail": [
+    "NOTHING LANDS ON HIS SHELF UNLESS HE PUTS IT THERE.",
+    "19 Nov 2026, 12:29: \"Yes all landed on the shelf so it fills up the space quickly.... is good for demo purposes but not for real life. To replace this behaviour, give an option (small button next lookup subtext called Shelve) that a user can just click to put it on the shelf straight from there.\" So the card is built and HELD against this answer, and the chip under the answer carries the button."
+   ]
+  },
+  {
+   "n": 374,
+   "at": "2026-11-19T10:23",
+   "file": "v374.html",
+   "title": "a flag only the model can clear is a corridor that never reopens",
+   "summary": "19 Nov 2026, 11:59-12:21, live: he spoke for twenty minutes and the record shows 26 empty hearings in a row, each one \"nothing was heard while the door was still answering\".",
+   "detail": [
+    "A FLAG ONLY THE MODEL CAN CLEAR IS A CORRIDOR THAT NEVER REOPENS.",
+    "19 Nov 2026, 11:59-12:21, live: he spoke for twenty minutes and the record shows 26 empty hearings in a row, each one \"nothing was heard while the door was still answering\". The door was not answering; it had answered at 11:46 and closed. `owedLine`, `pendingMouth` and `turnInFlight` were still set, so every hearing was judged as talking over the door, and the door said nothing either. Silence on both sides is the stall he reports as being stuck in the corridor.",
+    "So the flags expire on the clock, and sound in the air is the only thing that can hold him off."
+   ]
+  },
+  {
+   "n": 373,
+   "at": "2026-11-19T10:19",
+   "file": "v373.html",
+   "title": "a fresh session starts with nothing in its knowledge",
+   "summary": "Doctrine, 19 Nov: the next time he enters it starts a new thinking session and builds again.",
+   "detail": [
+    "A FRESH SESSION STARTS WITH NOTHING IN ITS KNOWLEDGE. Doctrine, 19 Nov: the next time he enters it starts a new thinking session and builds again."
+   ]
+  },
+  {
+   "n": 372,
+   "at": "2026-11-19T09:34",
+   "file": "v372.html",
+   "title": "\"what happened\" is not a question about the door",
+   "summary": "19 Nov 2026, 11:31:23, live on 371: he asked \"Can you tell me what happened with the Paris Masters final?\" and the door refused to search it - world.refused, \"about the door, not the world\"",
+   "detail": [
+    "\"WHAT HAPPENED\" IS NOT A QUESTION ABOUT THE DOOR.",
+    "19 Nov 2026, 11:31:23, live on 371: he asked \"Can you tell me what happened with the Paris Masters final?\" and the door refused to search it - world.refused, \"about the door, not the world\" - then said \"I don't know\". He explained \"It's a tennis tournament\" and it refused again. The guard that keeps the door from searching about itself was firing on the words \"what happened\" alone, and \"what happened\" is how a person asks about the world.",
+    "So the two kinds of phrase are now separate. Naming a part of the door (the door, the rail, the shelf, the voice, the ears, the mouth, the making, the cover, the song), or asking what the door itself did, is about the door. \"What happened\" and \"why was it\" only count when the sentence also names one of those things."
+   ]
+  },
+  {
+   "n": 371,
+   "at": "2026-11-19T09:28",
+   "file": "v371.html",
+   "title": "the door's patience is one number, and it is not 2.5 seconds",
+   "summary": "5 SECONDS. 19 Nov 2026, live: all eleven \"no words came back\" turns came exactly 2.5 seconds after the note, while the world lookup was still running - the Alcaraz answer took fifteen second",
+   "detail": [
+    "THE DOOR'S PATIENCE IS ONE NUMBER, AND IT IS NOT 2.5 SECONDS.",
+    "19 Nov 2026, live: all eleven \"no words came back\" turns came exactly 2.5 seconds after the note, while the world lookup was still running - the Alcaraz answer took fifteen seconds and the door had already given up and sent a SECOND note with his own words. That second note is where the duplicate and diverged lines came from. And at 08:58:59 \"twelve seconds and the line was never said\" shut the mouth mid-lookup, which is why the answer arrived cut to \"Carlos Alcaraz defeated Daniil\".",
+    "So the wait is decided here: a plain answer gets twelve seconds, a lookup gets thirty, and a turn the door already owns is never nudged at all."
+   ]
+  },
+  {
+   "n": 370,
+   "at": "2026-11-19T09:26",
+   "file": "v370.html",
+   "title": "the ear's boundary is one decision, and it is made in one place",
+   "summary": "19 Nov 2026, 08:58:42-08:59:09, live: one sentence of his became three ear segments.",
+   "detail": [
+    "THE EAR'S BOUNDARY IS ONE DECISION, AND IT IS MADE IN ONE PLACE.",
+    "19 Nov 2026, 08:58:42-08:59:09, live: one sentence of his became three ear segments. The relay returned his real question at 0.842, then the TAIL of the same sentence 3 seconds later (\"Most is finals? Yeah.\" at 0.575), then an empty segment while the door was still answering.",
+    "Every segment became a turn, a new turn cancelled the answer being built for the real question, and the empty one made the door say \"I did not catch that\" into its own answer. He said, correctly, \"you're not listening to what I'm saying\". So the boundary is now a verdict, not an accident of timing: turn - a real utterance with the door free to answer it extend - more words for the turn the door is still answering; they do not cancel it empty.held - nothing was heard while the door was answering, so it says nothing at all ask - nothing was heard and nothing is in flight, so it asks once The test is a-tail-fragment-extends-the-turn-it-belongs-to, written before this."
+   ]
+  },
+  {
+   "n": 369,
+   "at": "2026-11-19T09:05",
+   "file": "v369.html",
+   "title": "a log that cannot post must say so once, out loud",
+   "summary": "19 Nov 2026, 11:00: he ran the door at the office and the door opened and spoke, but not one line reached the record - the last entry in the whole log was 09:03:36, from the car.",
+   "detail": [
+    "A LOG THAT CANNOT POST MUST SAY SO ONCE, OUT LOUD.",
+    "19 Nov 2026, 11:00: he ran the door at the office and the door opened and spoke, but not one line reached the record - the last entry in the whole log was 09:03:36, from the car. Every failure was swallowed by a bare .catch(), so a door that could not be logged looked exactly like a door nobody had used. Now a failed post is counted, retried once by beacon, and after three in a row the door says on screen that the record is not reachable from this device.",
+    "The door never pretends to have a record of a run it could not report."
+   ]
+  },
+  {
+   "n": 368,
+   "at": "2026-11-19T07:56",
+   "file": "v368.html",
+   "title": "the put-down note may not forbid the answer it is asking for",
+   "summary": "19 Nov 2026, 07:50:18: he asked \"How's the weather in Ballito?\" with a song still on the table.",
+   "detail": [
+    "THE PUT-DOWN NOTE MAY NOT FORBID THE ANSWER IT IS ASKING FOR.",
+    "19 Nov 2026, 07:50:18: he asked \"How's the weather in Ballito?\" with a song still on the table. The note that put the song down said \"nothing is searched\" and then asked the mouth to answer his question - so the one instruction contradicted the other, the mouth stalled, and the weather arrived twelve seconds later after the world tool had been called anyway. The song is still put down here (it must be), but the note now says what to do instead of what not to do: answer him, and reach for the world tool if it is about the world."
+   ]
+  },
+  {
+   "n": 367,
+   "at": "2026-11-19T00:17",
+   "file": "v367.html",
+   "title": "tHE TURN IS A THING, AND IT CARRIES ITS SESSION ================= 19 Nov 2026, 02:12",
+   "summary": "THE TURN IS A THING, AND IT CARRIES ITS SESSION ================= 19 Nov 2026, 02:12.",
+   "detail": [
+    "THE TURN IS A THING, AND IT CARRIES ITS SESSION ================= 19 Nov 2026, 02:12. He rolled the door back to 361 on his own word - \"we are going backwards\" - after five builds that each fixed one fault and made another. The root cause was named that night and this is the build of it: 1.",
+    "THE TURN IS A THING. Until now a \"turn\" was whatever the chain of gates in doorHears happened to do to one sentence. Several of them could answer the same sentence - the making opened and the sharing branch asked for a title on top of it - because nothing in the page knew a turn had already been answered.",
+    "Now every finished utterance creates a turn, a turn has exactly one owner, and a decider that is not the owner is refused and recorded instead of speaking. 2. A TURN CARRIES ITS SESSION EPOCH.",
+    "At 23:59:58 he said \"Start fresh\" and the ear returned \"I want to create a song.\" at 0.964 - a sentence from the session that had just been replaced. Frames held for a socket that was closing and transcripts arriving from it were indistinguishable from new speech. Now the epoch goes with the socket, frames held for an old epoch are thrown away when the epoch moves, and a transcript from an old socket is dropped at the door with a line in the record.",
+    "3. ONE ROUTER. Thinking may annotate a turn; it may not re-enter the router on a turn that has already been answered.",
+    "That re-entry was the second decider. Nothing here changes what the door says. It changes who is allowed to say it."
+   ]
+  },
+  {
+   "n": 366,
+   "at": "2026-11-19T04:15",
+   "file": "v366.html",
+   "title": "an open question belongs to whoever asked it",
+   "summary": "19 Nov 2026, 00:01: the cover question was open (\"journey · picture · still open\"), he said \"I didn't say anything.\", and the sharing branch claimed the turn and asked \"Which song, Boss?",
+   "detail": [
+    "AN OPEN QUESTION BELONGS TO WHOEVER ASKED IT.",
+    "19 Nov 2026, 00:01: the cover question was open (\"journey · picture · still open\"), he said \"I didn't say anything.\", and the sharing branch claimed the turn and asked \"Which song, Boss? The title and who sings it.\" - while the making was still waiting on its own question. The making has an open beat, so the sharing branch may not answer at all until that beat is settled or the journey is closed."
+   ]
+  },
+  {
+   "n": 365,
+   "at": "2026-11-19T03:55",
+   "file": "v365.html",
+   "title": "one owner per turn",
+   "summary": "19 Nov 2026, 01:48: \"I want to create a song.\" was answered twice - the making opened and the sharing branch asked for a title on top of it.",
+   "detail": [
+    "ONE OWNER PER TURN.",
+    "19 Nov 2026, 01:48: \"I want to create a song.\" was answered twice - the making opened and the sharing branch asked for a title on top of it. That was not one bug, it was the shape of the page: several deciders in a row, each able to speak, and nothing saying who owns the turn. The token is claimed by whichever decider asks the door to say something first.",
+    "Every later one in the same turn is recorded and silent, so a collision is visible in the log instead of arriving in his ear as two questions."
+   ]
+  },
+  {
+   "n": 364,
+   "at": "2026-11-19T03:35",
+   "file": "v364.html",
+   "title": "a ROUTE THAT HAS ANSWERED OWNS THE TURN, so the sharing branch may not ask a second question on the same sentence",
+   "summary": "A ROUTE THAT HAS ANSWERED OWNS THE TURN, so the sharing branch may not ask a second question on the same sentence.",
+   "detail": [
+    "A ROUTE THAT HAS ANSWERED OWNS THE TURN, so the sharing branch may not ask a second question on the same sentence. 01:48: \"I want to create a song.\" opened the making and then also asked \"Which song, Boss?\"."
+   ]
+  },
+  {
+   "n": 363,
+   "at": "2026-11-19T03:20",
+   "file": "v363.html",
+   "title": "when thinking does not answer, the door routes it itself",
+   "summary": "19 Nov 2026, 01:44: thinking took longer than six seconds, and the door answered \"Nothing was decided on that, Boss.",
+   "detail": [
+    "WHEN THINKING DOES NOT ANSWER, THE DOOR ROUTES IT ITSELF.",
+    "19 Nov 2026, 01:44: thinking took longer than six seconds, and the door answered \"Nothing was decided on that, Boss. Say it once more.\" to \"I want to create a song.\" - a sentence it understands perfectly well, and which the door's own reader had already routed correctly for weeks before thinking existed. A slow model is not a reason to tell him he was not understood.",
+    "The fallback is the door's own gate, and the record says it took that path."
+   ]
+  },
+  {
+   "n": 362,
+   "at": "2026-11-19T03:10",
+   "file": "v362.html",
+   "title": "hOW THE MOUTH SPEAKS, because a race against time is a design fault, not a mood",
+   "summary": "HOW THE MOUTH SPEAKS, because a race against time is a design fault, not a mood.",
+   "detail": [
+    "HOW THE MOUTH SPEAKS, because a race against time is a design fault, not a mood.",
+    "19 Nov 2026, 01:33: \"Is there settings to slow down the speech and then after it finished give more time for input... At the moment it feels like a race against time and a bit unnatural. Humans speak with bits and pieces and stutters.\" The pace of the voice is not a setting on this model, so it is said plainly in the brief instead."
+   ]
+  },
+  {
+   "n": 361,
+   "at": "2026-11-19T00:08",
+   "file": "v361.html",
+   "title": "wHAT THE DOOR LAST SAID, kept past the end of its turn, so a hearing can be compared with it",
+   "summary": "WHAT THE DOOR LAST SAID, kept past the end of its turn, so a hearing can be compared with it.",
+   "detail": [
+    "WHAT THE DOOR LAST SAID, kept past the end of its turn, so a hearing can be compared with it."
+   ]
+  },
+  {
+   "n": 360,
+   "at": "2026-11-19T02:45",
+   "file": "v360.html",
+   "title": "build 359 is withdrawn",
+   "summary": "It made the ear deaf while the mouth was audible, and it took the mouth's own sound with it: at 01:24 the line printed and only a short noise came out.",
+   "detail": [
+    "BUILD 359 IS WITHDRAWN. It made the ear deaf while the mouth was audible, and it took the mouth's own sound with it: at 01:24 the line printed and only a short noise came out. A fix in the audio path that silences the door is not a fix.",
+    "The echo it was aimed at is real and is still there; it gets fixed with a test that proves the mouth still speaks, not by guesswork at half past one."
+   ]
+  },
+  {
+   "n": 359,
+   "at": "2026-11-19T02:35",
+   "file": "v359.html",
+   "title": "the ear is deaf while the mouth is audible",
+   "summary": "19 Nov 2026, 01:19: the door answered in about a second and the ear immediately took \"And had.\" at 0.835 - the tail of the door's own sentence, heard through the speaker and fed back as if h",
+   "detail": [
+    "THE EAR IS DEAF WHILE THE MOUTH IS AUDIBLE.",
+    "19 Nov 2026, 01:19: the door answered in about a second and the ear immediately took \"And had.\" at 0.835 - the tail of the door's own sentence, heard through the speaker and fed back as if he had said it. So the door talked to itself and he never got a word in. For 900ms after our last syllable the microphone is not his: a frame below the echo line is dropped and any half-heard turn is thrown away.",
+    "A voice clearly louder than the bleed still counts as him, so he can still talk over the door."
+   ]
+  },
+  {
+   "n": 358,
+   "at": "2026-11-19T02:25",
+   "file": "v358.html",
+   "title": "the line he reads is what the door understood, even when it understands it a moment late",
+   "summary": "19 Nov 2026, 01:06: he said \"start fresh\", the ear wrote \"Stored fresh.\" at 0.669, and the door took it as a fresh start - correctly.",
+   "detail": [
+    "THE LINE HE READS IS WHAT THE DOOR UNDERSTOOD, EVEN WHEN IT UNDERSTANDS IT A MOMENT LATE.",
+    "19 Nov 2026, 01:06: he said \"start fresh\", the ear wrote \"Stored fresh.\" at 0.669, and the door took it as a fresh start - correctly. But the bubble had already been painted with the raw hearing before the door resolved it, so what he read was \"Stored fresh.\" and the screen disagreed with the door. The raw hearing stays underneath, as a note, so nothing is hidden."
+   ]
+  },
+  {
+   "n": 357,
+   "at": "2026-11-19T02:15",
+   "file": "v357.html",
+   "title": "a song is on the shelf when the record says so, not when the page draws it",
+   "summary": "19 Nov 2026, 00:41:55: the rail answered \"store\" for Home (feat.",
+   "detail": [
+    "A SONG IS ON THE SHELF WHEN THE RECORD SAYS SO, NOT WHEN THE PAGE DRAWS IT.",
+    "19 Nov 2026, 00:41:55: the rail answered \"store\" for Home (feat. Michael Bublé), the page drew the card and the door said it was on his shelf - and no row was ever written, so it was gone at the next read. Voulez-Vous survived because \"wrapped\" writes its own row on the rail.",
+    "A store landing writes one here, and if it cannot, the door says so instead of claiming it."
+   ]
+  },
+  {
+   "n": 356,
+   "at": "2026-11-19T02:05",
+   "file": "v356.html",
+   "title": "a frame with nowhere to go is kept, not dropped",
+   "summary": "19 Nov 2026, 00:43-00:47: he answered five times and the relay answered \"end\" 209ms later having heard nothing, which means not one frame of his voice reached it: the ear socket was not open",
+   "detail": [
+    "A FRAME WITH NOWHERE TO GO IS KEPT, NOT DROPPED.",
+    "19 Nov 2026, 00:43-00:47: he answered five times and the relay answered \"end\" 209ms later having heard nothing, which means not one frame of his voice reached it: the ear socket was not open and the page threw the audio away in silence. Three seconds are held while the socket opens, so the first words of a turn are never the ones lost."
+   ]
+  },
+  {
+   "n": 355,
+   "at": "2026-11-19T01:55",
+   "file": "v355.html",
+   "title": "a turn the ear did not hear is still a turn he took",
+   "summary": "19 Nov 2026, 00:43-00:47: the door asked \"Do you want a cover picture?\", he answered five times, the ear came back empty every time, and the door said nothing at all.",
+   "detail": [
+    "A TURN THE EAR DID NOT HEAR IS STILL A TURN HE TOOK.",
+    "19 Nov 2026, 00:43-00:47: the door asked \"Do you want a cover picture?\", he answered five times, the ear came back empty every time, and the door said nothing at all. Five answers into silence is a door that looks dead, and it is the same class as every other fault tonight: a turn with no reply. One plain line, and the question he was answering stays open."
+   ]
+  },
+  {
+   "n": 354,
+   "at": "2026-11-19T01:40",
+   "file": "v354.html",
+   "title": "a duplicate payment request is the worst kind of double",
+   "summary": "19 Nov 2026, 00:24: the record holds PR-72KX and PR-9ZJR, both R100000, minted 849ms apart, and PR-VYGQ and PR-U6GQ, both R100, minted 1.3s apart.",
+   "detail": [
+    "A DUPLICATE PAYMENT REQUEST IS THE WORST KIND OF DOUBLE.",
+    "19 Nov 2026, 00:24: the record holds PR-72KX and PR-9ZJR, both R100000, minted 849ms apart, and PR-VYGQ and PR-U6GQ, both R100, minted 1.3s apart. Two turns reached the model for one sentence (the forward and the note landed either side of each other), and a model that is asked twice calls the tool twice. Two mechanical guards now stand in front of the mint, because a promise to be careful is not a guard."
+   ]
+  },
+  {
+   "n": 353,
+   "at": "2026-11-19T01:20",
+   "file": "v353.html",
+   "title": "no quotes around his words",
+   "summary": "Build 350 wrote his sentence in double quotes, and the door reads a quoted line as the line the mouth OWES - so it demanded he say his own sentence back, and every correct answer was thrown",
+   "detail": [
+    "NO QUOTES AROUND HIS WORDS. Build 350 wrote his sentence in double quotes, and the door reads a quoted line as the line the mouth OWES - so it demanded he say his own sentence back, and every correct answer was thrown away: 00:22:53 \"the door asked for one line and this is not it: The weather in Ballito is on your shelf\", and at 00:23:32 the mouth recited its own capabilities instead. His words go in bare."
+   ]
+  },
+  {
+   "n": 352,
+   "at": "2026-11-19T01:05",
+   "file": "v352.html",
+   "title": "the mouth no longer hears him, so every note carries his words",
+   "summary": "Until 347 the model heard the microphone itself, and a note was an aside on top of what it had just heard.",
+   "detail": [
+    "THE MOUTH NO LONGER HEARS HIM, SO EVERY NOTE CARRIES HIS WORDS. Until 347 the model heard the microphone itself, and a note was an aside on top of what it had just heard. The ear hears him now, so a note that says \"he has changed subject, answer his question\" is a note about a sentence the model has never seen - which is why it answered \"I am here, Boss.\" at 00:16 instead of the weather.",
+    "His own sentence travels with the note, unquoted so it can never be mistaken for the door's line."
+   ]
+  },
+  {
+   "n": 351,
+   "at": "2026-11-19T00:44",
+   "file": "v351.html",
+   "title": "the queue cannot wait for an answer that only it can cause",
+   "summary": "19 Nov 2026, 00:16 live: he asked for the weather, the door wrote the note, and the note was held because a turn was \"in flight\".",
+   "detail": [
+    "THE QUEUE CANNOT WAIT FOR AN ANSWER THAT ONLY IT CAN CAUSE.",
+    "19 Nov 2026, 00:16 live: he asked for the weather, the door wrote the note, and the note was held because a turn was \"in flight\". That flag is set when he stops speaking and cleared when the model begins answering - but the model answers only if the note goes. Nothing moved, for forty seconds, twice.",
+    "The old guard also refused to go stale while the microphone saw any sound at all, so a fan in the room could hold a note for ever. Eight seconds is the line, and sound is no longer an excuse for it."
+   ]
+  },
+  {
+   "n": 350,
+   "at": "2026-11-19T00:33",
+   "file": "v350.html",
+   "title": "a turn forwarded without a licence is a turn the mouth may not answer",
+   "summary": "19 Nov 2026, 00:11 live: the forward worked and the model did answer, and every word of it was dropped - \"mouth.unheard ...",
+   "detail": [
+    "A TURN FORWARDED WITHOUT A LICENCE IS A TURN THE MOUTH MAY NOT ANSWER.",
+    "19 Nov 2026, 00:11 live: the forward worked and the model did answer, and every word of it was dropped - \"mouth.unheard ... I hear you, Boss. What were you saying?\" - because build 341 says the mouth speaks only when the door has licensed it, and a raw turn licenses nothing.",
+    "That is why the door went quiet after one exchange. The forward now carries its licence: his sentence, and one instruction to answer it in one line."
+   ]
+  },
+  {
+   "n": 349,
+   "at": "2026-11-19T00:26",
+   "file": "v349.html",
+   "title": "a turn the door answered with nothing is a turn the mouth never heard",
+   "summary": "19 Nov 2026, 00:03:48 live: he said \"And you tell me the weather in ballito\", the ear gave it back at 0.958, the contracts route named the world - and then silence.",
+   "detail": [
+    "A TURN THE DOOR ANSWERED WITH NOTHING IS A TURN THE MOUTH NEVER HEARD.",
+    "19 Nov 2026, 00:03:48 live: he said \"And you tell me the weather in ballito\", the ear gave it back at 0.958, the contracts route named the world - and then silence. Nothing was sent to the model at all, because the door had always assumed the model heard him through the microphone. It no longer does: the ear hears him, so the door must hand his sentence on.",
+    "If nothing has gone to the mouth a moment after the route decides, his own words go, and the model can call the world lookup as it always could."
+   ]
+  },
+  {
+   "n": 348,
+   "at": "2026-11-19T00:10",
+   "file": "v348.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 347,
+   "at": "2026-11-18T23:55",
+   "file": "v347.html",
+   "title": "his words go to the ear, not into the model that answers him",
+   "summary": "his words go to the ear, not into the model that answers him.",
+   "detail": [
+    "his words go to the ear, not into the model that answers him."
+   ]
+  },
+  {
+   "n": 346,
+   "at": "2026-11-18T22:26",
+   "file": "v346.html",
+   "title": "a word the recogniser could not spell in english is not a name",
+   "summary": "18 Nov 2026, 20:16:32, live: he said \"da capo from Ace of Base\" and the transcript came back \"カップ from Ace of Base\" - katakana, because the recogniser decided that word was Japanese.",
+   "detail": [
+    "A WORD THE RECOGNISER COULD NOT SPELL IN ENGLISH IS NOT A NAME.",
+    "18 Nov 2026, 20:16:32, live: he said \"da capo from Ace of Base\" and the transcript came back \"カップ from Ace of Base\" - katakana, because the recogniser decided that word was Japanese. The session pins en-US and still did it, so the door has to defend its own side of the line: a token that has letters but no Latin letter is not a word of his. The hearing is logged exactly as it arrived, and what is left of the sentence is still read."
+   ]
+  },
+  {
+   "n": 345,
+   "at": "2026-11-18T22:20",
+   "file": "v345.html",
+   "title": "a landed song is not an open step",
+   "summary": "18 Nov 2026, 20:16:40, live: he typed \"da capo from Ace of Bas\" and the door answered \"Which song, Boss?\" without asking the rail, because shareCard (the song already LOCKED at 20:15:49) had",
+   "detail": [
+    "A LANDED SONG IS NOT AN OPEN STEP.",
+    "18 Nov 2026, 20:16:40, live: he typed \"da capo from Ace of Bas\" and the door answered \"Which song, Boss?\" without asking the rail, because shareCard (the song already LOCKED at 20:15:49) had barred thinking ever since. A finished thing may not hold a gate shut. Only an open step may: a share in flight, or the picture step.",
+    "The twenty seconds after a landing still hold the song path so a rejection said straight away is read as a rejection."
+   ]
+  },
+  {
+   "n": 344,
+   "at": "2026-11-18T22:03",
+   "file": "v344.html",
+   "title": "an answer never jumps above his line",
+   "summary": "343 kept the row of the turn the door had last asked about, so the answer to a later line was drawn under an earlier one - his 21:54 report, \"the conversation lines get inserted in strange s",
+   "detail": [
+    "AN ANSWER NEVER JUMPS ABOVE HIS LINE. 343 kept the row of the turn the door had last asked about, so the answer to a later line was drawn under an earlier one - his 21:54 report, \"the conversation lines get inserted in strange sequence\". The anchor is always his newest line."
+   ]
+  },
+  {
+   "n": 343,
+   "at": "2026-11-18T21:43",
+   "file": "v343.html",
+   "title": "a row sits where its turn is",
+   "summary": "Edwin, 18 Nov 2026, 21:40, with his screenshot: \"the conversation text is not flowing normal.",
+   "detail": [
+    "A ROW SITS WHERE ITS TURN IS. Edwin, 18 Nov 2026, 21:40, with his screenshot: \"the conversation text is not flowing normal. The sequencing is wrong... my words are all group together and the engines as well.\" A row was appended when it arrived, so an answer that took 25 seconds landed under his next two lines.",
+    "The answer belongs to the turn the door ASKED for it in, so the row is drawn under that line - and under its own earlier rows for the same turn - however long the answer took."
+   ]
+  },
+  {
+   "n": 342,
+   "at": "2026-11-18T21:28",
+   "file": "v342.html",
+   "title": "the settle path sets no flag, so the web was never barred",
+   "summary": "18 Nov 2026, 19:20:56, live: he was settling \"Highway to Hell by AC/DC Recovered\", the world was asked about it, and a fact card landed on his shelf.",
+   "detail": [
+    "THE SETTLE PATH SETS NO FLAG, SO THE WEB WAS NEVER BARRED.",
+    "18 Nov 2026, 19:20:56, live: he was settling \"Highway to Hell by AC/DC Recovered\", the world was asked about it, and a fact card landed on his shelf. The guard now also holds while the rail has just answered or while a list is standing."
+   ]
+  },
+  {
+   "n": 341,
+   "at": "2026-11-18T21:15",
+   "file": "v341.html",
+   "title": "the licence belongs to the note",
+   "summary": "18 Nov 2026, 19:13:49, live on 340: he asked for the weather, the door knew it, the mouth answered, and every frame was dropped - because 339 licensed the mouth only in the talk branch of th",
+   "detail": [
+    "THE LICENCE BELONGS TO THE NOTE.",
+    "18 Nov 2026, 19:13:49, live on 340: he asked for the weather, the door knew it, the mouth answered, and every frame was dropped - because 339 licensed the mouth only in the talk branch of thinking, and that turn never reached thinking at all (the route came from the contracts and the door answered it directly). So the door now opens the mouth wherever it asks for words of its own, and anything the mouth said while the door was still deciding is played instead of destroyed."
+   ]
+  },
+  {
+   "n": 340,
+   "at": "2026-11-18T21:10",
+   "file": "v340.html",
+   "title": "a sentence is not a song unless the conversation is about a song",
+   "summary": "18 Nov 2026, 21:05:24: he said \"You're not speaking to me.\" and the door answered \"Which song, Boss?",
+   "detail": [
+    "A SENTENCE IS NOT A SONG UNLESS THE CONVERSATION IS ABOUT A SONG.",
+    "18 Nov 2026, 21:05:24: he said \"You're not speaking to me.\" and the door answered \"Which song, Boss? The title and who sings it.\" - because GUESS_FIRST is a constant that is always true, so every sentence passed the narrowing door. The flag was the experiment from build 301 and the hunt it belonged to was retired in 328; what is left of it is this test, which now asks whether there is a song thread at all: he opened one, a song is waiting for its name, or a name is owed."
+   ]
+  },
+  {
+   "n": 339,
+   "at": "2026-11-18T21:03",
+   "file": "v339.html",
+   "title": "if it already answered, that was the answer",
+   "summary": "The mouth speaks a beat before thinking returns, so its sentence is usually the reply; playing it is what makes a conversation audible.",
+   "detail": [
+    "IF IT ALREADY ANSWERED, THAT WAS THE ANSWER. The mouth speaks a beat before thinking returns, so its sentence is usually the reply; playing it is what makes a conversation audible."
+   ]
+  },
+  {
+   "n": 338,
+   "at": "2026-11-18T20:53",
+   "file": "v338.html",
+   "title": "wHERE A FRESH GREETING GOES: straight to the new socket when it is up, into the queue only when it is not",
+   "summary": "WHERE A FRESH GREETING GOES: straight to the new socket when it is up, into the queue only when it is not.",
+   "detail": [
+    "WHERE A FRESH GREETING GOES: straight to the new socket when it is up, into the queue only when it is not. A case can prove the route without a network."
+   ]
+  },
+  {
+   "n": 337,
+   "at": "2026-11-18T20:48",
+   "file": "v337.html",
+   "title": "a new pass is a new room",
+   "summary": "18 Nov 2026, 20:40:17: Control had closed his session, the unlock issued a fresh one, and the page kept the room it had before - so the voice was never started for the pass he had just prove",
+   "detail": [
+    "A NEW PASS IS A NEW ROOM.",
+    "18 Nov 2026, 20:40:17: Control had closed his session, the unlock issued a fresh one, and the page kept the room it had before - so the voice was never started for the pass he had just proved, and the pass it did hold was already closed."
+   ]
+  },
+  {
+   "n": 336,
+   "at": "2026-11-18T19:55",
+   "file": "v336.html",
+   "title": "the mouth may sound only while a directive is outstanding",
+   "summary": "18 Nov 2026, 19:50:00.5, live on 335: while the door was searching the rail the mouth said \"Boss?\" and then began the door's own question again.",
+   "detail": [
+    "THE MOUTH MAY SOUND ONLY WHILE A DIRECTIVE IS OUTSTANDING.",
+    "18 Nov 2026, 19:50:00.5, live on 335: while the door was searching the rail the mouth said \"Boss?\" and then began the door's own question again. The words were held the moment they arrived - but the audio for them had already gone to the speaker, because a guard that reads words is always behind the sound the words describe. So the rule is no longer about what it said.",
+    "The door gives the mouth an exact line to say, and only while that line is owed may any sound leave the door. Everything else is dropped before it plays."
+   ]
+  },
+  {
+   "n": 335,
+   "at": "2026-11-18T19:46",
+   "file": "v335.html",
+   "title": "the refusal is still dropped at the gate, but it no longer puts a note on his shelf",
+   "summary": "The hold is kept, because a refusal must never be heard - and it is released the moment the door mints its own line (sendNoteNow), so it can no longer hold the question itself back for twelv",
+   "detail": [
+    "THE REFUSAL IS STILL DROPPED AT THE GATE, BUT IT NO LONGER PUTS A NOTE ON HIS SHELF. The hold is kept, because a refusal must never be heard - and it is released the moment the door mints its own line (sendNoteNow), so it can no longer hold the question itself back for twelve seconds, which is what made the tail he caught on 334."
+   ]
+  },
+  {
+   "n": 334,
+   "at": "2026-11-18T19:39",
+   "file": "v334.html",
+   "title": "the two shapes of \"not the answer\"",
+   "summary": "The first is the mouth speaking while thinking is still out: the answer is not his yet, so nothing it says can be the reply.",
+   "detail": [
+    "THE TWO SHAPES OF \"NOT THE ANSWER\". The first is the mouth speaking while thinking is still out: the answer is not his yet, so nothing it says can be the reply. The second is the mouth saying something other than the one line the door asked for - the fragments (\"The title and who sings\", \"it.\", \"Boss?\") that he heard as an echo.",
+    "Both are decided here, as plain questions, so a case can prove them without a socket."
+   ]
+  },
+  {
+   "n": 333,
+   "at": "2026-11-18T19:28",
+   "file": "v333.html",
+   "title": "a list of what the house can do is not a claim that it was done",
+   "summary": "18 Nov 2026, 19:26, live on 332: the capability list said \"or put a payment request on your shelf for you to pay yourself\", the guard read it as a claim, and the correction it then sent was",
+   "detail": [
+    "A LIST OF WHAT THE HOUSE CAN DO IS NOT A CLAIM THAT IT WAS DONE.",
+    "18 Nov 2026, 19:26, live on 332: the capability list said \"or put a payment request on your shelf for you to pay yourself\", the guard read it as a claim, and the correction it then sent was spoken to him. Ability is not an act, and a general statement about the shelf is not a card."
+   ]
+  },
+  {
+   "n": 332,
+   "at": "2026-11-18T19:17",
+   "file": "v332.html",
+   "title": "a timeout is a thinking failure, and nothing may be asked on the back of it",
+   "summary": "18 Nov 2026, 17:51:06, live: thinking did not answer within six seconds, and the door asked him the stores-or-new fork anyway, off its own flat readers.",
+   "detail": [
+    "A TIMEOUT IS A THINKING FAILURE, AND NOTHING MAY BE ASKED ON THE BACK OF IT.",
+    "18 Nov 2026, 17:51:06, live: thinking did not answer within six seconds, and the door asked him the stores-or-new fork anyway, off its own flat readers. The doctrine says thinking runs until it is done; a failure is not a licence to guess. So the door says one plain line, asks no journey question, searches nothing and shelves nothing."
+   ]
+  },
+  {
+   "n": 331,
+   "at": "2026-11-18T17:48",
+   "file": "v331.html",
+   "title": "a MAP IS A KNOWING BEFORE IT IS A CARD: the place, and the rail that resolved it",
+   "summary": "A MAP IS A KNOWING BEFORE IT IS A CARD: the place, and the rail that resolved it.",
+   "detail": [
+    "A MAP IS A KNOWING BEFORE IT IS A CARD: the place, and the rail that resolved it."
+   ]
+  },
+  {
+   "n": 330,
+   "at": "2026-11-18T17:43",
+   "file": "v330.html",
+   "title": "the brief is the knowing for a making",
+   "summary": "His words, the sound he gave and his picture answer are the fact the render stands on, and they are written down here, at the moment they are whole.",
+   "detail": [
+    "THE BRIEF IS THE KNOWING FOR A MAKING. His words, the sound he gave and his picture answer are the fact the render stands on, and they are written down here, at the moment they are whole."
+   ]
+  },
+  {
+   "n": 329,
+   "at": "2026-11-18T17:25",
+   "file": "v329.html",
+   "title": "the picture line, scoped to the song it was asked for",
+   "summary": "The picture line, scoped to the song it was asked for.",
+   "detail": [
+    "The picture line, scoped to the song it was asked for. A cover question from a song he has since left behind must never hold the next one shut - 18 Nov 2026, 15:14, that is exactly what it did."
+   ]
+  },
+  {
+   "n": 328,
+   "at": "2026-11-18T17:05",
+   "file": "v328.html",
+   "title": "the door asked for a name, so the answer is a name",
+   "summary": "With the hunt gone there is no guessHunt to keep the next turn on the song path, and \"skater boy\" said on its own reaches no song word at all: it would fall past thinking into the old machin",
+   "detail": [
+    "THE DOOR ASKED FOR A NAME, SO THE ANSWER IS A NAME. With the hunt gone there is no guessHunt to keep the next turn on the song path, and \"skater boy\" said on its own reaches no song word at all: it would fall past thinking into the old machinery. The question the door asked is what makes his answer a name."
+   ]
+  },
+  {
+   "n": 327,
+   "at": "2026-11-18T16:45",
+   "file": "v327.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 326,
+   "at": "2026-11-18T16:36",
+   "file": "v326.html",
+   "title": "the mouth is about to answer, so this is the last moment his words can be read: the boundary, if the server has not already given us one",
+   "summary": "The mouth is about to answer, so this is the last moment his words can be read: the boundary, if the server has not already given us one.",
+   "detail": [
+    "The mouth is about to answer, so this is the last moment his words can be read: the boundary, if the server has not already given us one."
+   ]
+  },
+  {
+   "n": 325,
+   "at": "2026-11-18T16:16",
+   "file": "v325.html",
+   "title": "a question is never an offer",
+   "summary": "18 Nov 2026, 14:10:30, live on 324: he said \"It's a song from Avril Lavigne.\" and the mouth asked \"Which song by Avril Lavigne would you like to share, Boss?\" The door read ITS OWN QUESTION",
+   "detail": [
+    "A QUESTION IS NEVER AN OFFER.",
+    "18 Nov 2026, 14:10:30, live on 324: he said \"It's a song from Avril Lavigne.\" and the mouth asked \"Which song by Avril Lavigne would you like to share, Boss?\" The door read ITS OWN QUESTION as a list and wrote down the song \"Which song\" by \"Avril Lavigne would you like to share\". He answered \"complicated\", that nonsense matched, the stores were asked for it, and the rail's first Avril hit came back as his answer: \"I found Sk8er Boi by Avril Lavigne. Is that the one you mean?\" A question names nothing, so nothing is read out of one."
+   ]
+  },
+  {
+   "n": 324,
+   "at": "2026-11-18T15:54",
+   "file": "v324.html",
+   "title": "the title is never the chatter in front of it",
+   "summary": "18 Nov 2026, 13:52:01: \"I have a few options here, Boss.",
+   "detail": [
+    "THE TITLE IS NEVER THE CHATTER IN FRONT OF IT.",
+    "18 Nov 2026, 13:52:01: \"I have a few options here, Boss. Is it Don't Fear the Reaper by Blue Oyster Cult\" was read as the song \"Boss. Is it Don't Fear the Reaper\" - a title nobody could match, and one that would have been sent to the stores.",
+    "The song starts after the last sentence break, and after \"is it\"."
+   ]
+  },
+  {
+   "n": 323,
+   "at": "2026-11-18T15:46",
+   "file": "v323.html",
+   "title": "the song is never cut away by the question around it",
+   "summary": "18 Nov 2026, 13:44:01, live on 322: the mouth said 'I have \"Don't Fear The Reaper\" by Blue Oyster Cult.",
+   "detail": [
+    "THE SONG IS NEVER CUT AWAY BY THE QUESTION AROUND IT.",
+    "18 Nov 2026, 13:44:01, live on 322: the mouth said 'I have \"Don't Fear The Reaper\" by Blue Oyster Cult. Is that the one you mean, Boss, or another one?' and the reader returned NOTHING, because the strip below removes everything up to \"you mean\" - and that sentence puts the song before it. He answered \"That's the one.\" and the door had no name in hand (\"share · he settled it, but no name is in hand\"), asked the rail anyway, and took a second prompt to land a song he had already named.",
+    "A piece that already carries a quote or a \"by\" is a song, and the sentence around it is not allowed to eat it."
+   ]
+  },
+  {
+   "n": 322,
+   "at": "2026-11-18T15:39",
+   "file": "v322.html",
+   "title": "a title and an artist is his answer even before there is a list",
+   "summary": "18 Nov 2026, 13:34:55, live on 321: he said \"anyone by Justin Bieber\" straight after \"I want to share a song\", the door had offered nothing yet, so `answering` was false and his answer was f",
+   "detail": [
+    "A TITLE AND AN ARTIST IS HIS ANSWER EVEN BEFORE THERE IS A LIST.",
+    "18 Nov 2026, 13:34:55, live on 321: he said \"anyone by Justin Bieber\" straight after \"I want to share a song\", the door had offered nothing yet, so `answering` was false and his answer was filed as more narrowing - \"share · narrowing it with the mouth · anyone by Justin Bieber\" - and it took a second prompt (\"anyone\") to make the same song land. The 01:10 rule it tripped over is about a BARE title offered into an open question, and that rule stands. An artist is not a topic: a title plus an artist is a name, and a name settles."
+   ]
+  },
+  {
+   "n": 321,
+   "at": "2026-11-18T15:30",
+   "file": "v321.html",
+   "title": "the directive keeps its own words, so a sentence can be compared with them",
+   "summary": "18 Nov 2026, the first live Stage 1 run (build 320, 13:19-13:25), read back from the record: six of the seven engine lines were logged turn.orphan, and every one of those was FALSE.",
+   "detail": [
+    "THE DIRECTIVE KEEPS ITS OWN WORDS, SO A SENTENCE CAN BE COMPARED WITH THEM.",
+    "18 Nov 2026, the first live Stage 1 run (build 320, 13:19-13:25), read back from the record: six of the seven engine lines were logged turn.orphan, and every one of those was FALSE. Notes the door holds are released by flushNotes, which does go through sendNoteNow, but the door's own ask-watch retry sent a note with a raw ws.send and minted nothing, and a note that is dropped (correctly) leaves no directive at all while the mouth still speaks. Worse, the one line that WAS attributed was attributed falsely: a note saying \"nothing is being made\" was recorded as the ancestor of the mouth's \"What should the song say?\".",
+    "A record that claims an ancestry it cannot prove is the same fault as the payment question, only quieter. So the directive now carries its words, and attribution compares them: a sentence that does not match the note it arrived under is mouth.diverged, named as such, never dressed as the note's own sentence."
+   ]
+  },
+  {
+   "n": 320,
+   "at": "2026-11-18T15:00",
+   "file": "v320.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 319,
+   "at": "2026-11-18T10:57",
+   "file": "v319.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 318,
+   "at": "2026-11-18T10:51",
+   "file": "v318.html",
+   "title": "what he said and what the door heard are both true, and both shown",
+   "summary": "18 Nov 2026, 10:50: he said \"start fresh\", the microphone heard \"Thought fresh\", and the door did the right thing (the sitting cleared and a fresh socket replaced it) while the screen printe",
+   "detail": [
+    "WHAT HE SAID AND WHAT THE DOOR HEARD ARE BOTH TRUE, AND BOTH SHOWN.",
+    "18 Nov 2026, 10:50: he said \"start fresh\", the microphone heard \"Thought fresh\", and the door did the right thing (the sitting cleared and a fresh socket replaced it) while the screen printed \"YOU Thought fresh\" and nothing else, so the door looked deaf. When the door settles his words by how they sound, it says what it took them for."
+   ]
+  },
+  {
+   "n": 317,
+   "at": "2026-11-18T10:47",
+   "file": "v317.html",
+   "title": "the conversation keeps its thread until he opens a new one",
+   "summary": "18 Nov 2026, 10:42, live on 316: he was talking tennis (\"Yes, I am actually.\"), a hunt left open from an earlier song was still standing, and that sentence settled it - the rail was searched",
+   "detail": [
+    "THE CONVERSATION KEEPS ITS THREAD UNTIL HE OPENS A NEW ONE.",
+    "18 Nov 2026, 10:42, live on 316: he was talking tennis (\"Yes, I am actually.\"), a hunt left open from an earlier song was still standing, and that sentence settled it - the rail was searched for \"I am actually\" and a track by U SungEun was locked onto his shelf while the mouth was saying \"Enjoy the tennis this weekend\". Two rules, both mechanical: a sentence with no name in it is never a title, and a song route may not open on a word trigger while he is in the middle of something else."
+   ]
+  },
+  {
+   "n": 316,
+   "at": "2026-11-18T10:38",
+   "file": "v316.html",
+   "title": "a microphone mishearing is not a song title",
+   "summary": "18 Nov 2026, 10:37, live on 315: he was asked \"Carry on where we left off, or start fresh?\", the microphone heard \"Stout fish\", and the door wrote it down as him carrying on AND fed it to th",
+   "detail": [
+    "A MICROPHONE MISHEARING IS NOT A SONG TITLE.",
+    "18 Nov 2026, 10:37, live on 315: he was asked \"Carry on where we left off, or start fresh?\", the microphone heard \"Stout fish\", and the door wrote it down as him carrying on AND fed it to the song hunt as a clue (\"share · narrowing it with the mouth · Stout fish\") while the mouth answered \"Fresh it is, Boss\". Two readings of one turn. A hearing this close to one of the two answers is that answer, so the choice is settled by how it sounds, not only by how it is spelled."
+   ]
+  },
+  {
+   "n": 315,
+   "at": "2026-11-18T10:34",
+   "file": "v315.html",
+   "title": "the screen showed his wrong artist while the right song played",
+   "summary": "18 Nov 2026, 08:32:55, live: he said \"Women by Dave Lippman\" (the artist is Def Leppard); the door settled on the song it had offered and asked the rail once for \"Women by Def Leppard\", and",
+   "detail": [
+    "THE SCREEN SHOWED HIS WRONG ARTIST WHILE THE RIGHT SONG PLAYED.",
+    "18 Nov 2026, 08:32:55, live: he said \"Women by Dave Lippman\" (the artist is Def Leppard); the door settled on the song it had offered and asked the rail once for \"Women by Def Leppard\", and the SAME turn also wrote \"share · narrowing it with the mouth · Women by Dave Lippman\" and told the mouth nothing had been asked of the stores. So the card played Def Leppard while the line above it said Dave Lippman. One turn, two descriptions."
+   ]
+  },
+  {
+   "n": 314,
+   "at": "2026-11-18T10:20",
+   "file": "v314.html",
+   "title": "the small words in a name are not the choice",
+   "summary": "18 Nov 2026, 10:18, live: the door offered \"How Deep Is Your Love\" by the Bee Gees, by Calvin Harris and Disciples, or someone else, and he answered \"Calvin Harris and the Disciples\".",
+   "detail": [
+    "THE SMALL WORDS IN A NAME ARE NOT THE CHOICE.",
+    "18 Nov 2026, 10:18, live: the door offered \"How Deep Is Your Love\" by the Bee Gees, by Calvin Harris and Disciples, or someone else, and he answered \"Calvin Harris and the Disciples\". flatSaid compared the strings with the \"the\" in them, so nothing matched, his answer was filed as narrowing, and the mouth told him it was on his shelf when nothing had been searched. Small words are removed before the comparison: the artist he says is still the artist on offer."
+   ]
+  },
+  {
+   "n": 313,
+   "at": "2026-11-18T10:14",
+   "file": "v313.html",
+   "title": "the screen said britney while the voice said calvin harris",
+   "summary": "18 Nov 2026, 10:13, live: he was settling \"My Way by Calvin Harris\" and the mouth asked the world for Britney Spears songs, so a list card (\"from Wikipedia and Apple Music\") landed on his sh",
+   "detail": [
+    "THE SCREEN SAID BRITNEY WHILE THE VOICE SAID CALVIN HARRIS.",
+    "18 Nov 2026, 10:13, live: he was settling \"My Way by Calvin Harris\" and the mouth asked the world for Britney Spears songs, so a list card (\"from Wikipedia and Apple Music\") landed on his shelf and the door's own line underneath it read \"share · narrowing · nothing was searched\". Two screens, two answers, one of them invented. A song never comes from the web while he is settling one: the ask is refused before it is searched, and no lookup of his is ever shelved while a hunt is open."
+   ]
+  },
+  {
+   "n": 312,
+   "at": "2026-11-18T10:05",
+   "file": "v312.html",
+   "title": "a fresh session is a new mouth, not a new paragraph",
+   "summary": "18 Nov 2026, 10:0x: he chose a fresh start and the mouth answered \"Fresh it is.",
+   "detail": [
+    "A FRESH SESSION IS A NEW MOUTH, NOT A NEW PARAGRAPH.",
+    "18 Nov 2026, 10:0x: he chose a fresh start and the mouth answered \"Fresh it is. What should the song say, in your own words?\" - because clearing the sitting clears the RECORD, and the live socket still held every earlier turn in its own context. So the door now closes the socket and opens a new one, and the new mouth is handed nothing from before.",
+    "The greeting on the other side is the only thing it knows."
+   ]
+  },
+  {
+   "n": 311,
+   "at": "2026-11-18T10:03",
+   "file": "v311.html",
+   "title": "\"my way\" is a song, not a feeling",
+   "summary": "18 Nov 2026, 08:01: he said \"My Way by Calvin Harris\" and the door answered \"share · held · that was a wish, not a title\", because the person-shape rule matched the bare word \"my\".",
+   "detail": [
+    "\"MY WAY\" IS A SONG, NOT A FEELING.",
+    "18 Nov 2026, 08:01: he said \"My Way by Calvin Harris\" and the door answered \"share · held · that was a wish, not a title\", because the person-shape rule matched the bare word \"my\". A possessive belongs to a feeling only when it carries a feeling (my heart, my head, my life is...), so the guard now needs the noun and not just the pronoun."
+   ]
+  },
+  {
+   "n": 310,
+   "at": "2026-11-18T09:56",
+   "file": "v310.html",
+   "title": "the artist he names is the choice",
+   "summary": "18 Nov 2026, 07:54: the mouth offered \"My Way by Calvin Harris, or My Way by Frank Sinatra, or My Way by Fetty Wap\" and he answered \"The one from Calvin Harris.\" The door heard the artist, w",
+   "detail": [
+    "THE ARTIST HE NAMES IS THE CHOICE.",
+    "18 Nov 2026, 07:54: the mouth offered \"My Way by Calvin Harris, or My Way by Frank Sinatra, or My Way by Fetty Wap\" and he answered \"The one from Calvin Harris.\" The door heard the artist, wrote it down as a wish, and asked him which song again - having just been told. So when the artist in his words picks out exactly one of the songs in front of him, that is his answer, not a narrowing. Two artists in the words is not a choice and is left alone."
+   ]
+  },
+  {
+   "n": 309,
+   "at": "2026-11-18T09:32",
+   "file": "v309.html",
+   "title": "a thank-you is not a search",
+   "summary": "18 Nov 2026, 07:28:16, live on 308: the song had landed, he said \"Okay, fantastic.",
+   "detail": [
+    "A THANK-YOU IS NOT A SEARCH.",
+    "18 Nov 2026, 07:28:16, live on 308: the song had landed, he said \"Okay, fantastic. I see it there. Thank you.\" and the door asked the rail for \"fantastic I see there Thank you\" and then told him \"Nothing found for those exact words\" - a search nobody wanted, about a song already on his shelf.",
+    "A line whose whole content is acknowledgement is answered in words and searched for nothing. It is only ever read this way when nothing is being asked of him (no fork, no open question, no hunt, nothing armed), so a \"yes\" to a real question still answers it."
+   ]
+  },
+  {
+   "n": 308,
+   "at": "2026-11-18T09:25",
+   "file": "v308.html",
+   "title": "he names a song as \"title by artist\", which is how people talk",
+   "summary": "18 Nov 2026, 07:23:01, live on 306: stuck in a list he never asked for, he typed \"Falling by Alesso\" and the door fed it back to the mouth as a candidate, which offered the same three songs",
+   "detail": [
+    "HE NAMES A SONG AS \"TITLE BY ARTIST\", WHICH IS HOW PEOPLE TALK.",
+    "18 Nov 2026, 07:23:01, live on 306: stuck in a list he never asked for, he typed \"Falling by Alesso\" and the door fed it back to the mouth as a candidate, which offered the same three songs again. A title and an artist in his own words is his answer, so it is read as one here."
+   ]
+  },
+  {
+   "n": 307,
+   "at": "2026-11-18T09:22",
+   "file": "v307.html",
+   "title": "a making is not a hunt",
+   "summary": "18 Nov 2026, 09:18:30: \"It's a little Let me make a song.\" opened the share hunt AND the making at the same time, so every later line in a perfectly good run - his words, his kind of music,",
+   "detail": [
+    "A MAKING IS NOT A HUNT.",
+    "18 Nov 2026, 09:18:30: \"It's a little Let me make a song.\" opened the share hunt AND the making at the same time, so every later line in a perfectly good run - his words, his kind of music, \"yes\" to the picture, the news question - was also fed to the hunt as a candidate, and at the end a store search fired on the title of the song he had just made. One route at a time."
+   ]
+  },
+  {
+   "n": 306,
+   "at": "2026-11-18T09:16",
+   "file": "v306.html",
+   "title": "the making's first question is only ever asked of a making he asked for",
+   "summary": "18 Nov 2026, 09:09:58, live: nothing was being made and he had not asked for a song - he had said \"let us start something new\" - and the mouth closed with \"What should the song say, Boss?\".",
+   "detail": [
+    "THE MAKING'S FIRST QUESTION IS ONLY EVER ASKED OF A MAKING HE ASKED FOR.",
+    "18 Nov 2026, 09:09:58, live: nothing was being made and he had not asked for a song - he had said \"let us start something new\" - and the mouth closed with \"What should the song say, Boss?\". His words: \"it just jumped straight into the song making. I didn't asked for that.\" A question about a song nobody asked for is the start of a spend, so it is caught here and replaced with the only true line: nothing is being made."
+   ]
+  },
+  {
+   "n": 305,
+   "at": "2026-11-18T09:12",
+   "file": "v305.html",
+   "title": "turnInFlight was read here and written three thousand lines below, never declared, so it lived as an implicit global tha",
+   "summary": "turnInFlight was read here and written three thousand lines below, never declared, so it lived as an implicit global that only existed once something had assigned it.",
+   "detail": [
+    "turnInFlight was read here and written three thousand lines below, never declared, so it lived as an implicit global that only existed once something had assigned it. On 18 Nov 2026, 09:09:08 the very first note of the visit was the welcome-back question, before any turn had run: Safari threw \"Can't find variable: turnInFlight\" on the first read and the door carried on with a broken queue."
+   ]
+  },
+  {
+   "n": 304,
+   "at": "2026-11-18T02:18",
+   "file": "v304.html",
+   "title": "the stage is the one thing the screen says, so it is the one thing the log must also say",
+   "summary": "18 Nov 2026, 02:15: the fingerprint returned at 00:15:22 and the record holds nothing after it, while the screen sat on \"opening the voice\".",
+   "detail": [
+    "THE STAGE IS THE ONE THING THE SCREEN SAYS, SO IT IS THE ONE THING THE LOG MUST ALSO SAY.",
+    "18 Nov 2026, 02:15: the fingerprint returned at 00:15:22 and the record holds nothing after it, while the screen sat on \"opening the voice\". Nothing was wrong with the log; the door never said which step it had reached. Now it does, one short line each, so a stall names itself instead of looking like a dead page."
+   ]
+  },
+  {
+   "n": 303,
+   "at": "2026-11-18T02:10",
+   "file": "v303.html",
+   "title": "a fetch without a deadline is a door that can go deaf",
+   "summary": "18 Nov 2026, 02:06: he made a song, left the house, came back and said \"the voice door doesn't want to open\".",
+   "detail": [
+    "A FETCH WITHOUT A DEADLINE IS A DOOR THAT CAN GO DEAF.",
+    "18 Nov 2026, 02:06: he made a song, left the house, came back and said \"the voice door doesn't want to open\". The log stops dead at 00:08:11 UTC and holds no line after it: no tap, no ask, no refusal. That is what a hung fetch looks like from the inside - openDoor sets connecting, awaits a request that never answers, and every later tap returns at its first line.",
+    "The door said nothing because it was still waiting. Every request the door makes now carries a deadline and says when it has passed it."
+   ]
+  },
+  {
+   "n": 302,
+   "at": "2026-11-18T01:57",
+   "file": "v302.html",
+   "title": "read what he asked for, and refuse a search while he is still narrowing it, BEFORE any key is checked: a refusal that re",
+   "summary": "Read what he asked for, and refuse a search while he is still narrowing it, BEFORE any key is checked: a refusal that reads \"the sharing rail did not answer\" because a session had lapsed is",
+   "detail": [
+    "Read what he asked for, and refuse a search while he is still narrowing it, BEFORE any key is checked: a refusal that reads \"the sharing rail did not answer\" because a session had lapsed is a lie about the rail, and the rail was never asked."
+   ]
+  },
+  {
+   "n": 301,
+   "at": "2026-11-18T01:32",
+   "file": "v301.html",
+   "title": "the hunt opens as a conversation",
+   "summary": "Nothing he says about the song is sent to the stores until he says that is the one; the mouth proposes and he narrows it.",
+   "detail": [
+    "THE HUNT OPENS AS A CONVERSATION. Nothing he says about the song is sent to the stores until he says that is the one; the mouth proposes and he narrows it."
+   ]
+  },
+  {
+   "n": 300,
+   "at": "2026-11-18T01:02",
+   "file": "v300.html",
+   "title": "\"no\" plus a title is a title",
+   "summary": "18 Nov 2026, 00:57:56: he answered the wrong read-back with \"no ehco\" - no, it is Echo - and the door treated the whole line as a rejection, threw away the name he had just given, and asked",
+   "detail": [
+    "\"NO\" PLUS A TITLE IS A TITLE.",
+    "18 Nov 2026, 00:57:56: he answered the wrong read-back with \"no ehco\" - no, it is Echo - and the door treated the whole line as a rejection, threw away the name he had just given, and asked \"What is the title, Boss, and who sings it?\" He had said it twice by then. The rejection is the first word; anything after it is what he wants instead."
+   ]
+  },
+  {
+   "n": 299,
+   "at": "2026-11-18T01:00",
+   "file": "v299.html",
+   "title": "a courtesy word is not a band either",
+   "summary": "18 Nov 2026, 00:54:45, the trace reads: searching the rail itself: \"Yes Oh\" (with the artist he named: Oh).",
+   "detail": [
+    "A COURTESY WORD IS NOT A BAND EITHER.",
+    "18 Nov 2026, 00:54:45, the trace reads: searching the rail itself: \"Yes Oh\" (with the artist he named: Oh). One earlier answer had come back with a single candidate whose artist happened to be \"Oh\", that was taken as proof of a name, and from then on every search carried \"Oh\" - \"for the light by foreign air Oh\" - which is why worship records came back for a song by Foreign Air."
+   ]
+  },
+  {
+   "n": 298,
+   "at": "2026-11-18T00:37",
+   "file": "v298.html",
+   "title": "tHE FIRST THING SAID AFTER \"WELCOME BACK\" SETTLES THE CHOICE, and only an explicit \"fresh\" closes the memory",
+   "summary": "THE FIRST THING SAID AFTER \"WELCOME BACK\" SETTLES THE CHOICE, and only an explicit \"fresh\" closes the memory.",
+   "detail": [
+    "THE FIRST THING SAID AFTER \"WELCOME BACK\" SETTLES THE CHOICE, and only an explicit \"fresh\" closes the memory. Anything else he says is him carrying on, which is what he asked for."
+   ]
+  },
+  {
+   "n": 297,
+   "at": "2026-11-18T00:25",
+   "file": "v297.html",
+   "title": "a door closed a minute ago is still the same visit",
+   "summary": "18 Nov 2026, 00:20: he shut the voice, opened it again, and the door had no idea what he had been doing - \"it is a fresh door\".",
+   "detail": [
+    "A DOOR CLOSED A MINUTE AGO IS STILL THE SAME VISIT.",
+    "18 Nov 2026, 00:20: he shut the voice, opened it again, and the door had no idea what he had been doing - \"it is a fresh door\". True to the letter of build 296 and useless to him. Build 242's rule (a new sitting is not the last conversation) still holds for a real parting, so the sitting is kept for fifteen minutes and then it is gone: closing the door is a pause, not a memory."
+   ]
+  },
+  {
+   "n": 296,
+   "at": "2026-11-18T00:09",
+   "file": "v296.html",
+   "title": "the old sentence was the fault, word for word: it told the mouth to answer any reference to the past with \"I hold only t",
+   "summary": "The old sentence was the fault, word for word: it told the mouth to answer any reference to the past with \"I hold only this session, Boss; please repeat what matters\", and at 00:00 on 18 Nov",
+   "detail": [
+    "The old sentence was the fault, word for word: it told the mouth to answer any reference to the past with \"I hold only this session, Boss; please repeat what matters\", and at 00:00 on 18 Nov he got that twice in a row about a conversation that had happened one minute earlier, in the same sitting, because the socket had been renewed behind a background tab. The rule against invented continuity stays; the instruction to recite an amnesia does not."
+   ]
+  },
+  {
+   "n": 295,
+   "at": "2026-11-17T23:59",
+   "file": "v295.html",
+   "title": "a tab switch is not a pocket",
+   "summary": "17 Nov 2026, 23:59: \"When I play the song, I cannot talk to the voice on my mac?\" He opened his song from the shelf, which opens in its own tab (the cards have done that since build 281), an",
+   "detail": [
+    "A TAB SWITCH IS NOT A POCKET.",
+    "17 Nov 2026, 23:59: \"When I play the song, I cannot talk to the voice on my mac?\" He opened his song from the shelf, which opens in its own tab (the cards have done that since build 281), and this listener closed the microphone the moment the door lost focus - so the door was deaf for as long as he listened, and deaf again every time he glanced at anything else. On a phone that rule is right: no microphone in a pocket. On a machine with a mouse, the tab he switched to is still in front of him, so the door keeps its ears and only a real absence ends it."
+   ]
+  },
+  {
+   "n": 294,
+   "at": "2026-11-17T23:50",
+   "file": "v294.html",
+   "title": "the door has just asked for a title, so the title is what comes next",
+   "summary": "17 Nov 2026, 23:46:54: he left the choice to the door (\"And you choose one for me\"), the fork closed with no hunt armed, and then \"animal\", \"Free Animal\" and \"free animal\" were each met with",
+   "detail": [
+    "THE DOOR HAS JUST ASKED FOR A TITLE, SO THE TITLE IS WHAT COMES NEXT.",
+    "17 Nov 2026, 23:46:54: he left the choice to the door (\"And you choose one for me\"), the fork closed with no hunt armed, and then \"animal\", \"Free Animal\" and \"free animal\" were each met with \"I couldn't find that one\" while the rail was never called once (claim.unbacked, railCallsThisTurn 0). A question and the arming of the thing that answers it are one act: if the door asks which song, it is listening for the answer."
+   ]
+  },
+  {
+   "n": 293,
+   "at": "2026-11-17T23:44",
+   "file": "v293.html",
+   "title": "a courtesy word is not a sentence",
+   "summary": "17 Nov 2026, 23:42:58: asked which song, he said \"Please forgive me.\" - the title of the song he wanted - and the fork read the leading \"please\" as a bare agreement, asked again \"a song from",
+   "detail": [
+    "A COURTESY WORD IS NOT A SENTENCE.",
+    "17 Nov 2026, 23:42:58: asked which song, he said \"Please forgive me.\" - the title of the song he wanted - and the fork read the leading \"please\" as a bare agreement, asked again \"a song from the stores, or a new one?\", nothing was searched, and the mouth then told him the rail had found nothing. The same words with the artist attached (\"Please Forgive Me from Bryan Adams\") had worked twenty minutes earlier, because five words was too many for a bare answer. So bare-ness is decided by what is left when the courtesy is taken out: a sentence of yes/no and politeness is bare, and anything carrying a real word in it is what he said it is."
+   ]
+  },
+  {
+   "n": 292,
+   "at": "2026-11-17T23:37",
+   "file": "v292.html",
+   "title": "the correction has to be worth more than the apology",
+   "summary": "The correction has to be worth more than the apology.",
+   "detail": [
+    "The correction has to be worth more than the apology. At 23:34:39 his \"Hello.\" - asked because the door had gone silent on a lock - was met with \"I hold this session only\", and the guard answered \"Nothing is lost\". True and useless: the song he had just chosen was sitting on his shelf and neither line said so.",
+    "If a song locked a moment ago, the correction names it."
+   ]
+  },
+  {
+   "n": 291,
+   "at": "2026-11-17T23:25",
+   "file": "v291.html",
+   "title": "17 Nov 2026, 20:20:58: he said \"Not one of those",
+   "summary": "17 Nov 2026, 20:20:58: he said \"Not one of those.",
+   "detail": [
+    "17 Nov 2026, 20:20:58: he said \"Not one of those. Give me more.\" and the mouth answered with three Michael Bolton titles out of its own memory - \"How Am I Supposed To Live Without You\", \"Said I Loved You...But I Lied\", \"When a Man Loves a Woman\". Two of them happened to be right, which is worse than being wrong: a choice list from a model's memory is a claim with nothing behind it, and the door's whole promise is that a name it gives him came from the rail.",
+    "A song name may only ever be one the rail returned."
+   ]
+  },
+  {
+   "n": 290,
+   "at": "2026-11-17T22:49",
+   "file": "v290.html",
+   "title": "17 Nov 2026, 22:43: \"What is this on the shelf",
+   "summary": "17 Nov 2026, 22:43: \"What is this on the shelf?",
+   "detail": [
+    "17 Nov 2026, 22:43: \"What is this on the shelf? he song vault could not be read / Rate limit exceeded: entity_list allows 350 requests per 60s\". The shelf reader was minting a playback token for every song on every read - a function call each - so a phone with the door open a couple of times spent the app's own budget. That is fixed in shelfCards.",
+    "Here, a read that is refused for rate must also not be retried in the same breath: the door waits out the window instead of spending it."
+   ]
+  },
+  {
+   "n": 289,
+   "at": "2026-11-17T22:42",
+   "file": "v289.html",
+   "title": "17 Nov 2026, 20:37:49",
+   "summary": "17 Nov 2026, 20:37:49. The share locked \"Please Forgive Me (Classic Version)\" and the mouth said it was on his shelf and then asked \"What should the song say?\" - the making's first question",
+   "detail": [
+    "17 Nov 2026, 20:37:49. The share locked \"Please Forgive Me (Classic Version)\" and the mouth said it was on his shelf and then asked \"What should the song say?\" - the making's first question put to a song that was written in 1993. He answered the only way a person could: \"Doesn't say anything because it's already written.\""
+   ]
+  },
+  {
+   "n": 288,
+   "at": "2026-11-17T22:35",
+   "file": "v288.html",
+   "title": "17 Nov 2026, 20:31:29: the song was on his shelf, he said \"Thank you.\", the mouth answered \"You're welcome, Boss",
+   "summary": "17 Nov 2026, 20:31:29: the song was on his shelf, he said \"Thank you.\", the mouth answered \"You're welcome, Boss.",
+   "detail": [
+    "17 Nov 2026, 20:31:29: the song was on his shelf, he said \"Thank you.\", the mouth answered \"You're welcome, Boss. Is there anything else I can help with?\" - and then the door searched the word \"Thank You\" and offered him Dimitri Vegas, Dido and Alanis Morissette. Two answers to one turn, which is how it read to him: \"there is two process listening and process one request differently\".",
+    "A thank-you is an acknowledgement and nothing else: nothing is searched, nothing is shelved, and the mouth's one warm line is the whole reply."
+   ]
+  },
+  {
+   "n": 287,
+   "at": "2026-11-17T22:28",
+   "file": "v287.html",
+   "title": "\"Hello.\" was read as an artist at 20:26:14, so the next search went out as \"Hello Hello.\" and locked a song he never named",
+   "summary": "\"Hello.\" was read as an artist at 20:26:14, so the next search went out as \"Hello Hello.\" and locked a song he never named.",
+   "detail": [
+    "\"Hello.\" was read as an artist at 20:26:14, so the next search went out as \"Hello Hello.\" and locked a song he never named. A greeting, an acknowledgement or a complaint is never a name, and a bare name needs more than one word: \"Bryan Adams\" is a name, \"Hello\" is a way of finding out if the room is listening."
+   ]
+  },
+  {
+   "n": 286,
+   "at": "2026-11-17T22:23",
+   "file": "v286.html",
+   "title": "17 Nov 2026, 20:17",
+   "summary": "17 Nov 2026, 20:17. He said \"Let's find a song\" and then \"Bryan Adams\", and the rail answered with four of his songs.",
+   "detail": [
+    "17 Nov 2026, 20:17. He said \"Let's find a song\" and then \"Bryan Adams\", and the rail answered with four of his songs. He then asked \"Isn't there a song like Please Forgive Me?\" and said \"Please forgive me.\" - and the door searched that title with no artist, so the rail returned \"Forgive me\" by DJ UNIVXRSEL and \"forgive me...\" by nohssiwi.",
+    "Searching the same words WITH the artist he had already given returns \"Please Forgive Me (Classic Version) · Bryan Adams\" first try, which is the whole fault: the hunt forgot who he had named one turn earlier. It is remembered now, and every search inside the hunt carries it."
+   ]
+  },
+  {
+   "n": 285,
+   "at": "2026-11-17T22:13",
+   "file": "v285.html",
+   "title": "17 Nov 2026, 20:08:31, the second he opened the door",
+   "summary": "17 Nov 2026, 20:08:31, the second he opened the door.",
+   "detail": [
+    "17 Nov 2026, 20:08:31, the second he opened the door. Before he had said one word the mouth called the world tool with \"what is the latest news\", read him a report about the Crimean Bridge, and put a card called \"News\" on his shelf. His words: \"I didn't ask you for the news.",
+    "Why did you give it to me?\" A door that has just opened has been asked nothing at all: until he speaks there is no question to answer, whatever the model thinks it has noticed. This is the licence \"no news before he asks\", in one line."
+   ]
+  },
+  {
+   "n": 284,
+   "at": "2026-11-17T20:30",
+   "file": "v284.html",
+   "title": "17 Nov 2026, 18:23:54 and 18:24:06, right after a good run: his song was in the studio and the mouth answered him with \"",
+   "summary": "17 Nov 2026, 18:23:54 and 18:24:06, right after a good run: his song was in the studio and the mouth answered him with \"I hold only this session, Boss, so tell me again what matters.",
+   "detail": [
+    "17 Nov 2026, 18:23:54 and 18:24:06, right after a good run: his song was in the studio and the mouth answered him with \"I hold only this session, Boss, so tell me again what matters. What should the song say?\" - twice, word for word, after he said \"I didn't ask for that. That was the previous song\" and then \"I already told you.\" The amnesia guard existed but only spoke when a question was open, and a song in the studio opens no question, so the apology stood.",
+    "He is never asked to repeat what the door already holds: if a song is being made, say that and say nothing was lost; if nothing is open, say nothing is lost. The apology for an amnesia the door does not have is never the answer."
+   ]
+  },
+  {
+   "n": 283,
+   "at": "2026-11-17T20:20",
+   "file": "v283.html",
+   "title": "17 Nov 2026, 18:17, HIS RUN ON 282 - and this one cost him a song",
+   "summary": "17 Nov 2026, 18:17, HIS RUN ON 282 - and this one cost him a song.",
+   "detail": [
+    "17 Nov 2026, 18:17, HIS RUN ON 282 - and this one cost him a song. He said \"I want to create a song\", the door asked what it should say, and the answer it heard was \"Can we Okay, no. I don't want to create a song anymore.\" A WITHDRAWAL, taken as the lyric: the words went on the record as his subject, the beat moved to the sound, and by the time he gave the passage he actually wanted (\"I am lonely... walking through the streets... people sitting in poverty and I feel sad\") the door could only hear a kind of music, because a sound was what it was asking for.",
+    "\"blues\" became the sound, the picture was answered, and the make went into the studio carrying the withdrawal line as the words. Nothing about that sentence is words for a song: it is him changing his mind, and changing his mind has to be heard before anything else in the turn."
+   ]
+  },
+  {
+   "n": 282,
+   "at": "2026-11-17T20:14",
+   "file": "v282.html",
+   "title": "17 Nov 2026, 18:05: \"Let Make a Final Song\" - the making never opened, so no words, no sound, no song, and the door promised one anyway",
+   "summary": "17 Nov 2026, 18:05: \"Let Make a Final Song\" - the making never opened, so no words, no sound, no song, and the door promised one anyway.",
+   "detail": [
+    "17 Nov 2026, 18:05: \"Let Make a Final Song\" - the making never opened, so no words, no sound, no song, and the door promised one anyway. This test read only the word straight after the verb, and \"final\" is not a song, so a perfectly ordinary ask (\"make a final song\", \"do a nice tune\", \"write a short one\") was read as no ask at all. A song word within the next three words is the object; a word that is plainly something else (\"make a mistake in the last song\") still is not."
+   ]
+  },
+  {
+   "n": 281,
+   "at": "2026-11-17T19:55",
+   "file": "v281.html",
+   "title": "17 Nov 2026, ~19:58: \"When I open the song on the shelf it goes here - https://.../functions/songVault?play=...&t=...\" T",
+   "summary": "17 Nov 2026, ~19:58: \"When I open the song on the shelf it goes here - https://.../functions/songVault?play=...&t=...\" The landing used whatever link the sharing rail handed back as the card",
+   "detail": [
+    "17 Nov 2026, ~19:58: \"When I open the song on the shelf it goes here - https://.../functions/songVault?play=...&t=...\" The landing used whatever link the sharing rail handed back as the card's own link, and that rail was answering with a minted stream address: tapping a song opened an mp3 and the browser drew its grey bar. Two rules from here: a card's link is a PAGE, never a file, and the shelf's own reader owns the link, so a landing cannot overrule it. (The rail was fixed first, in songShare; this is the door refusing a file address even if some rail offers one.)"
+   ]
+  },
+  {
+   "n": 280,
+   "at": "2026-11-17T19:47",
+   "file": "v280.html",
+   "title": "17 Nov 2026: \"Never search the open web while a song is being made\" was read as \"while a song is being made, answer noth",
+   "summary": "17 Nov 2026: \"Never search the open web while a song is being made\" was read as \"while a song is being made, answer nothing else\", and a plain question about the weather in Ballito came back",
+   "detail": [
+    "17 Nov 2026: \"Never search the open web while a song is being made\" was read as \"while a song is being made, answer nothing else\", and a plain question about the weather in Ballito came back as \"I don't know, Boss.\" What must not happen is a kind of music being looked up (his sound is his answer) and a search result landing on his shelf beside the song. A question about the world is always answered, from the world tool."
+   ]
+  },
+  {
+   "n": 278,
+   "at": "2026-11-17T19:34",
+   "file": "v278.html",
+   "title": "17 Nov 2026, on build 276: \"landed without the cover only when I refreshed or on second refresh did it show.\" The pictur",
+   "summary": "17 Nov 2026, on build 276: \"landed without the cover only when I refreshed or on second refresh did it show.\" The picture was on the song's record from the moment the studio finished; the ca",
+   "detail": [
+    "17 Nov 2026, on build 276: \"landed without the cover only when I refreshed or on second refresh did it show.\" The picture was on the song's record from the moment the studio finished; the card simply did not carry it until something else painted it. The shelf read now hands back the song's own picture with the song, so the card is read once more BEFORE it is announced, and the picture it gains here is the one he asked for. A second drawing for the same yes is unasked spend, and the landing below never pays for one when the record already holds it."
+   ]
+  },
+  {
+   "n": 277,
+   "at": "2026-11-17T19:29",
+   "file": "v277.html",
+   "title": "17 Nov 2026, shortly after 21:32: he said \"Thank you.\" and the mouth answered \"I can't look up the weather in Durban rig",
+   "summary": "17 Nov 2026, shortly after 21:32: he said \"Thank you.\" and the mouth answered \"I can't look up the weather in Durban right now.\" He never asked about the weather, and no lookup was tried - b",
+   "detail": [
+    "17 Nov 2026, shortly after 21:32: he said \"Thank you.\" and the mouth answered \"I can't look up the weather in Durban right now.\" He never asked about the weather, and no lookup was tried - build 276 had already refused one. So the sentence invented both the question and a fault, which is the worst kind of answer: it is wrong about the world and wrong about us. A turn that asked nothing gets a short warm line, never a refusal to a question nobody put."
+   ]
+  },
+  {
+   "n": 276,
+   "at": "2026-11-17T19:24",
+   "file": "v276.html",
+   "title": "17 Nov 2026, 21:21: the four asks were answered, the make went to the studio, the draft was consumed - and songMaking()",
+   "summary": "17 Nov 2026, 21:21: the four asks were answered, the make went to the studio, the draft was consumed - and songMaking() then answered false, because the draft is what it reads.",
+   "detail": [
+    "17 Nov 2026, 21:21: the four asks were answered, the make went to the studio, the draft was consumed - and songMaking() then answered false, because the draft is what it reads. So the door had no idea a song was in the studio, the mouth looked up \"the current time in South Africa\" on his \"Thank you.\", and the search chunk landed on his shelf as a card beside the song being made. The making is not a draft: it is a take in the studio and a landing being watched.",
+    "This answers that question from the make itself."
+   ]
+  },
+  {
+   "n": 275,
+   "at": "2026-11-17T19:17",
+   "file": "v275.html",
+   "title": "the licence was the leak",
+   "summary": "17 Nov 2026, 19:07:42, before the studio had returned anything at all, the mouth said \"That song is on your shelf now, Boss.",
+   "detail": [
+    "THE LICENCE WAS THE LEAK.",
+    "17 Nov 2026, 19:07:42, before the studio had returned anything at all, the mouth said \"That song is on your shelf now, Boss. You can share it from there whenever you want. That one is real, I checked the record.\" The door caught it a line later and put the truth on screen, and nothing can unsay audio: he had already heard the lie.",
+    "And the brief had taught it the words, because this very sentence offered \"it is on your shelf\" as the way to say where a thing is. It is withdrawn. A song in the making is never described as landed, the mouth never licences sharing, and it never claims to have looked at a record it cannot see.",
+    "The only sentence that says a song is on his shelf is the door's own, after the take lands."
+   ]
+  },
+  {
+   "n": 274,
+   "at": "2026-11-17T19:05",
+   "file": "v274.html",
+   "title": "his yes to the picture travels with the ask",
+   "summary": "17 Nov 2026, 18:52: the request was created here and his yes was posted a second later, while the maker had already read the row - so the yes was overwritten and the song landed with no cove",
+   "detail": [
+    "HIS YES TO THE PICTURE TRAVELS WITH THE ASK.",
+    "17 Nov 2026, 18:52: the request was created here and his yes was posted a second later, while the maker had already read the row - so the yes was overwritten and the song landed with no cover. The answer rides on the creation now, so the record holds it from the first second and the card can be born with its picture."
+   ]
+  },
+  {
+   "n": 273,
+   "at": "2026-11-17T18:47",
+   "file": "v273.html",
+   "title": "the script is three asks, not four",
+   "summary": "the script is three asks, not four. The words question is retired, so a mouth still carrying it would put a question in front of him that the door no longer has an answer slot for.",
+   "detail": [
+    "the script is three asks, not four. The words question is retired, so a mouth still carrying it would put a question in front of him that the door no longer has an answer slot for."
+   ]
+  },
+  {
+   "n": 272,
+   "at": "2026-11-17T18:37",
+   "file": "v272.html",
+   "title": "17 Nov 2026, 18:33",
+   "summary": "17 Nov 2026, 18:33. Two inventions in one run, both from rewording: the door asked for the kind of music and the mouth offered \"Upbeat pop, feel-good funk, or something else?\" - three genres",
+   "detail": [
+    "17 Nov 2026, 18:33. Two inventions in one run, both from rewording: the door asked for the kind of music and the mouth offered \"Upbeat pop, feel-good funk, or something else?\" - three genres of its own, then a live web lookup to decide one - and at the words question it offered \"or make up something new that captures the feeling\", a path the door cannot take. So a question of the making is SAID AS GIVEN, word for word: no examples, no options, no third path, no paraphrase."
+   ]
+  },
+  {
+   "n": 271,
+   "at": "2026-11-17T18:23",
+   "file": "v271.html",
+   "title": "17 Nov 2026, 18:15",
+   "summary": "17 Nov 2026, 18:15. The note asked for the kind of music and the mouth said \"What kind of music, Boss?",
+   "detail": [
+    "17 Nov 2026, 18:15. The note asked for the kind of music and the mouth said \"What kind of music, Boss? And do you want a cover picture?\" - it recited the script from this very rule and then, a turn later, invented a screen that does not exist: \"While that sheet is open, just tap the picture you want.\" There is no sheet.",
+    "It is named here because a model that fills a gap with a picture of a screen will do it again."
+   ]
+  },
+  {
+   "n": 270,
+   "at": "2026-11-17T17:55",
+   "file": "v270.html",
+   "title": "the id of the last song this door asked for, kept across a reload",
+   "summary": "The id of the last song this door asked for, kept across a reload.",
+   "detail": [
+    "The id of the last song this door asked for, kept across a reload. Without it a reopened door has no id to name, and asking the record \"is it done\" without an id answers about SOMEONE ELSE's request - his previous song - which on 17 Nov 2026 at 15:52:10 made the mouth say a song was on his shelf two seconds before the new one had even been written. A check must name its song."
+   ]
+  },
+  {
+   "n": 269,
+   "at": "2026-11-17T17:48",
+   "file": "v269.html",
+   "title": "a session that closed is not a session in the background",
+   "summary": "17 Nov 2026, after the voice link died (\"Session closed due to client inactivity\") and he opened the door again four minutes later: \"when I opened it again out of the blue it said - What kin",
+   "detail": [
+    "A SESSION THAT CLOSED IS NOT A SESSION IN THE BACKGROUND.",
+    "17 Nov 2026, after the voice link died (\"Session closed due to client inactivity\") and he opened the door again four minutes later: \"when I opened it again out of the blue it said - What kind of music should it be? Say you choose and I will pick.\" Nothing was wrong with the record - his words were still held - but the door asked a question from a conversation that had ended, with no context and no reason to be answering it. Build 140 wrote that re-ask for a door he was in and left in the background; a closed session is a different thing.",
+    "So on a fresh open the door says where things STAND, in one line, and asks nothing. The beat stays open, so whatever he says next still lands on it, and nothing is lost by not asking."
+   ]
+  },
+  {
+   "n": 268,
+   "at": "2026-11-17T17:42",
+   "file": "v268.html",
+   "title": "17 Nov 2026, 17:38, in one run: \"That's all I need, Boss",
+   "summary": "17 Nov 2026, 17:38, in one run: \"That's all I need, Boss.",
+   "detail": [
+    "17 Nov 2026, 17:38, in one run: \"That's all I need, Boss. The song will appear on your shelf when it's ready\" while no take existed, then \"My mistake, Boss, the song isn't ready yet; I'm checking on its progress now.\" Two faults in two breaths: the making was called finished before the door had said so, and a promise to go and look. There is no window into the studio from here, so checking is not a thing the door can do, and saying it is a promise dressed as an answer."
+   ]
+  },
+  {
+   "n": 267,
+   "at": "2026-11-17T17:33",
+   "file": "v267.html",
+   "title": "the words beat",
+   "summary": "Built around, or left exactly as he said them.",
+   "detail": [
+    "THE WORDS BEAT. Built around, or left exactly as he said them. ----"
+   ]
+  },
+  {
+   "n": 266,
+   "at": "2026-11-17T17:26",
+   "file": "v266.html",
+   "title": "the picture is answered once per song, and the door remembers it",
+   "summary": "17 Nov 2026, 17:23, his run: \"Yes.\" three times and the same question back each time.",
+   "detail": [
+    "THE PICTURE IS ANSWERED ONCE PER SONG, AND THE DOOR REMEMBERS IT.",
+    "17 Nov 2026, 17:23, his run: \"Yes.\" three times and the same question back each time. The making's beat did take his yes and started the song, but the beat's own state lived only in the draft, so the next turn found the picture open again, the landing's answer window opened on the mouth's repeated question, his yes was stored a second time as \"kept for landing\", and the two paths took turns asking him. So the answer is latched here, in one place, and every path that could ask or re-take it consults this latch."
+   ]
+  },
+  {
+   "n": 265,
+   "at": "2026-11-17T17:08",
+   "file": "v265.html",
+   "title": "edwin, 17 Nov 2026, 17:03: \"at the end of the creation conversation it says: That's all I need, Boss",
+   "summary": "Edwin, 17 Nov 2026, 17:03: \"at the end of the creation conversation it says: That's all I need, Boss.",
+   "detail": [
+    "Edwin, 17 Nov 2026, 17:03: \"at the end of the creation conversation it says: That's all I need, Boss. I'll let you know when it's ready. not sure if that is true or possible. How will it let me know it will simply land on the shelf?\" It is not true and it is not possible: nothing in this estate can send him a message later.",
+    "A promise of a notification is the same fault as a claim of delivery, and it is worse for a song, because he waits for a message that never comes instead of looking at his shelf."
+   ]
+  },
+  {
+   "n": 264,
+   "at": "2026-11-17T16:46",
+   "file": "v264.html",
+   "title": "the door's own make must own the watch",
+   "summary": "17 Nov 2026, 16:40, on build 263 - the flow he called perfect - and then nothing: the song landed at 16:42 and the picture he had said yes to was never drawn.",
+   "detail": [
+    "THE DOOR'S OWN MAKE MUST OWN THE WATCH.",
+    "17 Nov 2026, 16:40, on build 263 - the flow he called perfect - and then nothing: the song landed at 16:42 and the picture he had said yes to was never drawn. The landing watch was still following the PREVIOUS song (asking the record about request 6afc65b7 every thirty seconds), because this path posted the make and recorded it in lastSongRequest while madeShare still pointed at the old one. So the take landed unseen, the descent never ran, and the cover never came.",
+    "One line of state, and it cost him the picture. The make that is made here is now the make the door watches."
+   ]
+  },
+  {
+   "n": 263,
+   "at": "2026-11-17T16:36",
+   "file": "v263.html",
+   "title": "the making is the door's, not the mouth's",
+   "summary": "17 Nov 2026, 16:33, on build 262: he answered the sound with \"alternative pop\", the door held the make and asked him the picture in that same second - and the mouth called this act, whose ow",
+   "detail": [
+    "THE MAKING IS THE DOOR'S, NOT THE MOUTH'S.",
+    "17 Nov 2026, 16:33, on build 262: he answered the sound with \"alternative pop\", the door held the make and asked him the picture in that same second - and the mouth called this act, whose own beats knew nothing about a picture, so it fell straight through to a make. The song left, his question was never asked, and he heard \"that song is being made now\" where the script says \"do you want a cover picture\". So the mouth can no longer make anything at all.",
+    "It may report on a song he has asked for, or send him one he already has. The making is the door's own script, and the door makes the song."
+   ]
+  },
+  {
+   "n": 262,
+   "at": "2026-11-17T16:30",
+   "file": "v262.html",
+   "title": "\"You choose\" at the picture closes the picture as bare",
+   "summary": "\"You choose\" at the picture closes the picture as bare.",
+   "detail": [
+    "\"You choose\" at the picture closes the picture as bare. On 261 this branch only logged the skip: the beat closed and no song ever came, so a promise kept ended as a journey with nothing in it."
+   ]
+  },
+  {
+   "n": 261,
+   "at": "2026-11-17T16:10",
+   "file": "v261.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 260,
+   "at": "2026-11-17T16:05",
+   "file": "v260.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 259,
+   "at": "2026-11-17T16:03",
+   "file": "v259.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 258,
+   "at": "2026-11-17T15:55",
+   "file": "v258.html",
+   "title": "the slot keeps what he said, not just the word that matched",
+   "summary": "the slot keeps what he said, not just the word that matched.",
+   "detail": [
+    "the slot keeps what he said, not just the word that matched."
+   ]
+  },
+  {
+   "n": 257,
+   "at": "2026-11-17T15:06",
+   "file": "v257.html",
+   "title": "the script, and nothing beside it",
+   "summary": "The picture is the next line of the script: it holds the song for a yes or a no and it puts nothing on his screen.",
+   "detail": [
+    "THE SCRIPT, AND NOTHING BESIDE IT. The picture is the next line of the script: it holds the song for a yes or a no and it puts nothing on his screen. No Card, no tap row, no second ask, no share popup.",
+    "He asked for a basic flow, and every extra mechanism we added turned into another thing that could arrive at the wrong moment. The answer is taken by the door's own router, never guessed from what the mouth says."
+   ]
+  },
+  {
+   "n": 256,
+   "at": "2026-11-17T14:48",
+   "file": "v256.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 255,
+   "at": "2026-11-17T14:40",
+   "file": "v255.html",
+   "title": "fresh by a clock, never by a guess q.textContent = making",
+   "summary": "fresh by a clock, never by a guess q.textContent = making ?",
+   "detail": [
+    "fresh by a clock, never by a guess q.textContent = making ? 'do you want a cover picture to go with that?' : 'do you want a cover image drawn for it? one drawing, or leave it bare.'; q.style.cssText = 'font-size:13px;color:#e8dfcc;line-height:1.45;margin-bottom:9px'; const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap'; const answer = (want) => { artLockedAt = Date.now(); artOpen = null; songDraft.coverPending = 0; // BUILD 255: answered, so a spoken yes can no longer move it shareArt = { want: !!want, brief: '', url: '' }; try { saveDraft(); } catch (e) {} if (making) { /* The picture for THIS song, taken before it is made. Nothing is drawn here: there is no song yet, and the drawing happens on landing, from the song's own scene (build 173's path)."
+   ]
+  },
+  {
+   "n": 254,
+   "at": "2026-11-17T14:36",
+   "file": "v254.html",
+   "title": "nOT A BEAT. An open beat is what holds the make back, and the picture is not a gate on the song: it chooses what happens when the song lands",
+   "summary": "NOT A BEAT. An open beat is what holds the make back, and the picture is not a gate on the song: it chooses what happens when the song lands.",
+   "detail": [
+    "NOT A BEAT. An open beat is what holds the make back, and the picture is not a gate on the song: it chooses what happens when the song lands. On 253 it became a beat, so the row appeared and the making carried on regardless, which read as the door running ahead of him.",
+    "Nothing is held now, and nothing runs ahead either: the answer simply decides whether a picture is drawn on landing."
+   ]
+  },
+  {
+   "n": 253,
+   "at": "2026-11-17T14:22",
+   "file": "v253.html",
+   "title": "the question goes on his screen, and the mouth is told to ask nothing about it",
+   "summary": "The question goes on his screen, and the mouth is told to ask nothing about it.",
+   "detail": [
+    "The question goes on his screen, and the mouth is told to ask nothing about it. On 252 the mouth was told to ask it in one short line and asked it in the same breath as the sound, which is the one thing this beat exists to prevent. A tap cannot be bundled."
+   ]
+  },
+  {
+   "n": 252,
+   "at": "2026-11-17T14:13",
+   "file": "v252.html",
+   "title": "the sound closes into the picture, not straight into the making",
+   "summary": "The sound closes into the picture, not straight into the making.",
+   "detail": [
+    "The sound closes into the picture, not straight into the making. One short line, asked by the mouth, taken by the door: this is the beat he asked for on 17 Nov, right after \"what kind of music should it be\"."
+   ]
+  },
+  {
+   "n": 251,
+   "at": "2026-11-17T14:07",
+   "file": "v251.html",
+   "title": "oNE QUESTION, ON THE SCREEN, NOT IN THE MOUTH ---- 17 Nov 2026",
+   "summary": "ONE QUESTION, ON THE SCREEN, NOT IN THE MOUTH ---- 17 Nov 2026.",
+   "detail": [
+    "ONE QUESTION, ON THE SCREEN, NOT IN THE MOUTH ---- 17 Nov 2026. The rule already said the picture is the last question of the making, but the asking was left to the mouth: his song landed, nothing was asked, and the cover was drawn on the share sheet instead. A question that decides a spend is a tap.",
+    "One row, two answers, asked once per song, and no third question about what the picture should be, because the song's own scene is the brief. Yes draws it there and then; no leaves it bare."
+   ]
+  },
+  {
+   "n": 250,
+   "at": "2026-11-17T11:12",
+   "file": "v250.html",
+   "title": "leaving is an act, so the record says so",
+   "summary": "17 Nov 2026, 11:11, right after he tapped this on his iPhone: \"I left the room on my iPhone...",
+   "detail": [
+    "LEAVING IS AN ACT, SO THE RECORD SAYS SO.",
+    "17 Nov 2026, 11:11, right after he tapped this on his iPhone: \"I left the room on my iPhone... Still shows Open sessions.\" The room was gone and the pass was not, because this handler only forgot the token in this tab. The pass is closed in the record now, before the tab forgets it - read from the session he is leaving, never from anything typed."
+   ]
+  },
+  {
+   "n": 249,
+   "at": "2026-11-17T10:33",
+   "file": "v249.html",
+   "title": "a DEVICE ARRIVES NAMED ---- 17 Nov 2026, reading his own key list: \"just wondering why it registered like that in the fi",
+   "summary": "A DEVICE ARRIVES NAMED ---- 17 Nov 2026, reading his own key list: \"just wondering why it registered like that in the first place?\" Because this label was a two-line guess at navigator.userA",
+   "detail": [
+    "A DEVICE ARRIVES NAMED ---- 17 Nov 2026, reading his own key list: \"just wondering why it registered like that in the first place?\" Because this label was a two-line guess at navigator.userAgent, and that string is thinner than it looks. A Mac says \"Macintosh; Intel Mac OS X 10_15_7\": no phone, no browser name, and an OS version Apple froze for privacy years ago - so it fell through to the literal word \"browser\". Android says \"Android 10\" and never the handset model; the model lives in userAgentData, which nothing asked for.",
+    "What changed, and what did not: the label names the browser and the platform it can honestly know, and asks the browser for the handset model where a browser will answer. It never invents a model, never prints macOS's frozen version as if it were true, and never waits on a hint that does not come back - a model is a courtesy, never a condition of enrolling. The name is still frozen at enrolment."
+   ]
+  },
+  {
+   "n": 248,
+   "at": "2026-11-17T00:01",
+   "file": "v248.html",
+   "title": "the gate does not pass here any more",
+   "summary": "The gate does not pass here any more. A fingerprint proves who is at the door; it does not prove the room is his.",
+   "detail": [
+    "The gate does not pass here any more. A fingerprint proves who is at the door; it does not prove the room is his. Passing the gate at this line is what let the iPhone stand inside a house whose room was held by the Android on 16 Nov 2026 - the refusal arrived after the wall had already moved.",
+    "The gate passes below, once the door has actually opened."
+   ]
+  },
+  {
+   "n": 247,
+   "at": "2026-11-16T23:49",
+   "file": "v247.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 246,
+   "at": "2026-11-15T23:01",
+   "file": "v246.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 245,
+   "at": "2026-11-15T22:39",
+   "file": "v245.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 244,
+   "at": "2026-11-15T22:34",
+   "file": "v244.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 243,
+   "at": "2026-11-15T22:29",
+   "file": "v243.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 242,
+   "at": "2026-11-15T22:03",
+   "file": "v242.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 241,
+   "at": "2026-11-15T21:26",
+   "file": "v241.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 240,
+   "at": "2026-11-15T20:44",
+   "file": "v240.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 239,
+   "at": "2026-11-15T17:03",
+   "file": "v239.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 238,
+   "at": "2026-11-15T17:02",
+   "file": "v238.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 237,
+   "at": "2026-11-15T17:01",
+   "file": "v237.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 236,
+   "at": "2026-11-15T16:54",
+   "file": "v236.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 235,
+   "at": "2026-11-15T00:52",
+   "file": "v235.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 234,
+   "at": "2026-11-15T00:29",
+   "file": "v234.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 233,
+   "at": "2026-11-15T00:10",
+   "file": "v233.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 232,
+   "at": "2026-11-14T23:57",
+   "file": "v232.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 231,
+   "at": "2026-11-14T23:47",
+   "file": "v231.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 230,
+   "at": "2026-11-14T23:23",
+   "file": "v230.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 229,
+   "at": "2026-11-14T23:11",
+   "file": "v229.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 228,
+   "at": "2026-11-14T23:00",
+   "file": "v228.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 227,
+   "at": "2026-11-14T22:00",
+   "file": "v227.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 226,
+   "at": "2026-11-14T21:34",
+   "file": "v226.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 225,
+   "at": "2026-11-14T21:21",
+   "file": "v225.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 224,
+   "at": "2026-11-14T21:05",
+   "file": "v224.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 223,
+   "at": "2026-11-14T21:10",
+   "file": "v223.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 222,
+   "at": "2026-11-14T19:55",
+   "file": "v222.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 221,
+   "at": "2026-11-14T19:40",
+   "file": "v221.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 220,
+   "at": "2026-11-14T16:40",
+   "file": "v220.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 219,
+   "at": "2026-11-14T16:22",
+   "file": "v219.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 218,
+   "at": "2026-11-14T17:20",
+   "file": "v218.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 217,
+   "at": "2026-11-14T16:40",
+   "file": "v217.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 216,
+   "at": "2026-11-14T16:20",
+   "file": "v216.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 215,
+   "at": "2026-11-14T15:55",
+   "file": "v215.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 214,
+   "at": "2026-11-14T15:30",
+   "file": "v214.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 213,
+   "at": "2026-11-14T15:10",
+   "file": "v213.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 212,
+   "at": "2026-11-14T14:35",
+   "file": "v212.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  },
+  {
+   "n": 211,
+   "at": "2026-11-14T14:10",
+   "file": "v211.html",
+   "title": "no note was written for this build",
+   "summary": "",
+   "detail": []
+  }
+ ]
+}
