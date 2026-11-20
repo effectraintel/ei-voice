@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 403;
+const BUILD_NO = 404;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -847,9 +847,36 @@ const ACRONYM_REPAIRS = [
   [/\ba\.?\s+t\.?\s+p\.?\b/gi, 'ATP'],           // "A T P", "A.T.P"
 ];
 
+/* BUILD 404. THE EAR HEARS "TEST" AS "TASTE".
+   20 Nov 2026, 14:58: "Keeps on hearing test as taste!" The record agrees: 19 Nov 22:05:15, his own line on the screen
+   read "Maybe there's just one thing I'm going to taste, but I'm going to taste it on a different version." He was
+   talking about a test. South African English puts "test" and "taste" very close together, and the recogniser prefers
+   the commoner word.
+   The repair is deliberately narrow, because "taste" is a real word and he may mean it: only the shapes that cannot be
+   literal are touched - a future "going to taste", "taste it/that/this", and "taste the door/rail/build/page". "Well,
+   first I trying to taste the lager" and "my taste in music" are left exactly as they were heard. Every repair is
+   written to the record as ear.repaired, so a change to his words is never silent. The phrase set in the relay is
+   where this belongs properly, and "test" now goes in it too. */
+const WORD_REPAIRS = [
+  [/\b(going to|gonna|let me|i'?ll|i will|want to|need to|have to|must)\s+taste\b/gi, 'taste', 'test'],
+  [/\btaste\s+(it|that|this|them|those)\b/gi, 'taste', 'test'],
+  [/\btaste\s+the\s+(door|rail|build|page|flow|making|session|ear|mouth|song rail|whole thing)\b/gi, 'taste', 'test'],
+  [/\btaste\s+(again|run|version)\b/gi, 'taste', 'test'],
+];
+
+/* The repair keeps the shape of his sentence, including a capital where he had one. */
+function repairToken(m, token, word) {
+  const hit = m.match(new RegExp(token, 'i'));
+  if (!hit) return m;
+  const orig = hit[0];
+  const rep = /^[A-Z]/.test(orig) ? word.charAt(0).toUpperCase() + word.slice(1) : word;
+  return m.slice(0, hit.index) + rep + m.slice(hit.index + orig.length);
+}
+
 function repairAcronyms(text) {
   let t = String(text == null ? '' : text);
   for (const [rx, to] of ACRONYM_REPAIRS) t = t.replace(rx, to);
+  for (const [rx, token, word] of WORD_REPAIRS) t = t.replace(rx, (m) => repairToken(m, token, word));
   return t;
 }
 
