@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>the door &middot; what a build was for</title>
+<style>
+  :root { --ink:#e8dfcc; --dim:#8b8172; --gold:#c9a86a; --bg:#141210; --card:#1a1714; --line:#2e2a24; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         -webkit-font-smoothing:antialiased; min-height:100vh; }
+  .wrap { max-width:640px; margin:0 auto; padding:34px 20px 56px; }
+  .mark { font-size:10px; letter-spacing:.24em; text-transform:uppercase; color:var(--dim); }
+  h1 { font-family:Georgia, "DejaVu Serif", serif; font-weight:normal; font-size:26px; margin:14px 0 6px; }
+  .sub { font-size:13px; line-height:1.55; color:var(--dim); margin:0 0 22px; max-width:44ch; }
+  .now { display:flex; gap:12px; align-items:baseline; justify-content:space-between;
+         border:1px solid var(--line); border-radius:10px; background:var(--card);
+         padding:13px 15px; margin-bottom:22px; }
+  .now b { font-size:15px; font-weight:600; }
+  .now a { color:var(--gold); text-decoration:none; font-size:12.5px; letter-spacing:.04em; }
+  ol { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:baseline; gap:12px; padding:12px 2px; border-bottom:1px solid var(--line); }
+  li:last-child { border-bottom:0; }
+  .n { font-family:ui-monospace, "SF Mono", Menlo, monospace; font-size:13px; color:var(--gold);
+       min-width:3.4em; letter-spacing:.06em; }
+  .t { flex:1 1 auto; font-size:13.5px; color:var(--ink); }
+  .at { font-family:ui-monospace, "SF Mono", Menlo, monospace; font-size:11px; color:var(--dim); }
+  li a { color:var(--gold); text-decoration:none; font-size:12px; letter-spacing:.05em; padding-left:4px; }
+  li a:hover { text-decoration:underline; }
+  li.here .t::after { content:' · you are here'; color:var(--dim); font-size:11px; letter-spacing:.04em; }
+  .err { border:1px solid #4a2f22; background:#221a14; color:#e0b48a; border-radius:10px;
+         padding:12px 14px; font-size:12.5px; line-height:1.5; }
+  footer { margin-top:28px; font-size:9.5px; letter-spacing:.22em; text-transform:uppercase; color:#5f5749; }
+</style>
+<style>
+  /* One build, in its own window. Edwin, 20 Nov 2026: "when I click it open a new window with all the details." */
+  .kicker { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--dim); }
+  h1 { margin:10px 0 4px; }
+  .stamp { color:var(--dim); font-size:12.5px; margin:0 0 22px; }
+  .story p { font-size:14.5px; line-height:1.72; color:#d9d0be; margin:0 0 15px; }
+  .story p.moment { color:var(--ink); }
+  .acts { display:flex; flex-wrap:wrap; gap:10px; margin:26px 0 0; padding-top:18px; border-top:1px solid var(--line); }
+  .acts a { display:inline-block; border:1px solid var(--line); border-radius:9px; background:var(--card);
+            padding:9px 14px; color:var(--gold); text-decoration:none; font-size:12.5px; letter-spacing:.03em; }
+  .acts a:hover { border-color:var(--gold); }
+  .none { color:var(--dim); font-size:14px; line-height:1.7; }
+  footer { margin-top:30px; padding-top:16px; border-top:1px solid var(--line);
+           color:var(--dim); font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+  .back { color:var(--dim); font-size:12px; text-decoration:none; }
+  .back:hover { color:var(--gold); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="versions.html">&larr; every version</a>
+  <div id="head" style="margin-top:18px">
+    <div class="kicker">Effectra Intelligence</div>
+    <h1 id="title">reading the build</h1>
+    <p class="stamp" id="stamp"></p>
+  </div>
+  <div class="story" id="story"></div>
+  <div class="acts" id="acts" hidden></div>
+  <footer>Proof on chain. Payload in the vault.</footer>
+</div>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var want = String(parseInt(q.get('v'), 10) || 0);
+  var titleEl = document.getElementById('title');
+  var stampEl = document.getElementById('stamp');
+  var story = document.getElementById('story');
+  var acts = document.getElementById('acts');
+
+  function actsFor(n, file) {
+    acts.hidden = false;
+    acts.innerHTML = '';
+    var open = document.createElement('a');
+    open.href = String(file || ('v' + n + '.html'));
+    open.textContent = 'open this build';
+    acts.appendChild(open);
+    var back = document.createElement('a');
+    back.href = 'versions.html';
+    back.textContent = 'every version';
+    acts.appendChild(back);
+  }
+
+  if (!want) {
+    titleEl.textContent = 'which build?';
+    story.innerHTML = '<p class="none">A build is asked for in the address: build.html?v=404</p>';
+    return;
+  }
+  fetch('builds.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+    .then(function (d) {
+      var rows = (d && Array.isArray(d.builds)) ? d.builds : [];
+      var b = null;
+      for (var i = 0; i < rows.length; i++) { if (Number(rows[i].n) === want) { b = rows[i]; break; } }
+      if (!b) {
+        titleEl.textContent = 'build ' + want;
+        stampEl.textContent = 'this build is not in the list';
+        story.innerHTML = '<p class="none">Nothing is written here for build ' + want
+          + ', which means it was never published or the list has moved on.</p>';
+        return;
+      }
+      titleEl.textContent = b.title || ('build ' + want);
+      stampEl.textContent = 'build ' + want + (b.at ? ' \u00b7 ' + String(b.at).replace('T', ' \u00b7 ') : '');
+      if (b.summary) {
+        var lead = document.createElement('p');
+        lead.className = 'moment';
+        lead.textContent = b.summary;
+        story.appendChild(lead);
+      }
+      (b.detail || []).forEach(function (p) {
+        var el = document.createElement('p');
+        if (/^\d{1,2}\s+[A-Z][a-z]{2}\s+\d{4}/.test(p)) el.className = 'moment';
+        el.textContent = p;
+        story.appendChild(el);
+      });
+      if (!(b.detail || []).length) {
+        var none = document.createElement('p');
+        none.className = 'none';
+        none.textContent = 'No note was written for this build when it was made. The build itself is still '
+          + 'pinned and opens exactly as it shipped.';
+        story.appendChild(none);
+      }
+      actsFor(want, b.file);
+    })
+    .catch(function (e) {
+      story.innerHTML = '';
+      var p = document.createElement('p');
+      p.className = 'none';
+      p.textContent = 'The note could not be read just now (' + String((e && e.message) || e)
+        + '). The build itself still opens: v' + want + '.html';
+      story.appendChild(p);
+    });
+})();
+</script>
+</body>
+</html>
