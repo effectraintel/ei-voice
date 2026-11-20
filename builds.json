@@ -2,6 +2,22 @@
  "note": "what each build was for, read out of the build's own note in the door's source. versions.html lists these; build.html?v=NNN opens one.",
  "builds": [
   {
+   "n": 405,
+   "at": "2026-11-20T18:34",
+   "file": "v405.html",
+   "title": "a sentence said once is written once",
+   "summary": "one sentence came back as five readings and the door wrote all five down; it now keeps the surer one, and the voice print no longer refuses him at 0.69.",
+   "detail": [
+    "A SENTENCE SAID ONCE IS WRITTEN ONCE, AND THE FLOOR WAS TOO HIGH. Edwin, 20 Nov 2026, after comparing the Mac with the iPhone SE on one sentence: \"So there is 2 issues, overlapping is the biggest... and then the floor needs to be lower as it is too high.\" 1. THE OVERLAP.",
+    "16:21:29 on 404, one sentence said once on the Mac: \"Six swift ships sit still while I test the taste of salt.\" The ear returned FIVE readings of it inside 142 milliseconds - \"Six Swift. Ships sit still while I test this the taste of salt\", \"six Swift ships sit still while at the taste of salt\", \"six with ships, it still while I taste the taste of salt\", \"six with ships, sit still while I test the taste of salt\", \"stick Swift ships, sits still well, as tested Taste of salt,\" - and the door appended every one, so twelve spoken words reached the turn as thirty-four. At 16:22:11 the same thing made fifty-one words.",
+    "The iPhone did it at 16:27:52 with thirty-seven, so it is the door and not the device, and it is the fault he has called first priority all week. They are alternatives, not sentences: the recogniser re-reads the same audio while it settles. The door now keeps the readings rather than the run-on, and two readings are the same utterance when they share a run of three words, or most of their words, or one sits inside the other.",
+    "What it keeps is the reading the ear was surest of, because that is the ear's own opinion and not ours, and every replacement is written to the record as ear.overlap so a change to his words is never silent. Two sentences said in one breath share almost nothing, and both survive. 2.",
+    "THE FLOOR. 16:20:46 on 404: the cleanest transcript of the whole comparison, confidence 0.923, was thrown away because the voice print scored it 0.688 against a 0.72 floor. Every score below 0.72 in the entire log is his own voice - eleven of them, from \"Start fresh.\" at 0.608 and 0.645, through \"You can choose.\" at 0.697 and \"Yes.\" at 0.695 and 0.651, to \"Taste taste taste not taste.\" at 0.601.",
+    "There is not one genuine other voice in 147 measurements, so the gate has never caught anybody but the man it was built for. His own range runs 0.601 to 0.973 with a median of 0.873, so the gate moves to 0.55: under his worst and still above a voice that is not his. It stays a courtesy gate, because the passkey is the boarding proof and this only stops the room answering for him.",
+    "Tests first, both failing on 404: one-sentence-is-not-five-sentences, two-sentences-in-one-breath-are-both-kept, and the-print-takes-his-own-voice-at-sixty-nine. 276/276."
+   ]
+  },
+  {
    "n": 404,
    "at": "2026-11-20T15:02",
    "file": "v404.html",
