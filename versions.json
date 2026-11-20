@@ -1,8 +1,13 @@
 {
- "latest": 403,
- "updated": "2026-11-20T14:41",
+ "latest": 404,
+ "updated": "2026-11-20T15:02",
  "note": "written when a build is published. the door reads this to answer a version in the address.",
  "builds": [
+  {
+   "n": 404,
+   "file": "v404.html",
+   "at": "2026-11-20T15:02"
+  },
   {
    "n": 403,
    "file": "v403.html",
