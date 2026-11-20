@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 401;
+const BUILD_NO = 402;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2455,6 +2455,18 @@ function clearSitting() {
    a fresh session?" So there is no clock on the sitting. It is kept until he starts fresh or a new sitting replaces
    it, and a return is never silently continued: the door asks, in one line, which of the two he wants. */
 const SITTING_KEY = 'ei.door.sitting';
+/* BUILD 402 - EVERY SESSION STARTS NEW.
+   Edwin, 20 Nov 2026, 14:05: "I think we need to drop the Carry on where we left off, or start fresh? Line.
+   Every session now start new. We can consider having a continuation of previous conversations later, but I'm
+   not going to test or use that now and that is full build on its own. So we can drop the option out of the
+   voice for now (the backend capability can remain as is)."
+
+   So the capability stays whole - a sitting is still parked, still handed over, still cleared by "start fresh" -
+   and one switch decides whether the door ever OFFERS it. It is off: a parked sitting is dropped on sight and the
+   door greets a new session. The day he builds continuation properly, this becomes true and nothing else changes. */
+const CONTINUE_ACROSS_SESSIONS = false;
+/* What he may still say on his own to end a sitting. Short and whole, so a word inside a sentence is never it. */
+const FRESH_SAID_ALONE = /^(?:ok(?:ay)?[,\s]+)?(?:start fresh|start over|start again|start new|new session|new door|fresh start|fresh session|forget everything|wipe it)[.!]?$/i;
 function parkSitting() {
   try {
     if (!sittingTurns.length) return;
@@ -2463,6 +2475,18 @@ function parkSitting() {
 }
 function pickSittingUp() {
   if (sittingTurns.length) return;                    // the page still has it: nothing to pick up
+  /* BUILD 402: a session starts new, so a sitting left behind is not picked up and not asked about. It is
+     dropped, and the record says so rather than leaving it to be found again next time. */
+  if (!CONTINUE_ACROSS_SESSIONS) {
+    try {
+      if (localStorage.getItem(SITTING_KEY)) {
+        localStorage.removeItem(SITTING_KEY);
+        logLine('sitting.dropped', 'a sitting from an earlier visit was found and dropped \u00b7 every session starts new',
+          { level: 'info', target: 'sitting' });
+      }
+    } catch (e) {}
+    return;
+  }
   let kept = null;
   try { kept = JSON.parse(localStorage.getItem(SITTING_KEY) || 'null'); } catch (e) { kept = null; }
   if (!kept || !Array.isArray(kept.turns) || !kept.turns.length) return;
@@ -4361,7 +4385,7 @@ function songHearTurn(heard) {
         artLockedAt = Date.now();
         logLine('song.journey.cover', 'no picture \u00b7 he left it to the door', { level: 'info', target: 'music' });
         railNote('journey \u00b7 picture \u00b7 none \u00b7 making');
-        doorNote('Say exactly this, one short line: "It will be on your shelf soon." Then say nothing else, and '
+        doorNote(MAKING_CLOSE_LINE + ' Then say nothing else, and '
           + 'never promise to let him know: nothing here can send him a message later, it simply lands on his shelf.', true);
         try { armMake(); } catch (e) {}
         return;
@@ -4428,7 +4452,7 @@ function songHearTurn(heard) {
           + ' \u00b7 answered in the same breath as the sound', { level: 'info', target: 'music' });
         chainBeat('cover');
         try {
-          doorNote('Say exactly this, one short line: "It will be on your shelf soon." Then say nothing else: ask '
+          doorNote(MAKING_CLOSE_LINE + ' Then say nothing else: ask '
             + 'nothing about a picture, offer nothing, do not talk about sharing, and never say you will let him '
             + 'know or come back to him, because nothing here can send him a message later: it simply lands on his '
             + 'shelf.', true);
@@ -4549,7 +4573,7 @@ function songHearTurn(heard) {
       /* BUILD 257. The last line of the script is his to hear and the making is the door's own: one short sentence,
          and the song goes ahead. Nothing else is asked, offered or announced. */
       try {
-        doorNote('Say exactly this, one short line: "It will be on your shelf soon." Then say nothing else: ask '
+        doorNote(MAKING_CLOSE_LINE + ' Then say nothing else: ask '
           + 'nothing, offer nothing, do not mention the picture again, do not talk about sharing, and never say you '
           + 'will let him know or come back to him, because nothing here can send him a message later: it simply '
           + 'lands on his shelf.', true);
@@ -4878,6 +4902,18 @@ function resolveQuestion(words) {
   return w + ' (in the session so far: ' + last.q + ')';
 }
 
+/* BUILD 402 - THE ORDER HE ASKED FOR.
+   Edwin, 20 Nov 2026, 14:05: "it first told me it will be on the shelf soon and then it told me it is being made.
+   Should be the other way around." It was true in the wrong order: the promise was spoken at the last beat of the
+   script, and the fact only once the studio had taken it. So the fact comes first, at the beat, and the promise
+   comes when the song is actually in the studio. Two lines, each said once. */
+const MAKING_CLOSE_LINE = 'Say exactly this, one short line: "It is being made now."';
+
+function makingPostedNote() {
+  return 'The door has put the song into the studio. Say exactly this, one short line: "It will be on your shelf '
+    + 'soon." Nothing else: do not ask about a picture, do not ask anything else, and never say it is sent.';
+}
+
 function armMake() {
   try {
     if (!pictureSettled()) {
@@ -4995,14 +5031,17 @@ async function makeIfStillWaiting(sig) {
     railNote('in the studio \u00b7 ' + String(text || '').slice(0, 40));
     doorNote(r.needs_word
       ? 'The door put the song in itself and the rail says he already has one like this. Say that in one short line.'
-      : 'The door has already put the song into the studio itself, so it is being made and it lands on his shelf. '
-        + 'Say one short true line saying so, naming the sound he chose and what the song is about, so he knows what '
-        + 'is being made rather than being surprised by it. Do not ask about a picture, do not ask anything else, and '
-        + 'never say it is sent.',
+      : makingPostedNote(),
       true);
   } catch (e) {
     logLine('song.make.door.fail', String((e && e.message) || e).slice(0, 140),
       { level: 'warn', target: 'music' });
+    /* BUILD 402: the door told him it is being made, so a studio that never took it cannot be left standing as a
+       claim. One honest line, in the same breath as the failure. */
+    try {
+      doorNote('The studio did not take the song, so nothing is being made. Say that plainly in one short line '
+        + 'and do not promise anything about his shelf.', true);
+    } catch (e2) {}
   }
 }
 
@@ -9159,6 +9198,20 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
     }
     /* BUILD 298. THE FIRST THING SAID AFTER "WELCOME BACK" SETTLES THE CHOICE, and only an explicit "fresh" closes the
        memory. Anything else he says is him carrying on, which is what he asked for. */
+    /* BUILD 402. THE DOOR NO LONGER ASKS, BUT "START FRESH" IS STILL HIS TO SAY.
+       He dropped the question on 20 Nov 2026 and every session now starts new. That removes the ASK, not his
+       ability to end a sitting with his own words: "start fresh" is in the door's own phrase set and it still
+       clears the sitting and replaces the socket. It is read only when the sentence is that command and nothing
+       else - "make a new one" is a song, and a word inside a sentence is never an instruction to wipe a room. */
+    if (!resumePending && FRESH_SAID_ALONE.test(String(said).trim())) {
+      clearSitting();
+      logLine('sitting.cleared', 'he said start fresh \u00b7 "this is a fresh door, and nothing before it"',
+        { level: 'info', target: 'sitting' });
+      try { dropMaking('he started fresh'); } catch (e) {}
+      try { guessLast = []; guessHunt = false; awaitSong = 0; shareQuery = ''; } catch (e) {}
+      startFreshSession();
+      return;
+    }
     if (resumePending) {
       resumePending = false;
       const low = said.toLowerCase();
