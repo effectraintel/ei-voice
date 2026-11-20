@@ -523,7 +523,7 @@ const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiv
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 400;
+const BUILD_NO = 401;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -2696,6 +2696,47 @@ let roomHeldUntil = '';
 let roomBeatTimer = null;
 const ROOM_BEAT_MS = 20000;
 
+/* BUILD 401 - POLLING IS EARNED, NOT A HABIT.
+   Edwin, 20 Nov 2026, 13:41: "That is a waste of credits... also polling should not happen if there is no
+   active session (meaning if no user is logged in) so sessions do expire already after inactivity so that
+   the user has to open the door again, we can use that session state to control for the polling as well."
+
+   Measured before this build, from the door's own logs over ten days: 7,127 backend calls, of which
+   voiceHold was 4,315 (61%) - one beat every twenty seconds, 48 an hour, and on 18 November 1,163 of them
+   across a full 24 hours for a day almost nobody spoke. The room's hold lapses on its own after three
+   minutes, so twenty seconds was three times faster than the record requires.
+
+   Three rules, one predicate:
+     1. NO PASS, NO POLLING. The pass in sessionStorage is the only thing that says he is here; it expires
+        on its own, so a door left open overnight stops asking by itself.
+     2. A PAGE NOBODY IS LOOKING AT DOES NOT POLL. Nothing arrives for him while he is not looking.
+     3. WHEN HE IS HERE BUT QUIET, THE BEAT SLOWS. Twenty seconds while a turn is in flight or he has
+        spoken in the last minute; ninety seconds otherwise, which still renews a three-minute hold with
+        a minute to spare. */
+const ROOM_BEAT_IDLE_MS = 90000;
+let roomBeatLastAt = 0;
+let doorActAt = 0;
+
+/* The one question every poller asks before it spends anything. */
+function doorPolling() {
+  try { if (document.hidden) return false; } catch (e) {}
+  try { return !!doorSession(); } catch (e) { return false; }
+}
+
+/* How often the room's hold needs renewing right now. */
+function roomBeatEvery() {
+  if (busy || listening) return ROOM_BEAT_MS;
+  if (Date.now() - (doorActAt || 0) < 60000) return ROOM_BEAT_MS;
+  return ROOM_BEAT_IDLE_MS;
+}
+
+/* Whether this moment is a beat at all. A beat is a paid call, so it is only due when it buys something. */
+function roomBeatDue(now) {
+  if (!doorPolling()) return false;
+  const t = Number(now) || Date.now();
+  return (t - (roomBeatLastAt || 0)) >= roomBeatEvery();
+}
+
 function stopRoomBeat() {
   if (roomBeatTimer) { clearInterval(roomBeatTimer); roomBeatTimer = null; }
 }
@@ -2741,9 +2782,12 @@ function roomLapse(why) {
   stopRoomBeat();
 }
 
-async function roomBeat() {
+async function roomBeat(force) {
   const s = doorSession();
   if (!s || !roomVoiceId) return;
+  /* BUILD 401: the timer may tick every twenty seconds, but a tick is not a call. Only a due beat asks. */
+  if (!force && !roomBeatDue()) return;
+  roomBeatLastAt = Date.now();
   try {
     const d = await gatePost('voiceHold', { action: 'hold', session_token: s.token, voice_id: roomVoiceId });
     if (d && d.ok && d.held === false) {
@@ -2787,7 +2831,7 @@ window.addEventListener('pagehide', () => { releaseRoom(); });
    quiet hand-over as on load: no reload while a conversation is open. */
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  try { roomBeat(); } catch (e) {}
+  try { roomBeat(true); } catch (e) {}   // build 401: he is looking again, so ask now
   setTimeout(() => { try { keepCurrent(); } catch (e) {} }, 1200);
 });
 
@@ -9068,6 +9112,8 @@ function endTurn(reason) {
 function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
 
   function doorHears(heard) {
+    /* BUILD 401: he is here and talking, so the room beats at full rate for the next minute. */
+    try { doorActAt = Date.now(); } catch (e) {}
     try { beginTurn(heard); } catch (e) {}
     const said = String(heard || '').trim();
     if (!said) return;
@@ -10207,6 +10253,7 @@ function turnRecord() { return curTurn ? Object.assign({}, curTurn) : null; }
   }
   
   function sendNoteNow(text, speak) {
+  try { doorActAt = Date.now(); } catch (e) {}
   notesSentThisTurn++;
   lastNoteSentAt = Date.now();
   /* BUILD 386: when the door last minted a line of its own, so a refusal can tell whether it is about to swallow it. */
@@ -11996,6 +12043,10 @@ function watchRequest(code, tries) {
   const tick = (left) => {
   if (left <= 0) { watchers.delete(key); return; }
   setTimeout(() => {
+    /* BUILD 401: this watcher asks every two seconds, and with no pass - or behind a page nobody is
+       looking at - every one of those is a paid call that can never change anything. The shelf read on
+       his return picks up whatever happened while he was away. */
+    if (!doorPolling()) { watchers.delete(key); return; }
     // After a few seconds of nothing, ask the provider directly: a refused checkout sends no
     // webhook at all, so waiting on one leaves a link that can never be paid.
     const ask = (left % 3 === 0) ? '&verify=1' : '';
@@ -12499,9 +12550,13 @@ async function shelfSync() {
 const seedShelf = () => { shelfSync(); refreshCards(true); loadGarage(true); };
 
 // While anything on the shelf is still open, keep it honest without being asked.
-setInterval(() => { if (!document.hidden && shelf.length) shelfSync(); }, 25000);
+/* BUILD 401: the two shelf polls are named, so what they are allowed to spend is provable in the harness
+   rather than hidden inside a timer that only runs in a browser. */
+function shelfPollTick() { if (!doorPolling()) return; if (shelf.length) shelfSync(); }
+function cardPollTick() { if (!doorPolling()) return; refreshCards(true); }
+setInterval(shelfPollTick, 25000);
 // A song made a minute ago should be on the shelf without him asking for it.
-setInterval(() => { if (!document.hidden) refreshCards(true); }, 90000);
+setInterval(cardPollTick, 90000);
 
 /* ---------- the shelf: what the door hands over ---------- */
 
