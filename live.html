@@ -519,11 +519,41 @@
    be honest about is on screen: what it heard, what it said, and how long it took
    from his last word to the first sound. */
 
+/* BUILD 405. A SENTENCE SAID ONCE IS WRITTEN ONCE, AND THE FLOOR WAS TOO HIGH.
+
+   Edwin, 20 Nov 2026, after comparing the Mac with the iPhone SE on one sentence:
+   "So there is 2 issues, overlapping is the biggest... and then the floor needs to be lower as it is too high."
+
+   1. THE OVERLAP. 16:21:29 on 404, one sentence said once on the Mac: "Six swift ships sit still while I test the
+   taste of salt." The ear returned FIVE readings of it inside 142 milliseconds - "Six Swift. Ships sit still while I
+   test this the taste of salt", "six Swift ships sit still while at the taste of salt", "six with ships, it still
+   while I taste the taste of salt", "six with ships, sit still while I test the taste of salt", "stick Swift ships,
+   sits still well, as tested Taste of salt," - and the door appended every one, so twelve spoken words reached the
+   turn as thirty-four. At 16:22:11 the same thing made fifty-one words. The iPhone did it at 16:27:52 with
+   thirty-seven, so it is the door and not the device, and it is the fault he has called first priority all week.
+
+   They are alternatives, not sentences: the recogniser re-reads the same audio while it settles. The door now keeps
+   the readings rather than the run-on, and two readings are the same utterance when they share a run of three words,
+   or most of their words, or one sits inside the other. What it keeps is the reading the ear was surest of, because
+   that is the ear's own opinion and not ours, and every replacement is written to the record as ear.overlap so a
+   change to his words is never silent. Two sentences said in one breath share almost nothing, and both survive.
+
+   2. THE FLOOR. 16:20:46 on 404: the cleanest transcript of the whole comparison, confidence 0.923, was thrown away
+   because the voice print scored it 0.688 against a 0.72 floor. Every score below 0.72 in the entire log is his own
+   voice - eleven of them, from "Start fresh." at 0.608 and 0.645, through "You can choose." at 0.697 and "Yes." at
+   0.695 and 0.651, to "Taste taste taste not taste." at 0.601. There is not one genuine other voice in 147
+   measurements, so the gate has never caught anybody but the man it was built for. His own range runs 0.601 to 0.973
+   with a median of 0.873, so the gate moves to 0.55: under his worst and still above a voice that is not his. It
+   stays a courtesy gate, because the passkey is the boarding proof and this only stops the room answering for him.
+
+   Tests first, both failing on 404: one-sentence-is-not-five-sentences, two-sentences-in-one-breath-are-both-kept,
+   and the-print-takes-his-own-voice-at-sixty-nine. 276/276. */
+
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
 const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 404;
+const BUILD_NO = 405;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -965,6 +995,7 @@ function bumpEpoch(why) {
   try { knowReset(why || 'a new pass'); } catch (e) {}
   try { earPend.length = 0; } catch (e) {}
   earText = ''; earLive = ''; earSpeech = false; earClosed = false; earEndPending = false;
+  try { earHearingsClear(); } catch (e) {}
   logLine('epoch.bump', why + ' \u00b7 the ear is now epoch ' + sessionEpoch, { level: 'info', target: 'hear' });
 }
 
@@ -14978,7 +15009,15 @@ const VP_FLOOR_DEFAULT = 0.90;
    the floor it answers him and records the number, because the cost of answering a television is one sentence and the
    cost of ignoring him is the door. The band is provisional until it is calibrated on his real voice, and every score
    is written down so that calibration can happen from the record rather than from a guess. */
-const VP_OTHER = 0.72;
+/* 405 · THE FLOOR WAS TOO HIGH, AND THE RECORD SAYS SO.
+   Edwin, 20 Nov 2026, after the device comparison: "the floor needs to be lower as it is too high."
+   Every score below 0.72 in the whole log is HIS OWN VOICE - eleven of them, from "Start fresh." at 0.608 and 0.645,
+   through "You can choose." at 0.697 and "Yes." at 0.695 and 0.651, to the cleanest transcript of the comparison at
+   0.688 and "Taste taste taste not taste." at 0.601. There is not one genuine other voice in 147 measurements, so a
+   0.72 gate has never caught anybody but the man it was built for. His own range runs 0.601 to 0.973, median 0.873.
+   The gate moves to 0.55, which is 0.05 under his worst and still refuses a voice that is not his. It remains a
+   courtesy: the passkey is the boarding proof, and this only stops the room answering for him. */
+const VP_OTHER = 0.55;
 const VP_FORCE = /\b(it'?s me|it is me|that'?s me|this is me)\b/i;
 let vpKnown = false, vpEnrolled = false, vpVector = null, vpFloor = VP_FLOOR_DEFAULT;
 let vpStatusP = null, vpTried = false, vpSupported = null;
@@ -15028,6 +15067,76 @@ function vpRelayHasVoice() {
 }
 const EAR_END_MS = 1800;
 let earWs = null, earReady = false, earText = '', earLive = '', earConf = null, earSpeech = false, earLastVoiced = 0, earClosed = false;
+/* 405 · ONE SENTENCE IS NOT FIVE SENTENCES.
+   20 Nov 2026, 16:21:29, one sentence said once on the Mac: "Six swift ships sit still while I test the taste of
+   salt." The ear returned five readings of it - "Six Swift. Ships sit still while I test this the taste of salt",
+   "six Swift ships sit still while at the taste of salt", "six with ships, it still while I taste the taste of salt",
+   "six with ships, sit still while I test the taste of salt", "stick Swift ships, sits still well, as tested Taste of
+   salt," - all inside 142 milliseconds, and the door appended every one of them. Twelve spoken words reached the turn
+   as thirty-four. At 16:22:11 the same thing made fifty-one words, and the iPhone did it at 16:27:52 with thirty-seven,
+   so it is the door and not the device.
+
+   They are alternatives, not sentences: the recogniser re-reads the same audio as it settles. So the door keeps the
+   READINGS rather than the run-on, and two readings are the same utterance when they share a run of three words, or
+   most of their words, or one sits inside the other. What it keeps is the reading the ear was surest of, because that
+   is the ear's own opinion and not ours. Two sentences said in one breath share almost nothing and both survive. */
+let earHearings = [];        // every reading heard in this turn, as { text, conf }
+
+function hearWords(t) {
+  return String(t || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
+}
+/* The longest run of consecutive words two readings have in common. */
+function hearSharedRun(a, b) {
+  const A = hearWords(a), B = hearWords(b);
+  if (!A.length || !B.length) return 0;
+  let best = 0, prev = new Array(B.length + 1).fill(0);
+  for (let i = 1; i <= A.length; i++) {
+    const cur = new Array(B.length + 1).fill(0);
+    for (let j = 1; j <= B.length; j++) {
+      if (A[i - 1] === B[j - 1]) { cur[j] = prev[j - 1] + 1; if (cur[j] > best) best = cur[j]; }
+    }
+    prev = cur;
+  }
+  return best;
+}
+function hearSameUtterance(a, b) {
+  const A = hearWords(a), B = hearWords(b);
+  if (!A.length || !B.length) return false;
+  if (A.join(' ') === B.join(' ')) return true;                       // the same words, heard twice
+  if (hearSharedRun(A, B) >= 3) return true;                          // "ships sit still while"
+  const setB = {}; for (const w of B) setB[w] = 1;
+  const shared = A.filter((w) => setB[w]).length;
+  if (shared / Math.max(A.length, B.length) >= 0.6) return true;      // most of the words, in some order
+  const [small, big] = A.length <= B.length ? [A, B] : [B, A];         // one sits inside the other
+  const setBig = {}; for (const w of big) setBig[w] = 1;
+  return small.length >= 2 && small.every((w) => setBig[w]);
+}
+/* Take one reading. Same utterance as one already held -> keep the surer one; otherwise it is a new sentence. */
+function earTakesFinal(raw, conf) {
+  const t = String(raw || '').trim();
+  if (!t) return '';
+  const c = (typeof conf === 'number') ? conf : null;
+  let replaced = null;
+  for (let i = 0; i < earHearings.length; i++) {
+    const h = earHearings[i];
+    if (!hearSameUtterance(h.text, t)) continue;
+    const better = (c != null && (h.conf == null || c > h.conf + 1e-9))
+      || (c != null && h.conf != null && Math.abs(c - h.conf) < 1e-9 && hearWords(t).length > hearWords(h.text).length);
+    if (better) { replaced = h.text; earHearings[i] = { text: t, conf: c }; }
+    else { replaced = t; }
+    break;
+  }
+  if (replaced === null) earHearings.push({ text: t, conf: c });
+  if (replaced !== null) {
+    logLine('ear.overlap', 'the same utterance heard again, so it replaces the reading and is not added to it \u00b7 kept "'
+      + String((earHearings.find((h) => h.text === t) || earHearings[0] || {}).text || '').slice(0, 70)
+      + '" \u00b7 dropped "' + String(replaced).slice(0, 70) + '"', { level: 'info', target: 'hear' });
+  }
+  earText = earHearings.map((h) => h.text).join(' ');
+  if (c != null) earConf = c;
+  return earText;
+}
+function earHearingsClear() { earHearings = []; }
 let earFails = 0, earWatch = 0, earOpenedAt = 0, earPend = [], earEndPending = false, earBeat = 0;
 
 function earOn() { return !!(earWs && earWs.readyState === 1); }
@@ -15078,7 +15187,7 @@ function earOpen() {
           logLine('ear.repaired', '"' + raw.slice(0, 80) + '" -> "' + t.slice(0, 80) + '"',
             { level: 'info', target: 'hear' });
         }
-        if (t) earText = earText ? earText + ' ' + t : t;
+        if (t) earTakesFinal(t, (typeof f.conf === 'number' ? f.conf : null));
         earConf = (typeof f.conf === 'number' ? f.conf : null);
         logLine('ear.final', t + ' \u00b7 conf ' + (f.conf == null ? '?' : f.conf) + ' \u00b7 ' + (f.lang || ''),
           { level: 'info', target: 'hear' });
@@ -15111,6 +15220,7 @@ function earOpen() {
 function earClose() {
   if (earBeat) { try { clearInterval(earBeat); } catch (e) {} earBeat = 0; }
   earReady = false; earText = ''; earLive = ''; earSpeech = false; earClosed = false;
+  try { earHearingsClear(); } catch (e) {}
   if (earWatch) { try { clearTimeout(earWatch); } catch (e) {} earWatch = 0; }
   const s = earWs; earWs = null;
   try { s && s.close(); } catch (e) {}
@@ -15281,15 +15391,17 @@ function earFinish(why) {
   const text = String(earText || earLive || '').trim();
   /* BUILD 377. IS THIS HIM? The relay measured this turn; the door decides what to do about it.
      Silence for a voice that is not his, because answering the room is exactly what he reported at 12:49. */
-  if (vpRecording) { earText = ''; earLive = ''; earConf = null; return; }
+  if (vpRecording) { earText = ''; earLive = ''; earConf = null; try { earHearingsClear(); } catch (e) {} return; }
   if (vpBlocks(text)) {
     earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false;
+    try { earHearingsClear(); } catch (e) {}
     return;
   }
   const conf = earConf;
   const verdict = earVerdictNow(text);
   const hadVoice = earSpeech;                       // BUILD 403: did the relay hear a voice at all
   earText = ''; earLive = ''; earConf = null; earSpeech = false; earClosed = false; earVoicedFrames = 0;
+  try { earHearingsClear(); } catch (e) {}
   if (verdict === 'empty.held') {
     /* He was not silent; the door was busy. Saying anything here is talking over its own answer. */
     logLine('ear.empty.held', 'nothing was heard while the door was still answering, so it says nothing',
