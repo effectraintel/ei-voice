@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L0 door: hello world</title>
+<style>
+  :root { --ink:#0e1116; --line:#242b35; --dim:#8b96a5; --lit:#e9eef5; --gold:#c8a45c; --red:#e0645c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ink); color:var(--lit);
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Inter,sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:56px 24px 80px; }
+  h1 { font-size:22px; font-weight:600; letter-spacing:-.01em; margin:0 0 6px; }
+  .sub { color:var(--dim); font-size:14px; margin:0 0 32px; }
+  label { display:block; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+          color:var(--dim); margin:0 0 8px; }
+  input { width:100%; padding:12px 14px; background:#151a21; color:var(--lit);
+          border:1px solid var(--line); border-radius:8px; font:14px ui-monospace,monospace; }
+  input:focus { outline:none; border-color:var(--gold); }
+  .row { margin:0 0 20px; }
+  .acts { display:flex; gap:10px; flex-wrap:wrap; margin:26px 0 0; }
+  button { padding:11px 18px; border-radius:8px; border:1px solid var(--line);
+           background:#1a212b; color:var(--lit); font-size:14px; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--gold); }
+  button.primary { background:var(--gold); border-color:var(--gold); color:#12161c; font-weight:600; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  #out { margin:30px 0 0; }
+  .card { border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin:0 0 14px; }
+  .card.bad { border-color:var(--red); }
+  .k { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
+  .v { font:13px ui-monospace,monospace; word-break:break-all; margin:4px 0 12px; }
+  .v:last-child { margin-bottom:0; }
+  .big { font:16px ui-monospace,monospace; color:var(--gold); }
+  pre { background:#12171e; border:1px solid var(--line); border-radius:10px; padding:14px;
+        overflow:auto; font:12px ui-monospace,monospace; color:#b9c4d2; max-height:340px; }
+  .note { color:var(--dim); font-size:12px; margin:22px 0 0; }
+  footer { margin:44px 0 0; padding-top:18px; border-top:1px solid var(--line);
+           font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:#5d6775; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The L0 door</h1>
+  <p class="sub">Paste a tenant key and send hello world. It goes through the door, comes back with
+     a receipt, and the record lands in EI. The tenant is taken from the key, never from anything typed here.</p>
+
+  <div class="row">
+    <label for="key">Tenant key</label>
+    <input id="key" type="password" placeholder="l0k_..." autocomplete="off" spellcheck="false">
+  </div>
+  <div class="row">
+    <label for="text">What to send</label>
+    <input id="text" type="text" value="hello world" spellcheck="false">
+  </div>
+
+  <div class="acts">
+    <button class="primary" id="send">Send hello world</button>
+    <button id="read" disabled>Read it back</button>
+  </div>
+
+  <div id="out"></div>
+
+  <p class="note">Nothing here is stored, and the page never mints a key. The raw response is shown
+     in full, because the answer is the point and not a summary of it.</p>
+
+  <footer>Powered by Effectra Intelligence</footer>
+</main>
+
+<script>
+  var DOOR = "https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/l0Door";
+  var keyEl = document.getElementById('key');
+  var textEl = document.getElementById('text');
+  var out = document.getElementById('out');
+  var sendBtn = document.getElementById('send');
+  var readBtn = document.getElementById('read');
+  var lastRecord = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  function show(json, ok) {
+    var html = '';
+    if (ok && json.receipt) {
+      html += '<div class="card">'
+        + '<div class="k">Receipt</div><div class="v big">' + esc(json.receipt.code) + '</div>'
+        + '<div class="k">Payload sha256</div><div class="v">' + esc(json.receipt.sha256) + '</div>'
+        + '<div class="k">Tenant</div><div class="v">' + esc(json.tenant) + '</div>'
+        + '<div class="k">Record in EI</div><div class="v">' + esc(json.record_id) + '</div>'
+        + '</div>';
+    } else if (ok && json.record) {
+      html += '<div class="card">'
+        + '<div class="k">Read back</div><div class="v big">' + esc(json.record.receipt_code) + '</div>'
+        + '<div class="k">Hash in the record</div><div class="v">' + esc(json.record.payload_sha256) + '</div>'
+        + '<div class="k">Tenant</div><div class="v">' + esc(json.tenant) + '</div>'
+        + '</div>';
+    } else {
+      html += '<div class="card bad"><div class="k">Refused</div><div class="v">'
+        + esc(json.error || 'the door refused this') + '</div></div>';
+    }
+    html += '<pre>' + esc(JSON.stringify(json, null, 2)) + '</pre>';
+    out.innerHTML = html;
+  }
+
+  function call(payload) {
+    var key = keyEl.value.trim();
+    if (!key) {
+      out.innerHTML = '<div class="card bad"><div class="k">Refused</div><div class="v">a tenant key is required</div></div>';
+      return Promise.resolve(null);
+    }
+    return fetch(DOOR, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-ei-tenant-key': key },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, json: j }; });
+    }).catch(function () {
+      return { ok: false, json: { error: 'could not reach the door' } };
+    });
+  }
+
+  sendBtn.onclick = function () {
+    sendBtn.disabled = true;
+    call({ action: 'hello', text: textEl.value || 'hello world' }).then(function (res) {
+      sendBtn.disabled = false;
+      if (!res) return;
+      if (res.json && res.json.record_id) { lastRecord = res.json.record_id; readBtn.disabled = false; }
+      show(res.json, res.ok);
+    });
+  };
+
+  readBtn.onclick = function () {
+    if (!lastRecord) return;
+    readBtn.disabled = true;
+    call({ action: 'read', record_id: lastRecord }).then(function (res) {
+      readBtn.disabled = false;
+      show(res.json, res.ok);
+    });
+  };
+</script>
+</body>
+</html>
