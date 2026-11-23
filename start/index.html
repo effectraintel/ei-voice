@@ -155,17 +155,22 @@
     }
 
     view.appendChild(el('h2', null, 'A new key'));
-    para('Minting a new key replaces the one you hold. Anything already using the old key stops working the moment the new one is made, so only do this if the old key is lost or needs replacing.', 'quiet');
-    var mint = el('button', null, 'Mint a new key');
-    mint.onclick = function () {
-      mint.disabled = true;
-      mint.textContent = 'Minting…';
-      openDoor('mint');
-    };
-    view.appendChild(mint);
 
-    view.appendChild(el('div', 'warn',
-      'If you arrived here by reloading, your key was already issued on this link and cannot be shown again. A new link is what mints another.'));
+    // THIS LINK MINTS ONCE, so a button on a link that already minted could only be refused. Saying so is the
+    // honest rendering: the member who needs a new key asks for a new link, and a member holding an unspent
+    // link still gets the button.
+    if (b.link_minted) {
+      para('This link already issued its key, so it cannot mint another, and your key cannot be shown again. To replace a lost key, ask for a new link and it will arrive in a minute.', 'quiet');
+    } else {
+      para('Minting a new key replaces the one you hold. Anything already using the old key stops working the moment the new one is made, so only do this if the old key is lost or needs replacing.', 'quiet');
+      var mint = el('button', null, 'Mint a new key');
+      mint.onclick = function () {
+        mint.disabled = true;
+        mint.textContent = 'Minting…';
+        openDoor('mint');
+      };
+      view.appendChild(mint);
+    }
   }
 
   function selectBox(box) {
