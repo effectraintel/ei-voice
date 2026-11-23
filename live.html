@@ -552,8 +552,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-18T22:44';
-const BUILD_NO = 405;
+const BUILD = '2026-11-23T09:05';
+const BUILD_NO = 406;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -5509,7 +5509,16 @@ function readRoute(text, opts) {
       return { act: 'none', route: 'none', negMake, titled, namedTitle,
         why: 'a question about the world, not a song' };
     }
-    if (aimedAtSong(first.at) || songish || namedTitle || titled || STORE_NAME.test(t) || (o.fork && bareAct(first.at))) {
+    /* BUILD 406. AN INCIDENTAL VERB IS NOT AN ASK.
+       23 Nov 2026, 08:52: Boss said "they're not really getting anywhere ... it's just politics" and the door asked
+       "Which song, Boss? The title and who sings it." The second time (18 Nov, 21:05: "You're not speaking to me").
+       Cause: the reader found an obtain verb in "getting", then counted the words around it as a named title - and
+       one capitalised word ("Pretty", which speech-to-text capitalises at random) was enough to call the sentence a
+       song. A named title settles a share only when he has actually asked to share; when the verb is an incidental
+       "getting", "found" or "gave", the sentence has to name a song some other way. His explicit "share X" is
+       untouched, and so is every case where a song noun, a store or a quoted title is present. */
+    if (aimedAtSong(first.at) || songish || (namedTitle && first.act === 'share') || titled
+        || STORE_NAME.test(t) || (o.fork && bareAct(first.at))) {
       return { act: first.act, route: 'share', negMake, titled, namedTitle,
         why: first.act === 'obtain' ? 'he asks the door to find a song that exists' : 'he asks to share a song that exists' };
     }
