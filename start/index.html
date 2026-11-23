@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your EI door key</title>
+<style>
+  html,body{margin:0;min-height:100%;background:#14110f;color:#efe9df}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       display:flex;align-items:flex-start;justify-content:center;padding:34px 22px 60px}
+  .card{width:100%;max-width:430px}
+  .mark{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:12px;letter-spacing:.18em;
+        color:#b08d2f;border:1px solid rgba(176,141,47,.42);border-radius:5px;padding:3px 7px 4px;
+        display:inline-block;line-height:1}
+  h1{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-weight:400;font-size:24px;line-height:1.3;margin:22px 0 0}
+  h2{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-weight:400;font-size:15px;letter-spacing:.04em;
+     margin:26px 0 8px;color:#cfc6b6}
+  p{color:#9a9184;font-size:14px;line-height:1.7;margin:12px 0 0}
+  .quiet{font-size:12.5px;color:#7d7568}
+  .keybox{margin:14px 0 0;padding:14px;border:1px solid rgba(176,141,47,.4);border-radius:7px;
+          background:rgba(176,141,47,.07);word-break:break-all;
+          font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.65;color:#efe9df}
+  .warn{margin:14px 0 0;padding:11px 13px;border-left:2px solid #b08d2f;background:rgba(176,141,47,.06);
+        font-size:13px;line-height:1.65;color:#cfc6b6}
+  button{font:inherit;font-size:13.5px;margin-top:14px;padding:10px 16px;border-radius:6px;cursor:pointer;
+         background:transparent;color:#b08d2f;border:1px solid rgba(176,141,47,.5)}
+  button:active{background:rgba(176,141,47,.12)}
+  button[disabled]{opacity:.45;cursor:default}
+  dl{margin:14px 0 0;display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-size:13.5px}
+  dt{color:#7d7568}
+  dd{margin:0;color:#efe9df;text-align:right;word-break:break-word}
+  ul{list-style:none;margin:8px 0 0;padding:0}
+  li{font-size:12.5px;color:#9a9184;padding:7px 0;border-top:1px solid rgba(255,255,255,.07);
+     display:flex;justify-content:space-between;gap:12px}
+  li span:last-child{color:#cfc6b6;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;white-space:nowrap}
+  .refused{margin:20px 0 0;padding:14px;border:1px solid rgba(180,90,70,.4);border-radius:7px;
+           background:rgba(180,90,70,.07);font-size:14px;line-height:1.7;color:#e3c9c1}
+  a{color:#b08d2f;text-decoration:none;border-bottom:1px solid rgba(176,141,47,.35);padding-bottom:2px}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="mark">EFFECTRA INTELLIGENCE</div>
+  <div id="view">
+    <h1>Opening your door…</h1>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  var API = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/l0Signup';
+  var view = document.getElementById('view');
+
+  // The token is read from the address and kept in memory only. Nothing here is written to the device:
+  // a key that survives in a browser is a key that survives on the next person who uses that browser.
+  var TOKEN = new URLSearchParams(window.location.search).get('t') || '';
+
+  // What a holder is told, by the reason the door returns. The door sends its own sentence in `error` and that
+  // one wins; these are the fallback, and they exist so the page can never collapse four different cases into
+  // the single sentence reserved for a forger.
+  var REFUSALS = {
+    superseded: 'A newer link was sent to this address. Use the most recent email, because the older one cannot work.',
+    expired: 'This link has expired. Ask for a new one and it will arrive in a minute.',
+    minted: 'This link already issued its key. Reloading shows your account; a new link is what mints another key.',
+    unknown: 'This link cannot be used.'
+  };
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function reset() { while (view.firstChild) view.removeChild(view.firstChild); }
+
+  function heading(text) { view.appendChild(el('h1', null, text)); }
+
+  function para(text, cls) { view.appendChild(el('p', cls || null, text)); }
+
+  function refused(body) {
+    reset();
+    heading('That link did not open.');
+    var box = el('div', 'refused', (body && body.error) || REFUSALS[body && body.reason] || REFUSALS.unknown);
+    view.appendChild(box);
+    var known = REFUSALS[body && body.reason];
+    if (known && body && body.error && known !== body.error) para(known, 'quiet');
+    para('Nothing was changed and nothing was charged.');
+  }
+
+  function keyFace(b) {
+    reset();
+    heading('Your key to the EI door.');
+    para('This key is shown once. Copy it now, because nothing in EI can read it back afterwards, and a lost key is replaced rather than recovered.');
+
+    var box = el('div', 'keybox', b.key);
+    view.appendChild(box);
+
+    var copy = el('button', null, 'Copy the key');
+    copy.onclick = function () {
+      var done = function () { copy.textContent = 'Copied'; copy.disabled = true; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(b.key).then(done, function () { selectBox(box); });
+      } else { selectBox(box); }
+    };
+    view.appendChild(copy);
+
+    view.appendChild(el('h2', null, 'Where it goes'));
+    para('Put it in your connector as the header below, and the door answers from your first prompt.');
+    view.appendChild(el('div', 'keybox', 'x-account-key: ' + b.key));
+
+    view.appendChild(el('h2', null, 'Your account'));
+    var dl = el('dl');
+    [['Account', b.account_ref], ['Address', b.tenant],
+     ['What it may do', (b.scopes || []).join(', ')], ['Mail per day', String(25)]].forEach(function (row) {
+      dl.appendChild(el('dt', null, row[0]));
+      dl.appendChild(el('dd', null, row[1] || '—'));
+    });
+    view.appendChild(dl);
+
+    view.appendChild(el('div', 'warn',
+      'Keep this page open until the key is copied. Reloading will show your account instead, and the key cannot be shown a second time.'));
+  }
+
+  function accountFace(b) {
+    reset();
+    heading('Your EI door account.');
+
+    var dl = el('dl');
+    [['Account', b.account_ref], ['Address', b.tenant], ['State', b.status],
+     ['What it may do', (b.scopes || []).join(', ')],
+     ['Mail per day', b.mail_cap === null || b.mail_cap === undefined ? '25 (default)' : String(b.mail_cap)],
+     ['Calls so far', String(b.calls || 0)]].forEach(function (row) {
+      dl.appendChild(el('dt', null, row[0]));
+      dl.appendChild(el('dd', null, row[1] || '—'));
+    });
+    view.appendChild(dl);
+
+    view.appendChild(el('h2', null, 'What the door did'));
+    var list = b.statement || [];
+    if (!list.length) {
+      para('Nothing yet. The first prompt through your connector will appear here.', 'quiet');
+    } else {
+      var ul = el('ul');
+      list.forEach(function (c) {
+        var li = el('li');
+        var when = c.at ? String(c.at).slice(0, 16).replace('T', ' ') : '';
+        li.appendChild(el('span', null, (c.action || 'call') + ' · ' + (c.outcome || '')));
+        li.appendChild(el('span', null, c.receipt_code || when));
+        ul.appendChild(li);
+      });
+      view.appendChild(ul);
+    }
+
+    view.appendChild(el('h2', null, 'A new key'));
+    para('Minting a new key replaces the one you hold. Anything already using the old key stops working the moment the new one is made, so only do this if the old key is lost or needs replacing.', 'quiet');
+    var mint = el('button', null, 'Mint a new key');
+    mint.onclick = function () {
+      mint.disabled = true;
+      mint.textContent = 'Minting…';
+      openDoor('mint');
+    };
+    view.appendChild(mint);
+
+    view.appendChild(el('div', 'warn',
+      'If you arrived here by reloading, your key was already issued on this link and cannot be shown again. A new link is what mints another.'));
+  }
+
+  function selectBox(box) {
+    var range = document.createRange();
+    range.selectNodeContents(box);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function failed() {
+    reset();
+    heading('The door did not answer.');
+    para('That is a fault on our side rather than anything you did. Nothing was changed. Try again in a moment, or ask for a new link.');
+  }
+
+  function render(r) {
+    var b = (r && r.body) || {};
+    if (r && r.status === 200 && b.ok && b.key) return keyFace(b);
+    if (r && r.status === 200 && b.ok) return accountFace(b);
+    return refused(b);
+  }
+
+  // THE ONE ENTRY. With no mode this cannot rotate anything: a first click mints because no account exists, and
+  // a returning member opens because one does. Only a press asks for a mode.
+  function openDoor(mode) {
+    var body = { action: 'verify', token: TOKEN };
+    if (mode) body.mode = mode;
+    return fetch(API, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      return res.json().then(function (j) { return { status: res.status, body: j }; });
+    }).then(render).catch(failed);
+  }
+
+  if (!TOKEN) {
+    reset();
+    heading('This address needs its link.');
+    para('The link that brought you here carries the proof, and this one arrived without it. Open the most recent email from Effectra Intelligence and use the button in it.');
+  } else {
+    openDoor();
+  }
+})();
+</script>
+</body>
+</html>
