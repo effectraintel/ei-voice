@@ -2,6 +2,18 @@
  "note": "what each build was for, read out of the build's own note in the door's source. versions.html lists these; build.html?v=NNN opens one.",
  "builds": [
   {
+   "n": 406,
+   "at": "2026-11-23T09:04",
+   "file": "v406.html",
+   "title": "rETIRED, not tuned",
+   "summary": "RETIRED, not tuned. The experiment this armed was the hunt that // build 328 deleted, and its own note below says what was left behind: every sentence passed the narrowing // door.",
+   "detail": [
+    "RETIRED, not tuned. The experiment this armed was the hunt that // build 328 deleted, and its own note below says what was left behind: every sentence passed the narrowing // door. On 23 Nov 2026, 08:52, Boss made a remark about politics and the door answered \"Which song, Boss?\" // for the second time (the first was 18 Nov, 21:05).",
+    "A sentence is not a song unless the conversation is // about a song, and that is shareThreadOpen's question alone. /* BUILD 340. A SENTENCE IS NOT A SONG UNLESS THE CONVERSATION IS ABOUT A SONG.",
+    "18 Nov 2026, 21:05:24: he said \"You're not speaking to me.\" and the door answered \"Which song, Boss? The title and who sings it.\" GUESS_FIRST is a constant that is always true, so EVERY sentence passed the narrowing door; the hunt it was written for was retired in build 328 and this is what was left of it. The question is now whether there is a song thread at all."
+   ]
+  },
+  {
    "n": 405,
    "at": "2026-11-20T18:34",
    "file": "v405.html",
@@ -717,11 +729,10 @@
    "n": 340,
    "at": "2026-11-18T21:10",
    "file": "v340.html",
-   "title": "a sentence is not a song unless the conversation is about a song",
-   "summary": "18 Nov 2026, 21:05:24: he said \"You're not speaking to me.\" and the door answered \"Which song, Boss?",
+   "title": "a rail note is not part of the conversation",
+   "summary": "It used to be appended inside the talk lane, so \"share - waiting for the name\" read as the end of his own sentence (18 Nov 2026, 21:05).",
    "detail": [
-    "A SENTENCE IS NOT A SONG UNLESS THE CONVERSATION IS ABOUT A SONG.",
-    "18 Nov 2026, 21:05:24: he said \"You're not speaking to me.\" and the door answered \"Which song, Boss? The title and who sings it.\" - because GUESS_FIRST is a constant that is always true, so every sentence passed the narrowing door. The flag was the experiment from build 301 and the hunt it belonged to was retired in 328; what is left of it is this test, which now asks whether there is a song thread at all: he opened one, a song is waiting for its name, or a name is owed."
+    "A RAIL NOTE IS NOT PART OF THE CONVERSATION. It used to be appended inside the talk lane, so \"share - waiting for the name\" read as the end of his own sentence (18 Nov 2026, 21:05). It now sits under the state line, outside the lane, where the door's bookkeeping belongs."
    ]
   },
   {
