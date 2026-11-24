@@ -552,8 +552,8 @@
 const FN = 'https://base44.app/api/apps/6a9992461f0a08877ba0f3a1/functions/eiLiveToken';
 const VOICES = ['Kore', 'Charon', 'Puck', 'Zephyr', 'Leda', 'Fenrir'];
 
-const BUILD = '2026-11-23T09:05';
-const BUILD_NO = 406;
+const BUILD = '2026-11-24T09:26';
+const BUILD_NO = 407;
 
 /* Build 183. The door has always been spoken. He asked for the same door typed — the chat
    client experience he tests at the portal — so it comes here, to the one page that holds the
@@ -15476,6 +15476,27 @@ function earFinish(why) {
   if (!earAcceptsHearing({ text: text, conf: conf })) {
     logLine('ear.lowconf', 'not sure enough to act on: ' + text.slice(0, 120) + ' \u00b7 conf ' + conf,
       { level: 'warn', target: 'hear' });
+    /* BUILD 407. A REPAIR LINE MUST NOT WAIT FOR THE REPLY IT IS MEANT TO BE.
+       24 Nov 2026, 09:14, live on 406 (session 72d4b2). He said "How are you today?" and the ear finished at
+       conf 0.544. The door decided it had not heard him, minted the apology - and then QUEUED it, because
+       awaitingFirstAudio was true. That flag is set the moment HE stops talking and is cleared only when the
+       MOUTH produces audio. In this branch the mouth has nothing else to say, so the repair line was waiting
+       for the first audio of the very sentence it was. A DEADLOCK, broken only by the eight-second stale
+       guard: he heard "Sorry, Boss, I did not catch that" NINE SECONDS after speaking, and twice, because the
+       silence watch then added its own ask. From where he sat the door had not recognised his voice, and he
+       changed his tone until one attempt cleared the gate - which is what "it didn't recognise my voice tone"
+       actually was. NOTHING IS IN FLIGHT HERE BY DEFINITION: the model never received these words, so the
+       three flags that mean "a reply is coming" are simply not true, and saying so is the whole fix. The
+       guards are untouched - a genuine mid-sentence barge is still held, because earVerdictNow answers
+       empty.held long before this branch and never reaches it. */
+    /* AND THE GUARD STANDS, which is what the sixth case caught: a fix that cleared these flags outright made the
+       door apologise while it was genuinely mid-answer. So the flags are cleared ONLY when nothing of ours is in
+       the air and he is not mid-sentence, which is the same reading earVerdictNow has always used for "sound in
+       the air" - one rule, one place, both callers. */
+    try {
+      const soundNow = playing() || (speaking && speakingAt && (Date.now() - speakingAt) < 1500);
+      if (!soundNow) { speaking = false; awaitingFirstAudio = false; sentenceInFlight = false; }
+    } catch (e) {}
     try { lastAsked = 'Sorry, Boss, I did not catch that. Say it once more.'; doorAsk(lastAsked,
       'Say exactly this, in one line, and nothing else: "Sorry, Boss, I did not catch that. Say it once more." '
       + 'Nothing was searched and nothing is on his shelf: the ear was not sure of the words.'); } catch (e) {}
