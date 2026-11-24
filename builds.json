@@ -2,6 +2,19 @@
  "note": "what each build was for, read out of the build's own note in the door's source. versions.html lists these; build.html?v=NNN opens one.",
  "builds": [
   {
+   "n": 407,
+   "at": "2026-11-24T09:27",
+   "file": "v407.html",
+   "title": "a repair line must not wait for the reply it is meant to be",
+   "summary": "24 Nov 2026, 09:14, live on 406 (session 72d4b2).",
+   "detail": [
+    "A REPAIR LINE MUST NOT WAIT FOR THE REPLY IT IS MEANT TO BE.",
+    "24 Nov 2026, 09:14, live on 406 (session 72d4b2). He said \"How are you today?\" and the ear finished at conf 0.544. The door decided it had not heard him, minted the apology - and then QUEUED it, because awaitingFirstAudio was true.",
+    "That flag is set the moment HE stops talking and is cleared only when the MOUTH produces audio. In this branch the mouth has nothing else to say, so the repair line was waiting for the first audio of the very sentence it was. A DEADLOCK, broken only by the eight-second stale guard: he heard \"Sorry, Boss, I did not catch that\" NINE SECONDS after speaking, and twice, because the silence watch then added its own ask.",
+    "From where he sat the door had not recognised his voice, and he changed his tone until one attempt cleared the gate - which is what \"it didn't recognise my voice tone\" actually was. NOTHING IS IN FLIGHT HERE BY DEFINITION: the model never received these words, so the three flags that mean \"a reply is coming\" are simply not true, and saying so is the whole fix. The guards are untouched - a genuine mid-sentence barge is still held, because earVerdictNow answers empty.held long before this branch and never reaches it."
+   ]
+  },
+  {
    "n": 406,
    "at": "2026-11-23T09:04",
    "file": "v406.html",
@@ -729,10 +742,11 @@
    "n": 340,
    "at": "2026-11-18T21:10",
    "file": "v340.html",
-   "title": "a rail note is not part of the conversation",
-   "summary": "It used to be appended inside the talk lane, so \"share - waiting for the name\" read as the end of his own sentence (18 Nov 2026, 21:05).",
+   "title": "a sentence is not a song unless the conversation is about a song",
+   "summary": "18 Nov 2026, 21:05:24: he said \"You're not speaking to me.\" and the door answered \"Which song, Boss?",
    "detail": [
-    "A RAIL NOTE IS NOT PART OF THE CONVERSATION. It used to be appended inside the talk lane, so \"share - waiting for the name\" read as the end of his own sentence (18 Nov 2026, 21:05). It now sits under the state line, outside the lane, where the door's bookkeeping belongs."
+    "A SENTENCE IS NOT A SONG UNLESS THE CONVERSATION IS ABOUT A SONG.",
+    "18 Nov 2026, 21:05:24: he said \"You're not speaking to me.\" and the door answered \"Which song, Boss? The title and who sings it.\" - because GUESS_FIRST is a constant that is always true, so every sentence passed the narrowing door. The flag was the experiment from build 301 and the hunt it belonged to was retired in 328; what is left of it is this test, which now asks whether there is a song thread at all: he opened one, a song is waiting for its name, or a name is owed."
    ]
   },
   {
