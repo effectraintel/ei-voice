@@ -7635,6 +7635,20 @@ function judgeClaim() {
     // can say it.
     const claims = /couldn'?t find|could not find|can'?t find|cannot find|unable to find|nothing was found|not on (?:the |your )?(?:sharing )?rail|hit an error|something went wrong|there(?:'?s| is| are| is not| isnt)? nothing on (?:your|the) shelf|couldn'?t reach (?:it|that|the (?:sharing |music )?rail|sharing service)|no answer from (?:the |your )?(?:sharing |music )?rail|(?:the |your )?(?:sharing |music )?rail (?:is |was |seems |must be |has been )?(?:down|not answering|not responding|unreachable|unavailable|playing up|broken)|(?:the |your )?(?:sharing |music )?rail (?:did\s*n[o'\u2019]?t|did not|does\s*n[o'\u2019]?t|does not|has\s*n[o'\u2019]?t|has not|had\s*n[o'\u2019]?t|never|won'?t|would\s*n[o'\u2019]?t|could\s*n[o'\u2019]?t) (?:answer|respond|reply|come back|come through|get back|work|find|locate|reach)/i;
     if (!claims.test(t)) return;
+    /* BUILD 408. A WORLD ANSWER IS NOT A SONG CLAIM, AND THE EXCUSE MAY NOT DEPEND ON TURN OWNERSHIP.
+       28 Nov 2026, 06:17:49: the world answered "I cannot find this week's specific event schedule for
+       Ballito"; this guard is the SONG rail's, it read "cannot find" as a rail excuse, found no rail call,
+       and told the mouth to call the world tool again. The mouth obeyed at 06:17:54, the second answer
+       arrived at 06:18:02 to a turn that had closed at 06:17:49, and he heard two contradicting answers to
+       one question. Build 392's worldTurn excuse was already here and did not hold, so the excuse is now
+       keyed on the lookup itself: a world lookup inside the last 60 seconds means this sentence is the
+       world's, whatever the turn object says by the time it lands. */
+    if (Date.now() - worldLookedAt < 60000) {
+      logLine('claim.excused', 'a world lookup ' + (Date.now() - worldLookedAt) + 'ms ago, so this is the '
+        + 'world\u2019s sentence and not the song rail\u2019s \u00b7 ' + t.slice(0, 60),
+        { level: 'info', target: 'claim' });
+      return;
+    }
     /* BUILD 392. A WORLD TURN IS NOT A SONG TURN.
        19 Nov 2026, 22:39:13, live on 391. He asked "Can you tell me what is happening in the ATP Masters? Final
        interim."; the world answered from Wikipedia (and wrongly - that is the rail's fault, fixed in the same
@@ -14551,6 +14565,45 @@ function handleFrame(text) {
     try {
       const spoke = String(said.engine || '');
       if (/\b(?:picture|cover|artwork|image)\b/i.test(spoke) && /\?/.test(spoke)) pictureSpokenAt = Date.now();
+    } catch (e) {}
+    /* BUILD 408. A REQUEST TO SEARCH IS AN INSTRUCTION TO SEARCH.
+       28 Nov 2026, 06:19:24: he said "And you just search the world." Nothing was looked up that turn, so the
+       mouth had nothing new to say and repeated its previous refusal word for word - "I cannot look up what
+       sports are on DStv this weekend, Boss." - and the door's own stuck-detector then asked it to try again
+       with no new fact to try with. When his words ask for a search and nothing has been looked up this turn,
+       the door looks, and the answer is built from what came back instead of from the mouth's memory of
+       failing. If his words are only the instruction, the question still live in the session is what gets
+       searched. */
+    try {
+      const askedRaw = String(lastHeardText || '').trim();
+      const wantsSearch = /\b(?:search|look\s+(?:it|that)?\s*up|look\s*up|go\s+and\s+(?:search|look|find|check)|find\s+out|check\s+(?:it|that|again))\b/i.test(askedRaw);
+      const lookedNow = (Date.now() - worldLookedAt < 30000) || worldGrounding || !!looked;
+      if (askedRaw && wantsSearch && !lookedNow) {
+        const latest = (() => { try { return knowLatest(); } catch (e) { return null; } })();
+        const subject = (askedRaw.split(/\s+/).filter(Boolean).length <= 9 && latest && latest.q) ? latest.q : askedRaw;
+        logLine('world.searched', 'he asked for a search, so the door searched "' + String(subject).slice(0, 90) + '"',
+          { level: 'info', target: 'world' });
+        fetch(FNBASE + 'eiWorldLookup', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ q: subject, kind: 'auto' }),
+        }).then((x) => x.json()).then((r) => {
+          if (r && r.ok) {
+            worldLookedAt = Date.now();
+            const facts = (r.facts || []).join(' ');
+            logLine('world.rescue', String(subject).slice(0, 90) + ' \u00b7 ' + r.engine + ' \u00b7 ' + String(facts).slice(0, 120),
+              { level: 'info', target: 'world' });
+            sendNoteNow('He asked you to search and you had not, so the door searched for you. These are the '
+              + 'measured facts, from ' + r.engine + ', as of ' + r.as_of + ': ' + facts + ' Answer him in one '
+              + 'short line using only these, and name that source or none.', false);
+            looked = 'the world \u00b7 ' + (r.engine || 'looked up');
+          } else {
+            sendNoteNow('He asked you to search. The door searched "' + String(subject).slice(0, 90) + '" and '
+              + 'nothing came back. Say plainly, in one short line, that you searched and found nothing for it. '
+              + 'Never say you cannot search, because you just did, and never invent a fact.', false);
+          }
+        }).catch(() => {});
+      }
     } catch (e) {}
     // A claim about the world with no lookup behind it. 9 Nov 2026, 20:38: he asked for the weather in
     // "Belito" and the door answered "According to AccuWeather, it's around 21 degrees Celsius in
